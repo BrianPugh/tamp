@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path("../..").absolute()))
 
 from tamp import __version__
 
-git_repo = git.Repo("../..")
+git_repo = git.Repo(".", search_parent_directories=True)
 git_commit = git_repo.head.commit
 
 # -- Project information -----------------------------------------------------
@@ -119,12 +119,14 @@ def linkcode_resolve(domain, info):
         obj = getattr(mod, info["fullname"])
 
     try:
-        file = Path(inspect.getsourcefile(obj)).resolve()
+        file = inspect.getsourcefile(obj)
         lines = inspect.getsourcelines(obj)
     except TypeError:
         # e.g. object is a typing.Union
         return None
-    file = file.relative_to(Path("..").resolve())
+    if file is None:
+        return None
+    file = Path(file).resolve().relative_to(git_repo.working_dir)
     if file.parts[0] != "tamp":
         # e.g. object is a typing.NewType
         return None
