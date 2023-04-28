@@ -2,6 +2,7 @@ import unittest
 
 import tamp.compressor
 import tamp.decompressor
+from tamp import initialize_dictionary
 
 try:
     import micropython
@@ -10,6 +11,12 @@ except ImportError:
 
 
 class TestPseudoRandom(unittest.TestCase):
+    def test_256_compressor_zero_seed(self):
+        self.assertEqual(initialize_dictionary(256, seed=0), bytearray(256))
+
+    def test_256_compressor_nonzero_seed(self):
+        self.assertNotEqual(initialize_dictionary(256, seed=1), bytearray(256))
+
     def test_256_compressor(self):
         actual = tamp.compressor.initialize_dictionary(256)
         self.assertEqual(len(actual), 256)

@@ -76,6 +76,7 @@ branch = true
 omit = [
     "tests/*",
     "tamp/*_viper.py",
+    "tamp/__main__.py",
 ]
 
 [tool.coverage.report]
@@ -97,6 +98,8 @@ exclude_lines = [
     "if 0:",
     "if False:",
     "if __name__ == .__main__.:",
+    "def run_app",
+    "except ImportError",
 ]
 
 [tool.pyright]

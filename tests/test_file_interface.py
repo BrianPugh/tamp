@@ -51,3 +51,10 @@ class TestFileInterface(unittest.TestCase):
                 actual = f.read()
 
             assert test_string == actual
+
+    def test_bad_modes(self):
+        with self.assertRaises(ValueError):
+            tamp.open(None, "abc")  # type: ignore[reportGeneralTypeIssues]
+
+        with self.assertRaises(ValueError):
+            tamp.open(None, "rw")  # type: ignore[reportGeneralTypeIssues]

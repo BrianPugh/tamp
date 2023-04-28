@@ -43,7 +43,7 @@ class Compressor:
 
         # Window Buffer
         if dictionary:
-            if bit_size(len(dictionary) - 1) > window:
+            if bit_size(len(dictionary) - 1) != window:
                 raise ValueError
             self.window_buf = dictionary
         else:
