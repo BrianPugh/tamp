@@ -75,6 +75,7 @@ uprofiler = "https://github.com/BrianPugh/micropython-libs/blob/main/lib/uprofil
 branch = true
 omit = [
     "tests/*",
+    "tamp/*_viper.py",
 ]
 
 [tool.coverage.report]
