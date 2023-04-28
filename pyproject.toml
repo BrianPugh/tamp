@@ -99,6 +99,7 @@ exclude_lines = [
     "if False:",
     "if __name__ == .__main__.:",
     "def run_app",
+    "except ImportError",
 ]
 
 [tool.pyright]

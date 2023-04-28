@@ -24,7 +24,15 @@ Our custom huffman size table:
 import io
 import unittest
 
-from tamp import Compressor, ExcessBitsError
+from tamp import Compressor, ExcessBitsError, bit_size
+
+
+class TestCompressorHelpers(unittest.TestCase):
+    def test_bit_size(self):
+        self.assertEqual(bit_size(0b11), 2)
+
+    def test_bit_size_excess(self):
+        self.assertEqual(bit_size(1 << 32), -1)
 
 
 class TestCompressor(unittest.TestCase):
