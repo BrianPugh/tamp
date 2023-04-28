@@ -24,13 +24,13 @@ tamp = "tamp.cli.main:run_app"
 [tool.poetry.dependencies]
 # Be as loose as possible if writing a library.
 python = "^3.8"
-typer = "^0.6.0"
+typer = ">=0.6.0, <1.0.0"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = "~4.5.0"
 sphinx_rtd_theme = "~1.0.0"
 gitpython = "^3.1.31"
-sphinx-copybutton = "^0.5.2"
+sphinx-copybutton = ">=0.5.2, <1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 coverage = {extras = ["toml"], version = "^5.1"}
@@ -43,15 +43,8 @@ black = "^23.1.0"
 belay = ">=0.19.2, <1.0.0"
 tqdm = "^4.65.0"
 matplotlib = "^3.7.1"
-ipdb = "^0.13.13"
+ipdb = ">=0.13.13, <1.0.0"
 mpremote = "^1.20.0"
-
-[tool.poetry.group.debug]
-optional = true
-
-[tool.poetry.group.debug.dependencies]
-ipdb = ">=0.13.9, <1.0.0"
-line_profiler = "^3.5.1"
 
 [tool.belay]
 name = "tamp"
