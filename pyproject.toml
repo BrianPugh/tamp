@@ -98,6 +98,7 @@ exclude_lines = [
     "if 0:",
     "if False:",
     "if __name__ == .__main__.:",
+    "def run_app",
 ]
 
 [tool.pyright]

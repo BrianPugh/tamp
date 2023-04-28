@@ -65,6 +65,15 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.stdout, "foo foo foo")
 
+    def test_decompress_stdin_to_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            test_file = tmp_dir / "test_output.txt"
+
+            result = runner.invoke(app, ["decompress", "-o", str(test_file)], input=compressed_foo_foo_foo)
+            self.assertEqual(result.exit_code, 0)
+            self.assertEqual(test_file.read_text(), "foo foo foo")
+
     def test_version(self):
         result = runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
