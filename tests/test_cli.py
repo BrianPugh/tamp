@@ -64,3 +64,8 @@ class TestCli(unittest.TestCase):
         result = runner.invoke(app, ["decompress"], input=compressed_foo_foo_foo)
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.stdout, "foo foo foo")
+
+    def test_version(self):
+        result = runner.invoke(app, ["--version"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.stdout, "0.0.0\n")
