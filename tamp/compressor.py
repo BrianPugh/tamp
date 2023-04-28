@@ -114,8 +114,8 @@ class Compressor:
             f = open(str(f), "wb")
 
         self._bit_writer = BitWriter(f)
-        if dictionary and bit_size(len(dictionary) - 1) > window:
-            raise ValueError("Dictionary larger than windows size.")
+        if dictionary and bit_size(len(dictionary) - 1) != window:
+            raise ValueError("Dictionary-window size mismatch.")
 
         self.window_bits = window
         self.literal_bits = literal

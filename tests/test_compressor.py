@@ -163,6 +163,11 @@ class TestCompressor(unittest.TestCase):
             actual = f.read()
         self.assertEqual(actual, expected)
 
+    def test_compressor_predefined_dictionary_incorrect_size(self):
+        dictionary = bytearray(1 << 8)
+        with io.BytesIO() as f, self.assertRaises(ValueError):
+            Compressor(f, window=9, literal=7, dictionary=dictionary)
+
     def test_oob_2_byte_pattern(self):
         """Viper implementation had a bug where a pattern of length 2 could be detected at the end of a string (going out of bounds by 1 byte)."""
         test_string_extended = bytearray(b"Q\x00Q\x00")
