@@ -24,7 +24,7 @@ Our custom huffman size table:
 import io
 import unittest
 
-from tamp import Compressor
+from tamp import Compressor, ExcessBitsError
 
 
 class TestCompressor(unittest.TestCase):
@@ -171,3 +171,11 @@ class TestCompressor(unittest.TestCase):
             ]
         )
         assert actual == expected
+
+    def test_excess_bits(self):
+        with io.BytesIO() as f:
+            compressor = Compressor(f, literal=7)
+
+            with self.assertRaises(ExcessBitsError):
+                compressor.write(b"\xFF")
+                compressor.flush()

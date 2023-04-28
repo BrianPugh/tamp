@@ -1,5 +1,7 @@
-import io
 import unittest
+from io import BytesIO
+
+import tamp
 
 try:
     import micropython
@@ -31,7 +33,7 @@ class TestDecompressor(unittest.TestCase):
             # fmt: on
         )
 
-        with io.BytesIO(compressed) as f:
+        with BytesIO(compressed) as f:
             decompressor = Decompressor(f)
             actual = decompressor.read()
 
@@ -58,7 +60,7 @@ class TestDecompressor(unittest.TestCase):
             # fmt: on
         )
 
-        with io.BytesIO(compressed) as f:
+        with BytesIO(compressed) as f:
             decompressor = Decompressor(f)
             self.assertEqual(decompressor.read(4), b"foo ")
             self.assertEqual(decompressor.read(2), b"fo")
@@ -84,9 +86,15 @@ class TestDecompressor(unittest.TestCase):
         decoded = decompress(compressed)
         self.assertEqual(decoded, b"QW")
 
+    def test_decompressor_missing_dict(self):
+        from tamp.decompressor import Decompressor
 
+        with self.assertRaises(ValueError), BytesIO(bytes([0b000_10_1_0_0])) as f:
+            Decompressor(f)
+
+
+@unittest.skipIf(micropython is None, "not running micropython")
 class TestDecompressorViper(unittest.TestCase):
-    @unittest.skipIf(micropython is None, "not running micropython")
     def test_decompressor(self):
         from tamp.decompressor_viper import Decompressor
 
@@ -110,13 +118,12 @@ class TestDecompressorViper(unittest.TestCase):
             # fmt: on
         )
 
-        with io.BytesIO(compressed) as f:
+        with BytesIO(compressed) as f:
             decompressor = Decompressor(f)
             actual = decompressor.read()
 
         self.assertEqual(actual, expected)
 
-    @unittest.skipIf(micropython is None, "not running micropython")
     def test_decompressor_restricted_read_size(self):
         from tamp.decompressor_viper import Decompressor
 
@@ -138,7 +145,7 @@ class TestDecompressorViper(unittest.TestCase):
             # fmt: on
         )
 
-        with io.BytesIO(compressed) as f:
+        with BytesIO(compressed) as f:
             decompressor = Decompressor(f)
             self.assertEqual(decompressor.read(4), b"foo ")
             self.assertEqual(decompressor.read(2), b"fo")
