@@ -76,6 +76,7 @@ branch = true
 omit = [
     "tests/*",
     "tamp/*_viper.py",
+    "tamp/__main__.py",
 ]
 
 [tool.coverage.report]
