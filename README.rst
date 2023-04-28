@@ -1,4 +1,4 @@
-.. image:: assets/logo_300w.png
+.. image:: https://raw.githubusercontent.com/BrianPugh/tamp/main/assets/logo_300w.png
    :alt: tamp logo
    :width: 300
    :align: center
