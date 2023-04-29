@@ -204,12 +204,12 @@ void tamp_compressor_sink(
         TampCompressor *compressor,
         const char *input,
         size_t input_size,
-        size_t *consumed_size,
+        size_t *consumed_size
         ){
     if(consumed_size){
         *consumed_size = 0;
     }
-    for(size_t i=0; i < *input_size; i++){
+    for(size_t i=0; i < input_size; i++){
         if(compressor->input_size == sizeof(compressor->input)){
             break;
         }
@@ -242,7 +242,7 @@ void tamp_compressor_compress(
         size_t *output_written_size,
         const char *input,
         size_t input_size,
-        size_t *input_consumed_size,
+        size_t *input_consumed_size
         ){
     while(input_size > 0 && output_size > 0){
         {
