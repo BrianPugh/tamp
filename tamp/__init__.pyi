@@ -3,8 +3,10 @@ from typing import Literal, Optional, Union, overload
 
 from .compressor import Compressor as Compressor
 from .compressor import TextCompressor as TextCompressor
+from .compressor import compress as compress
 from .decompressor import Decompressor as Decompressor
 from .decompressor import TextDecompressor as TextDecompressor
+from .decompressor import decompress as decompress
 
 __version__: str
 

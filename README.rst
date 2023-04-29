@@ -232,7 +232,7 @@ competitive performance while using around 10x less memory.
 
 Memory Usage
 ^^^^^^^^^^^^
-The following table shows approximately how much memory each algorithm uses with a window size of 1KB (10 bit).
+The following table shows approximately how much memory each algorithm uses during compression and decompression.
 
 +---------------+-------------------+------------------------------+-------------------+
 | Action        | tamp              | zlib                         | heatshrink        |
