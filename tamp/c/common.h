@@ -5,17 +5,32 @@
 extern "C" {
 #endif
 
+#include <stdlib.h>
+
 typedef struct TampConf {
-    uint8_t window;  // number of window bits
-    uint8_t literal;  // number of literal bits
+    uint8_t window:4;  // number of window bits
+    uint8_t literal:3;  // number of literal bits
+    uint8_t use_custom_dictionary:1;  // Use a custom initialized dictionary.
 } TampConf;
 
-typedef struct TampRingBuffer {
-    char *buffer;
-    uint16_t pos;  // Current position
-    uint16_t capacity;  // length of buffer
-    uint16_t size;  // number of bytes populated
-} RingBuffer;
+/**
+ * @brief Pre-populate a window buffer with common characters.
+ *
+ * @param[out] buffer Populated output buffer.
+ * @param[in] size Size of output buffer.
+ * @param[in] seed Pseudorandom generator initial seed.
+ */
+void initialize_dictionary(char *buffer, size_t size, uint32_t seed);
+
+/**
+ * @brief
+ *
+ * @param[in] window Number of window bits.
+ * @param[in] literal Number of literal bits.
+ *
+ * @return The minimum pattern size in bytes.
+ */
+int8_t compute_min_pattern_size(uint8_t window, uint8_t literal);
 
 #ifdef __cplusplus
 }

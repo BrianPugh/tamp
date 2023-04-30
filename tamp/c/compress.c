@@ -1,4 +1,4 @@
-#include "common.h"
+#include "compress.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -31,14 +31,6 @@ typedef struct TampCompressor {
     uint32_t window_pos:15;
 } TampCompressor;
 
-typedef enum {
-    /* Normal status >= 0 */
-    TAMP_OK = 0,
-    TAMP_OUTPUT_FULL = 1,  // Wasn't able to complete action due to full output buffer.
-
-    /* Error codes < 0 */
-    TAMP_EXCESS_BITS = -1,
-} tamp_res;
 
 #define FLUSH_CODE (0xAB)
 
@@ -83,16 +75,12 @@ static inline tamp_res partial_flush(TampCompressor *compressor, char *output, s
 }
 
 
-int tamp_compressor_init(TampCompressor *compressor, const TampConf *conf){
-    // TODO
-    compressor->min_pattern_size = compute_min_pattern_size(conf->window, conf->literal);
-
-    compressor->input_size = 0;
-    compressor->input_pos = 0;
-}
-
 /**
  * @brief Find the best match for the current input buffer.
+ *
+ * @param[in,out] compressor TampCompressor object to perform search on.
+ * @param[out] match_index
+ * @param[out] match_size
  */
 static inline void find_best_match(
         TampCompressor *compressor,
@@ -117,22 +105,36 @@ static inline void find_best_match(
     }
 }
 
-/**
- * @brief Run a single compression iteration on the internal input buffer.
- *
- * @param[in,out] compressor TampCompressor object to perform compression with.
- * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
- * @param[out] output_written_size Number of bytes written to output. May be NULL.
- *
- * @return Tamp Status Code.
- */
+
+tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf){
+    if(!conf){
+        conf = {.window=10, .literal=8, .use_custom_dictionary=false};
+    }
+
+    // TODO
+    compressor->min_pattern_size = compute_min_pattern_size(conf->window, conf->literal);
+
+    compressor->input_size = 0;
+    compressor->input_pos = 0;
+
+    // Write header to bit buffer
+    write_to_bit_buffer(compressor, conf->window - 8, 3);
+    write_to_bit_buffer(compressor, conf->literal - 5, 2);
+    write_to_bit_buffer(compressor, conf->use_custom_dictionary, 1);
+    write_to_bit_buffer(compressor, 0, 1);  // Reserved
+    write_to_bit_buffer(compressor, 0, 1);  // No more header bytes
+
+    return TAMP_OK;
+}
+
+
 tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
 
     if(output_written_size){
         (*output_written_size) = 0;
     }
+
     if(compressor->input_size == 0){
         return TAMP_OK;
     }
@@ -190,16 +192,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output,
     }
 }
 
-/**
- * @brief Sink data into input buffer.
- *
- * @param[in,out] compressor TampCompressor object to perform compression with.
- * @param[in] input Pointer to the input data to be sinked into compressor.
- * @param[in] input_size Size of input.
- * @param[out] consumed_size Number of bytes of input consumed. May be NULL.
- *
- * @return Tamp Status Code.
- */
+
 void tamp_compressor_sink(
         TampCompressor *compressor,
         const char *input,
@@ -220,21 +213,6 @@ void tamp_compressor_sink(
     }
 }
 
-/**
- * @brief Compress a chunk of data.
- *
- * Convenience function to loop over input/output data until something is full or complete.
- *
- * @param[in,out] compressor TampCompressor object to perform compression with.
- * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
- * @param[out] output_written_size Number of bytes written to output. May be NULL.
- * @param[in] input Pointer to the input data to be compressed.
- * @param[in] input_size Number of bytes in input data.
- * @param[out] input_consumed_size Number of bytes of input data consumed. May be NULL.
- *
- * @return Tamp Status Code.
- */
 void tamp_compressor_compress(
         TampCompressor *compressor,
         char *output,
@@ -268,18 +246,13 @@ void tamp_compressor_compress(
     }
 }
 
-/**
- * @brief Completely flush the internal bit buffer. Makes output "complete".
- *
- * @param[in,out] compressor TampCompressor object to flush.
- * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
- * @param[out] output_written_size Number of bytes written to output. May be NULL.
- * @param[in] write_token Write the FLUSH token, if appropriate. Set to true if you want to continue using the compressor. Set to false if you are done with the compressor, usually at the end of a stream.
- *
- * @return Tamp Status Code.
- */
-tamp_res tamp_compressor_flush(TampCompressor *compressor, char *output, size_t output_size, size_t *output_written_size, bool write_token){
+tamp_res tamp_compressor_flush(
+        TampCompressor *compressor,
+        char *output,
+        size_t output_size,
+        size_t *output_written_size,
+        bool write_token
+        ){
     tamp_res res;
     int bytes_written = 0;
     size_t output_written_size_backup;
