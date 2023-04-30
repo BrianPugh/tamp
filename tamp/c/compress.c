@@ -1,7 +1,9 @@
 #include "compress.h"
+#include "common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -20,7 +22,7 @@
 #define IS_LITERAL_FLAG (1 << compressor->conf->literal)
 
 typedef struct TampCompressor {
-    const TampConf conf;
+    TampConf conf;
     char *window;
     char input[16];
     uint32_t bit_buffer;
@@ -106,16 +108,24 @@ static inline void find_best_match(
 }
 
 
-tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf){
+tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, char *window){
+    const TampConf conf_default = {.window=10, .literal=8, .use_custom_dictionary=false};
     if(!conf){
-        conf = {.window=10, .literal=8, .use_custom_dictionary=false};
+        conf = &conf_default;
     }
 
-    // TODO
-    compressor->min_pattern_size = compute_min_pattern_size(conf->window, conf->literal);
+    memcpy(&compressor->conf, conf, sizeof(TampConf));
 
+    compressor->window = window;
+    compressor->bit_buffer_pos = 0;
+    compressor->min_pattern_size = compute_min_pattern_size(conf->window, conf->literal);
     compressor->input_size = 0;
     compressor->input_pos = 0;
+    compressor->window_pos = 0;
+
+    if(!compressor->conf.use_custom_dictionary){
+        initialize_dictionary(window, (1 << conf->window), 3758097560);
+    }
 
     // Write header to bit buffer
     write_to_bit_buffer(compressor, conf->window - 8, 3);

@@ -8,9 +8,9 @@ extern "C" {
 #include <stdlib.h>
 
 typedef struct TampConf {
-    uint8_t window:4;  // number of window bits
-    uint8_t literal:3;  // number of literal bits
-    uint8_t use_custom_dictionary:1;  // Use a custom initialized dictionary.
+    uint16_t window:4;  // number of window bits
+    uint16_t literal:4;  // number of literal bits
+    uint16_t use_custom_dictionary:1;  // Use a custom initialized dictionary.
 } TampConf;
 
 /**

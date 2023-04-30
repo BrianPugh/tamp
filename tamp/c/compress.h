@@ -25,10 +25,11 @@ typedef struct TampCompressor TampCompressor;
  *
  * @param[out] compressor Object to initialize.
  * @param[in] conf Compressor configuration. Set to NULL for default.
+ * @param[in] window Pre-allocated window buffer. Size must agree with conf->window.
  *
  * @return Tamp Status Code.
  */
-tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf);
+tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, char *window);
 
 /**
  * @brief Sink data into input buffer.
