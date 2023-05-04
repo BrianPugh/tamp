@@ -54,6 +54,14 @@ For micropython use, there are 3 main files:
 For example, if on-device decompression isn't used, then do not include ``decompressor_viper.py``.
 If manually installing, just copy these files to your microcontroller's ``/lib/tamp`` folder.
 
+If using `mip`_, tamp can be installed by specifying the appropriate ``package-*.json`` file.
+
+.. code-block:: bash
+
+   mip install github:brianpugh/tamp/package-compressor.json  # Compressor only
+   mip install github:brianpugh/tamp/package-decompressor.json  # Decompressor only
+   mip install github:brianpugh/tamp/package-compressor-decompressor.json  # Compressor & Decompressor
+
 If using `Belay`_, tamp can be installed by adding the following to ``pyproject.toml``.
 
 .. code-block:: toml
@@ -273,3 +281,4 @@ Tamp is good for compressing data on-device. If purely decompressing data on-dev
 .. _heatshrink: https://github.com/atomicobject/heatshrink
 .. _Silesia Corpus: https://sun.aei.polsl.pl//~sdeor/index.php?page=silesia
 .. _Enwik8: https://mattmahoney.net/dc/textdata.html
+.. _mip: https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip
