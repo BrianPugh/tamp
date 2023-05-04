@@ -18,7 +18,7 @@ jobs:
       - name: Update version in package.json
         run: |
           NEW_VERSION=$(echo $GITHUB_REF | sed 's/refs\/tags\/v//')
-          for package_file in package-compressor.json package-decompressor.json package-compressor-decompressor.json; do
+          for package_file in package-compressor.json package-decompressor.json package.json; do
             jq --arg version "$NEW_VERSION" '.version = $version' "$package_file" > "${package_file}.tmp" && mv "${package_file}.tmp" "$package_file"
           done
 

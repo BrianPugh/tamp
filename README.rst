@@ -58,9 +58,9 @@ If using `mip`_, tamp can be installed by specifying the appropriate ``package-*
 
 .. code-block:: bash
 
+   mip install github:brianpugh/tamp  # Defaults to package.json: Compressor & Decompressor
    mip install github:brianpugh/tamp/package-compressor.json  # Compressor only
    mip install github:brianpugh/tamp/package-decompressor.json  # Decompressor only
-   mip install github:brianpugh/tamp/package-compressor-decompressor.json  # Compressor & Decompressor
 
 If using `Belay`_, tamp can be installed by adding the following to ``pyproject.toml``.
 
