@@ -1,0 +1,36 @@
+name: Update Version
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  update_version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install jq
+        run: sudo apt-get install jq
+
+      - name: Update version in package.json
+        run: |
+          NEW_VERSION=$(echo $GITHUB_REF | sed 's/refs\/tags\/v//')
+          for package_file in package-compressor.json package-decompressor.json package-compressor-decompressor.json; do
+            jq --arg version "$NEW_VERSION" '.version = $version' "$package_file" > "${package_file}.tmp" && mv "${package_file}.tmp" "$package_file"
+          done
+
+      - name: Commit changes
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@users.noreply.github.com'
+          git add package.json
+          git commit -m "Update version in package.json to $NEW_VERSION"
+          git push
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
