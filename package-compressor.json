@@ -1,0 +1,11 @@
+{
+  "urls": [
+    ["tamp/__init__.py", "github:brianpugh/tamp/tamp/__init__.py"],
+    [
+      "tamp/compressor_viper.py",
+      "github:brianpugh/tamp/tamp/compressor_viper.py"
+    ]
+  ],
+  "deps": [],
+  "version": "1.0.2"
+}
