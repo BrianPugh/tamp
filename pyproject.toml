@@ -18,6 +18,10 @@ authors = ["Brian Pugh"]
 readme = "README.rst"
 packages = [{include = "tamp"}]
 
+[tool.poetry.build]
+generate-setup-file = false
+script = 'build.py'
+
 [tool.poetry.scripts]
 tamp = "tamp.cli.main:run_app"
 
@@ -45,6 +49,7 @@ tqdm = "^4.65.0"
 matplotlib = "^3.7.1"
 ipdb = ">=0.13.13, <1.0.0"
 mpremote = "^1.20.0"
+cython = "^0.29.34"
 
 [tool.belay]
 name = "tamp"
