@@ -38,3 +38,18 @@ cdef class Compressor:
         self._c_conf.window = window
         self._c_conf.literal = literal
         self._c_conf.use_custom_dictionary = bool(dictionary)
+
+    def write(self, data: bytes) -> int:
+        raise NotImplementedError
+
+    def flush(self, write_token: bool = True) -> int:
+        raise NotImplementedError
+
+    def close(self) -> int:
+        raise NotImplementedError
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
