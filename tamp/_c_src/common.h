@@ -6,6 +6,8 @@ extern "C" {
 #endif
 
 #include <stdlib.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 typedef struct TampConf {
     uint16_t window:4;  // number of window bits

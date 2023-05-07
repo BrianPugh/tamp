@@ -21,19 +21,6 @@
         )
 #define IS_LITERAL_FLAG (1 << compressor->conf->literal)
 
-typedef struct TampCompressor {
-    TampConf conf;
-    char *window;
-    char input[16];
-    uint32_t bit_buffer;
-    uint32_t bit_buffer_pos:5;
-    uint32_t min_pattern_size:2;
-    uint32_t input_size:5;
-    uint32_t input_pos:4;
-    uint32_t window_pos:15;
-} TampCompressor;
-
-
 #define FLUSH_CODE (0xAB)
 
 // encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths

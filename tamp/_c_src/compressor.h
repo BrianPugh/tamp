@@ -16,8 +16,17 @@ typedef enum {
     TAMP_EXCESS_BITS = -1,
 } tamp_res;
 
-/* Opaque TampCompressor struct */
-typedef struct TampCompressor TampCompressor;
+typedef struct TampCompressor {
+    char *window;
+    char input[16];
+    uint32_t bit_buffer;
+    uint32_t bit_buffer_pos:5;
+    uint32_t min_pattern_size:2;
+    uint32_t input_size:5;
+    uint32_t input_pos:4;
+    uint32_t window_pos:15;
+    TampConf conf;
+} TampCompressor;
 
 
 /**

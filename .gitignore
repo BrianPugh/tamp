@@ -247,3 +247,6 @@ Temporary Items
 enwik8*
 *.pkl
 *.tamp
+
+# Cython
+tamp/_c_src/tamp.c
