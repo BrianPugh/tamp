@@ -1,4 +1,4 @@
-#include "compress.h"
+#include "compressor.h"
 #include "common.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +19,7 @@
 #define read_input(offset) ( \
         compressor->input[input_add(offset)] \
         )
-#define IS_LITERAL_FLAG (1 << compressor->conf->literal)
+#define IS_LITERAL_FLAG (1 << compressor->conf.literal)
 
 #define FLUSH_CODE (0xAB)
 
@@ -162,13 +162,13 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output,
         // Write LITERAL
         match_size = 1;
         char c = read_input(0);
-        if(c >> compressor->conf->literal){
+        if(c >> compressor->conf.literal){
             return TAMP_EXCESS_BITS;
         }
         write_to_bit_buffer(
                 compressor,
                 IS_LITERAL_FLAG | c,
-                compressor->conf->literal + 1
+                compressor->conf.literal + 1
                 );
     }
     else{
@@ -187,6 +187,8 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output,
         compressor->input_pos = input_add(1);
         compressor->input_size--;
     }
+
+    return TAMP_OK;
 }
 
 
@@ -210,7 +212,7 @@ void tamp_compressor_sink(
     }
 }
 
-void tamp_compressor_compress(
+tamp_res tamp_compressor_compress(
         TampCompressor *compressor,
         char *output,
         size_t output_size,
@@ -219,6 +221,7 @@ void tamp_compressor_compress(
         size_t input_size,
         size_t *input_consumed_size
         ){
+    tamp_res res;
     while(input_size > 0 && output_size > 0){
         {
             // Sink Data into input buffer.
@@ -233,14 +236,18 @@ void tamp_compressor_compress(
         if(compressor->input_size == sizeof(compressor->input)){
             // Input buffer is full and ready to start compressing.
             size_t chunk_output_written_size;
-            tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
+            res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
             output += chunk_output_written_size;
             output_size -= chunk_output_written_size;
             if(output_written_size){
                 output_written_size += chunk_output_written_size;
             }
+            if(res != TAMP_OK){
+                return res;
+            }
         }
     }
+    return TAMP_OK;
 }
 
 tamp_res tamp_compressor_flush(
@@ -251,27 +258,27 @@ tamp_res tamp_compressor_flush(
         bool write_token
         ){
     tamp_res res;
-    int bytes_written = 0;
-    size_t output_written_size_backup;
-    if(!output_written_size){
-        output_written_size = &output_written_size_backup;
-    }
 
     while(compressor->input_size){
         // Compress the remainder of the input buffer.
-        int chunk_compressed_size;
-        res = tamp_compressor_compress_poll(compressor, output, output_size, output_written_size);
-        output_size -= *output_written_size;
-        output += *output_written_size;
+        size_t chunk_output_written_size;
+        res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
+        output_size -= chunk_output_written_size;
+        if(output_written_size){
+            *output_written_size += chunk_output_written_size;
+        }
+        output += chunk_output_written_size;
         if(res != TAMP_OK){
             return res;
         }
     }
 
+    // Maybe write the FLUSH token
     if(compressor->bit_buffer_pos && write_token){
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
     }
 
+    // Flush the remainder of the output bit-buffer
     while(compressor->bit_buffer_pos && output_size){
         *output++ = compressor->bit_buffer >> 24;
         compressor->bit_buffer <<= 8;

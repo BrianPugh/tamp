@@ -108,7 +108,7 @@ tamp_res tamp_compressor_flush(
  *
  * @return Tamp Status Code.
  */
-void tamp_compressor_compress(
+tamp_res tamp_compressor_compress(
         TampCompressor *compressor,
         char *output,
         size_t output_size,

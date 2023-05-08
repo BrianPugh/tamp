@@ -14,7 +14,7 @@ cdef extern from "compressor.h":
     ctypedef struct TampCompressor:
         pass
 
-    cpdef enum tamp_res:
+    ctypedef enum tamp_res:
         TAMP_OK = 0
         TAMP_OUTPUT_FULL = 1
         TAMP_EXCESS_BITS = -1
@@ -43,7 +43,7 @@ cdef extern from "compressor.h":
                     bool write_token
                     );
 
-    void tamp_compressor_compress(
+    tamp_res tamp_compressor_compress(
             TampCompressor *compressor,
             char *output,
             size_t output_size,

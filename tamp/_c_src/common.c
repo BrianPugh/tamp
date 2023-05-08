@@ -20,7 +20,7 @@ inline uint32_t xorshift32(uint32_t *state) {
 }
 
 void initialize_dictionary(char *buffer, size_t size, uint32_t seed){
-    for(size_t i; i < (size >> 3); i+=8){
+    for(size_t i=0; i < (size >> 3); i+=8){
         xorshift32(&seed);
         buffer[i + 0] = common_characters[seed & 0x0F];
         buffer[i + 1] = common_characters[seed >> 4 & 0x0F];

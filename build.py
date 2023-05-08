@@ -9,8 +9,11 @@ extension = Extension(
     "tamp._c",
     [
         str(cython_dir / "tamp.pyx"),
+        str(cython_dir / "compressor.c"),
+        str(cython_dir / "common.c"),
     ],
-    # extra_compile_args=["-O3"],
+    include_dirs=[str(cython_dir)],
+    extra_compile_args=["-O3", "-Werror"],
 )
 
 ext_modules = cythonize([extension], include_path=[cython_dir], language_level=3)

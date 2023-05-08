@@ -1,6 +1,9 @@
 cimport ctamp
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
+from libc.stddef cimport size_t
+from .. import ExcessBitsError
 
+CHUNK_SIZE = (1 << 20)
 
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
@@ -40,13 +43,54 @@ cdef class Compressor:
         self._c_conf.use_custom_dictionary = bool(dictionary)
 
     def write(self, data: bytes) -> int:
-        raise NotImplementedError
+        cdef bytearray buffer = bytearray(CHUNK_SIZE)
+        cdef char *output_buffer = buffer
+        cdef size_t input_consumed_size = 0
+        cdef size_t output_written_size = 1
+        cdef ctamp.tamp_res res
 
-    def flush(self, write_token: bool = True) -> int:
-        raise NotImplementedError
+        data = memoryview(data)
+
+        while output_written_size:
+            data = data[input_consumed_size:]
+            res = ctamp.tamp_compressor_compress(
+                self._c_compressor,
+                output_buffer,
+                CHUNK_SIZE,
+                &output_written_size,
+                data,
+                len(data),
+                &input_consumed_size
+            )
+            if(res < 0):
+                if res == ctamp.tamp_res.TAMP_EXCESS_BITS:
+                    raise ExcessBitsError
+                else:
+                    raise NotImplementedError
+            self.f.write(output_buffer[:output_written_size])
+
+    cpdef int flush(self, write_token: bool = True):
+        cdef bytearray buffer = bytearray(4)
+        cdef char *output_buffer = buffer
+        cdef size_t output_written_size = 0
+
+        ctamp.tamp_compressor_flush(
+            self._c_compressor,
+            output_buffer,
+            len(buffer),
+            &output_written_size,
+            write_token,
+        )
+
+        if output_written_size:
+            self.f.write(buffer[:output_written_size])
+
+        return output_written_size
 
     def close(self) -> int:
-        raise NotImplementedError
+        bytes_written = self.flush(write_token=False)
+        self.f.close()
+        return bytes_written
 
     def __enter__(self):
         return self
