@@ -103,6 +103,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     memcpy(&compressor->conf, conf, sizeof(TampConf));
 
     compressor->window = window;
+    compressor->bit_buffer = 0;
     compressor->bit_buffer_pos = 0;
     compressor->min_pattern_size = compute_min_pattern_size(conf->window, conf->literal);
     compressor->input_size = 0;
