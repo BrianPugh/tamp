@@ -44,13 +44,14 @@ static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits
  */
 static inline tamp_res partial_flush(TampCompressor *compressor, char *output, size_t output_size, size_t *output_written_size){
     if(output_written_size){
-        output_written_size=0;
+        *output_written_size = 0;
     }
     while(compressor->bit_buffer_pos >= 8 && output_size){
-        *output++ = compressor->bit_buffer >> 24;
+        *output = compressor->bit_buffer >> 24;
+        output++;
         compressor->bit_buffer <<= 8;
         if(output_written_size){
-            output_written_size++;
+            (*output_written_size)++;
         }
         output_size--;
         compressor->bit_buffer_pos -= 8;
@@ -261,10 +262,10 @@ tamp_res tamp_compressor_flush(
         bool write_token
         ){
     tamp_res res;
+    size_t chunk_output_written_size;
 
     while(compressor->input_size){
         // Compress the remainder of the input buffer.
-        size_t chunk_output_written_size;
         res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
         output_size -= chunk_output_written_size;
         if(output_written_size){
@@ -276,6 +277,18 @@ tamp_res tamp_compressor_flush(
         }
     }
 
+    // Perform partial flush to see if we need a FLUSH token, and to subsequently
+    // make room for the FLUSH token.
+    res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
+    output_size -= chunk_output_written_size;
+    if(output_written_size){
+        *output_written_size += chunk_output_written_size;
+    }
+    output += chunk_output_written_size;
+    if(res != TAMP_OK){
+        return res;
+    }
+
     // Maybe write the FLUSH token
     if(compressor->bit_buffer_pos && write_token){
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
@@ -283,7 +296,8 @@ tamp_res tamp_compressor_flush(
 
     // Flush the remainder of the output bit-buffer
     while(compressor->bit_buffer_pos && output_size){
-        *output++ = compressor->bit_buffer >> 24;
+        *output = compressor->bit_buffer >> 24;
+        output++;
         compressor->bit_buffer <<= 8;
         compressor->bit_buffer_pos -= MIN(compressor->bit_buffer_pos, 8);
         output_size--;
