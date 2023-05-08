@@ -128,13 +128,11 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
 
-    if(output_written_size){
-        (*output_written_size) = 0;
-    }
+    if(output_written_size)
+        *output_written_size = 0;
 
-    if(compressor->input_size == 0){
+    if(compressor->input_size == 0)
         return TAMP_OK;
-    }
 
     {
         // Make sure there's enough room in the bit buffer.
@@ -222,6 +220,12 @@ tamp_res tamp_compressor_compress(
         size_t *input_consumed_size
         ){
     tamp_res res;
+
+    if(output_written_size)
+        *output_written_size = 0;
+    if(input_consumed_size)
+        *input_consumed_size = 0;
+
     while(input_size > 0 && output_size > 0){
         {
             // Sink Data into input buffer.

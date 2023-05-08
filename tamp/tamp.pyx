@@ -53,21 +53,17 @@ cdef class Compressor:
         cdef bytearray buffer = bytearray(CHUNK_SIZE)
         cdef char *output_buffer = buffer
         cdef size_t input_consumed_size = 0
-        cdef size_t output_written_size = 1
+        cdef size_t output_buffer_written_size = 1
         cdef ctamp.tamp_res res
+        cdef int written_to_disk_size = 0
 
-        '''
-        if not isinstance(data, memoryview):
-            data = memoryview(data)
-        '''
-
-        while output_written_size:
+        while output_buffer_written_size:
             data = data[input_consumed_size:]
             res = ctamp.tamp_compressor_compress(
                 self._c_compressor,
                 output_buffer,
                 CHUNK_SIZE,
-                &output_written_size,
+                &output_buffer_written_size,
                 data,
                 len(data),
                 &input_consumed_size
@@ -77,7 +73,10 @@ cdef class Compressor:
                     raise ExcessBitsError
                 else:
                     raise NotImplementedError
-            self.f.write(output_buffer[:output_written_size])
+            self.f.write(output_buffer[:output_buffer_written_size])
+            written_to_disk_size += output_buffer_written_size
+
+        return written_to_disk_size
 
     cpdef int flush(self, write_token: bool = True):
         cdef bytearray buffer = bytearray(4)

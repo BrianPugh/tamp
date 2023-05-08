@@ -94,9 +94,7 @@ tamp_res tamp_compressor_flush(
                 );
 
 /**
- * @brief Compress a chunk of data.
- *
- * Convenience function to loop over input/output data until something is full or complete.
+ * @brief Compress a chunk of data until input or output buffer is exhausted.
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
