@@ -1,9 +1,16 @@
 cimport ctamp
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
-from .. import ExcessBitsError
+from io import BytesIO
+from . import ExcessBitsError
+try:
+    from typing import Union
+except ImportError:
+    pass
+
 
 CHUNK_SIZE = (1 << 20)
+
 
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
@@ -49,7 +56,10 @@ cdef class Compressor:
         cdef size_t output_written_size = 1
         cdef ctamp.tamp_res res
 
-        data = memoryview(data)
+        '''
+        if not isinstance(data, memoryview):
+            data = memoryview(data)
+        '''
 
         while output_written_size:
             data = data[input_consumed_size:]
@@ -97,3 +107,39 @@ cdef class Compressor:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
+
+
+class TextCompressor(Compressor):
+    """Compresses text to a file or stream."""
+
+    def write(self, data: str) -> int:
+        return super().write(data.encode())
+
+
+def compress(data: Union[bytes, str], *args, **kwargs) -> bytes:
+    """Single-call to compress data.
+
+    Parameters
+    ----------
+    data: Union[str, bytes]
+        Data to compress.
+    *args: tuple
+        Passed along to :class:`Compressor`.
+    **kwargs : dict
+        Passed along to :class:`Compressor`.
+
+    Returns
+    -------
+    bytes
+        Compressed data
+    """
+    with BytesIO() as f:
+        if isinstance(data, str):
+            c = TextCompressor(f, *args, **kwargs)
+            c.write(data)
+        else:
+            c = Compressor(f, *args, **kwargs)
+            c.write(data)
+        c.flush(write_token=False)
+        f.seek(0)
+        return f.read()

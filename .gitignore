@@ -248,5 +248,5 @@ enwik8*
 *.pkl
 *.tamp
 
-# Cython
-tamp/_c_src/tamp.c
+# Cython-generated files
+tamp/tamp.c

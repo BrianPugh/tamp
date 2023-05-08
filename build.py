@@ -4,19 +4,18 @@ from pathlib import Path
 
 from Cython.Build import build_ext, cythonize
 
-cython_dir = Path("tamp/_c_src/")
 extension = Extension(
     "tamp._c",
     [
-        str(cython_dir / "tamp.pyx"),
-        str(cython_dir / "compressor.c"),
-        str(cython_dir / "common.c"),
+        "tamp/tamp.pyx",
+        "tamp/_c_src/compressor.c",
+        "tamp/_c_src/common.c",
     ],
-    include_dirs=[str(cython_dir)],
+    include_dirs=["tamp/_c_src/"],
     extra_compile_args=["-O3", "-Werror"],
 )
 
-ext_modules = cythonize([extension], include_path=[cython_dir], language_level=3)
+ext_modules = cythonize([extension], include_path=extension.include_dirs, language_level=3)
 dist = Distribution({"ext_modules": ext_modules})
 cmd = build_ext(dist)
 cmd.ensure_finalized()
