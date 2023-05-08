@@ -15,6 +15,7 @@ CHUNK_SIZE = (1 << 20)
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
     cdef ctamp.TampConf* _c_conf
+    cdef bytearray _window_buffer
     cdef object f
 
     def __cinit__(self):
@@ -49,9 +50,12 @@ cdef class Compressor:
         self._c_conf.literal = literal
         self._c_conf.use_custom_dictionary = bool(dictionary)
 
+        self._window_buffer = bytearray(1 << window)
+
+        res = ctamp.tamp_compressor_init(self._c_compressor, self._c_conf, <char *>self._window_buffer)
+
     def write(self, data: bytes) -> int:
-        cdef bytearray buffer = bytearray(CHUNK_SIZE)
-        cdef char *output_buffer = buffer
+        cdef bytearray output_buffer = bytearray(CHUNK_SIZE)
         cdef size_t input_consumed_size = 0
         cdef size_t output_buffer_written_size = 1
         cdef ctamp.tamp_res res
@@ -61,7 +65,7 @@ cdef class Compressor:
             data = data[input_consumed_size:]
             res = ctamp.tamp_compressor_compress(
                 self._c_compressor,
-                output_buffer,
+                <char *>output_buffer,
                 CHUNK_SIZE,
                 &output_buffer_written_size,
                 data,
@@ -79,17 +83,20 @@ cdef class Compressor:
         return written_to_disk_size
 
     cpdef int flush(self, write_token: bool = True):
-        cdef bytearray buffer = bytearray(4)
-        cdef char *output_buffer = buffer
+        cdef ctamp.tamp_res res
+        cdef bytearray buffer = bytearray(20)
         cdef size_t output_written_size = 0
 
-        ctamp.tamp_compressor_flush(
+        res = ctamp.tamp_compressor_flush(
             self._c_compressor,
-            output_buffer,
+            <char *> buffer,
             len(buffer),
             &output_written_size,
             write_token,
         )
+
+        if(res < 0):
+            raise NotImplementedError
 
         if output_written_size:
             self.f.write(buffer[:output_written_size])

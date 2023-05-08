@@ -9,9 +9,9 @@
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 #define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
-#define window_size (1 << compressor->conf.window)
+#define WINDOW_SIZE (1 << compressor->conf.window)
 #define window_add(offset) (\
-            (compressor->window_pos + offset) % window_size\
+            (compressor->window_pos + offset) % WINDOW_SIZE\
         )
 #define input_add(offset) (\
             (compressor->input_pos + offset) % sizeof(compressor->input)\
@@ -37,13 +37,10 @@ static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits
     compressor->bit_buffer |= bits << (32 - compressor->bit_buffer_pos);
 }
 
-static inline void write_to_input_buffer(TampCompressor *compressor, char byte){
-    compressor->input[compressor->input_pos] = byte;
-    compressor->input_pos = input_add(1);
-}
-
 /**
  * @brief Partially flush the internal bit buffer.
+ *
+ * Up to 7 bits may remain in the internal bit buffer.
  */
 static inline tamp_res partial_flush(TampCompressor *compressor, char *output, size_t output_size, size_t *output_written_size){
     if(output_written_size){
@@ -56,8 +53,9 @@ static inline tamp_res partial_flush(TampCompressor *compressor, char *output, s
             output_written_size++;
         }
         output_size--;
+        compressor->bit_buffer_pos -= 8;
     }
-    if(!output_size){
+    if(compressor->bit_buffer_pos >= 8){
         return TAMP_OUTPUT_FULL;
     }
     return TAMP_OK;
@@ -77,10 +75,10 @@ static inline void find_best_match(
         uint8_t *match_size
         ){
     *match_size = 0;
-    for(uint16_t window_index=0; window_index < window_size; window_index++){
+    for(uint16_t window_index=0; window_index < WINDOW_SIZE; window_index++){
         for(uint8_t input_offset=0; input_offset < compressor->input_size; input_offset++){
             char c = read_input(input_offset);
-            if(compressor->window[window_index] != c){
+            if(compressor->window[window_index + input_offset] != c){
                 break;
             }
             if(input_offset + 1 > *match_size){
@@ -203,7 +201,8 @@ void tamp_compressor_sink(
         if(compressor->input_size == sizeof(compressor->input)){
             break;
         }
-        write_to_input_buffer(compressor, input[i]);
+        compressor->input[input_add(compressor->input_size)] = input[i];
+        compressor->input_size += 1;
         if(consumed_size){
             (*consumed_size)++;
         }
