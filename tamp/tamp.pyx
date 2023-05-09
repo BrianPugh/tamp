@@ -11,6 +11,9 @@ except ImportError:
 
 CHUNK_SIZE = (1 << 20)
 
+_ERROR_LOOKUP = {
+    ctamp.TAMP_EXCESS_BITS: ExcessBitsError,
+}
 
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
@@ -75,17 +78,14 @@ cdef class Compressor:
                 len(data),
                 &input_consumed_size
             )
-            if(res < 0):
-                if res == ctamp.tamp_res.TAMP_EXCESS_BITS:
-                    raise ExcessBitsError
-                else:
-                    raise NotImplementedError
+            if res < 0:
+                raise _ERROR_LOOKUP.get(res, NotImplementedError)
             self.f.write(output_buffer[:output_buffer_written_size])
             written_to_disk_size += output_buffer_written_size
 
         return written_to_disk_size
 
-    cpdef int flush(self, write_token: bool = True):
+    cpdef int flush(self, write_token: bool = True) except -1:
         cdef ctamp.tamp_res res
         cdef bytearray buffer = bytearray(20)
         cdef size_t output_written_size = 0
@@ -98,8 +98,8 @@ cdef class Compressor:
             write_token,
         )
 
-        if(res < 0):
-            raise NotImplementedError
+        if res < 0:
+            raise _ERROR_LOOKUP.get(res, NotImplementedError)
 
         if output_written_size:
             self.f.write(buffer[:output_written_size])
