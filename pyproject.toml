@@ -50,6 +50,7 @@ matplotlib = "^3.7.1"
 ipdb = ">=0.13.13, <1.0.0"
 mpremote = "^1.20.0"
 cython = "^0.29.34"
+pytest-subtests = "^0.10.0"
 
 [tool.belay]
 name = "tamp"
@@ -187,6 +188,7 @@ convention = "numpy"
     "S106",  # possible hardcoded password.
     "S311",  # Standard pseudo-random generators are not suitable for cryptographic purposes
     "PGH001",  # use of "eval"
+    "N806", # Variable in function should be lowercase; it sometimes makes sense if iterating over class constructors.
 ]
 
 [tool.ruff.pep8-naming]

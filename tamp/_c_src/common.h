@@ -22,7 +22,7 @@ typedef struct TampConf {
  * @param[in] size Size of output buffer.
  * @param[in] seed Pseudorandom generator initial seed.
  */
-void initialize_dictionary(char *buffer, size_t size, uint32_t seed);
+void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
 
 /**
  * @brief

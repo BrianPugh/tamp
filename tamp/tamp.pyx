@@ -3,6 +3,7 @@ from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
 from . import ExcessBitsError, bit_size
+
 try:
     from typing import Union
 except ImportError:
@@ -58,30 +59,36 @@ cdef class Compressor:
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
 
-        res = ctamp.tamp_compressor_init(self._c_compressor, self._c_conf, <char *>self._window_buffer)
+        res = ctamp.tamp_compressor_init(self._c_compressor, self._c_conf, <unsigned char *>self._window_buffer)
 
-    def write(self, data: bytes) -> int:
-        cdef bytearray output_buffer = bytearray(CHUNK_SIZE)
-        cdef size_t input_consumed_size = 0
-        cdef size_t output_buffer_written_size = 1
-        cdef ctamp.tamp_res res
-        cdef int written_to_disk_size = 0
+    def write(self, const unsigned char[::1] data not None) -> int:
+        cdef:
+            ctamp.tamp_res res
 
-        while output_buffer_written_size:
-            data = data[input_consumed_size:]
+            bytearray output_buffer = bytearray(CHUNK_SIZE)
+            const unsigned char* data_ptr = &data[0]
+
+            size_t input_consumed_size = 0
+            size_t input_remaining_size = data.shape[0]
+            size_t output_buffer_written_size
+            int written_to_disk_size = 0
+
+        while input_remaining_size:
             res = ctamp.tamp_compressor_compress(
                 self._c_compressor,
-                <char *>output_buffer,
+                <unsigned char *>output_buffer,
                 CHUNK_SIZE,
                 &output_buffer_written_size,
-                data,
-                len(data),
+                data_ptr,
+                input_remaining_size,
                 &input_consumed_size
             )
             if res < 0:
                 raise _ERROR_LOOKUP.get(res, NotImplementedError)
             self.f.write(output_buffer[:output_buffer_written_size])
             written_to_disk_size += output_buffer_written_size
+            data_ptr += input_consumed_size
+            input_remaining_size -= input_consumed_size
 
         return written_to_disk_size
 
@@ -92,7 +99,7 @@ cdef class Compressor:
 
         res = ctamp.tamp_compressor_flush(
             self._c_compressor,
-            <char *> buffer,
+            <unsigned char *> buffer,
             len(buffer),
             &output_written_size,
             write_token,

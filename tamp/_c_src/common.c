@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-static const char common_characters[] = {
+static const unsigned char common_characters[] = {
     0x20, 0x00, 0x30, 0x65, 0x69, 0x3e, 0x74, 0x6f,
     0x3c, 0x61, 0x6e, 0x73, 0xa, 0x72, 0x2f, 0x2e
 };
@@ -19,7 +19,7 @@ inline uint32_t xorshift32(uint32_t *state) {
     return x;
 }
 
-void initialize_dictionary(char *buffer, size_t size, uint32_t seed){
+void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed){
     if (seed == 0) {
         memset(buffer, 0, size);
         return;

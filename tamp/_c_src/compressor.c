@@ -24,7 +24,7 @@
 #define FLUSH_CODE (0xAB)
 
 // encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths
-static const char huffman_codes[] = {
+static const unsigned char huffman_codes[] = {
     0x0, 0x3, 0x8, 0xb, 0x14, 0x24, 0x26, 0x2b, 0x4b, 0x54, 0x94, 0x95, 0xaa, 0x27
 };
 // These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
@@ -42,7 +42,7 @@ static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits
  *
  * Up to 7 bits may remain in the internal bit buffer.
  */
-static inline tamp_res partial_flush(TampCompressor *compressor, char *output, size_t output_size, size_t *output_written_size){
+static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
     if(output_written_size){
         *output_written_size = 0;
     }
@@ -78,7 +78,7 @@ static inline void find_best_match(
     *match_size = 0;
     for(uint16_t window_index=0; window_index < WINDOW_SIZE; window_index++){
         for(uint8_t input_offset=0; input_offset < compressor->input_size; input_offset++){
-            char c = read_input(input_offset);
+            unsigned char c = read_input(input_offset);
             if(compressor->window[window_index + input_offset] != c){
                 break;
             }
@@ -94,7 +94,7 @@ static inline void find_best_match(
 }
 
 
-tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, char *window){
+tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window){
     const TampConf conf_default = {.window=10, .literal=8, .use_custom_dictionary=false};
     if(!conf){
         conf = &conf_default;
@@ -125,7 +125,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 }
 
 
-tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output, size_t output_size, size_t *output_written_size){
+tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
 
     if(output_written_size)
@@ -159,7 +159,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output,
     if(match_size < compressor->min_pattern_size){
         // Write LITERAL
         match_size = 1;
-        char c = read_input(0);
+        unsigned char c = read_input(0);
         if(c >> compressor->conf.literal){
             return TAMP_EXCESS_BITS;
         }
@@ -197,7 +197,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output,
 
 void tamp_compressor_sink(
         TampCompressor *compressor,
-        const char *input,
+        const unsigned char *input,
         size_t input_size,
         size_t *consumed_size
         ){
@@ -218,10 +218,10 @@ void tamp_compressor_sink(
 
 tamp_res tamp_compressor_compress(
         TampCompressor *compressor,
-        char *output,
+        unsigned char *output,
         size_t output_size,
         size_t *output_written_size,
-        const char *input,
+        const unsigned char *input,
         size_t input_size,
         size_t *input_consumed_size
         ){
@@ -262,7 +262,7 @@ tamp_res tamp_compressor_compress(
 
 tamp_res tamp_compressor_flush(
         TampCompressor *compressor,
-        char *output,
+        unsigned char *output,
         size_t output_size,
         size_t *output_written_size,
         bool write_token

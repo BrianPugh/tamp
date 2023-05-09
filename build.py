@@ -12,7 +12,11 @@ extension = Extension(
         "tamp/_c_src/common.c",
     ],
     include_dirs=["tamp/_c_src/"],
-    extra_compile_args=["-O3", "-Werror"],
+    extra_compile_args=[
+        "-O3",
+        "-Werror",
+        "-Wno-unreachable-code-fallthrough",  # https://github.com/cython/cython/issues/5041
+    ],
 )
 
 ext_modules = cythonize([extension], include_path=extension.include_dirs, language_level=3)

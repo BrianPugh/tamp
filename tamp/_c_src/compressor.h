@@ -17,8 +17,8 @@ typedef enum {
 } tamp_res;
 
 typedef struct TampCompressor {
-    char *window;
-    char input[16];
+    unsigned char *window;
+    unsigned char input[16];
     uint32_t bit_buffer;
     uint32_t bit_buffer_pos:5;
     uint32_t min_pattern_size:2;
@@ -38,7 +38,7 @@ typedef struct TampCompressor {
  *
  * @return Tamp Status Code.
  */
-tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, char *window);
+tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window);
 
 /**
  * @brief Sink data into input buffer.
@@ -52,7 +52,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  */
 void tamp_compressor_sink(
         TampCompressor *compressor,
-        const char *input,
+        const unsigned char *input,
         size_t input_size,
         size_t *consumed_size
         );
@@ -69,7 +69,7 @@ void tamp_compressor_sink(
  */
 tamp_res tamp_compressor_compress_poll(
         TampCompressor *compressor,
-        char *output,
+        unsigned char *output,
         size_t output_size,
         size_t *output_written_size
         );
@@ -87,7 +87,7 @@ tamp_res tamp_compressor_compress_poll(
  */
 tamp_res tamp_compressor_flush(
                 TampCompressor *compressor,
-                char *output,
+                unsigned char *output,
                 size_t output_size,
                 size_t *output_written_size,
                 bool write_token
@@ -108,10 +108,10 @@ tamp_res tamp_compressor_flush(
  */
 tamp_res tamp_compressor_compress(
         TampCompressor *compressor,
-        char *output,
+        unsigned char *output,
         size_t output_size,
         size_t *output_written_size,
-        const char *input,
+        const unsigned char *input,
         size_t input_size,
         size_t *input_consumed_size
         );
