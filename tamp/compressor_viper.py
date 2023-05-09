@@ -56,11 +56,8 @@ class Compressor:
         self.input_pos = 0
 
         # Write header
-        _f_write(
-            f,
-            (window - 8) << 5 | (literal - 5) << 3 | int(bool(dictionary)) << 2,
-            1,
-        )
+        self.f_buf = ((window - 8) << 5 | (literal - 5) << 3 | int(bool(dictionary)) << 2) << (22)
+        self.f_pos = 8
 
     @micropython.viper
     def _compress_input_buffer_single(self) -> int:

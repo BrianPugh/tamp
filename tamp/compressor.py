@@ -34,18 +34,19 @@ class BitWriter:
     def write_huffman(self, pattern_size):
         return self.write(huffman_codes[pattern_size], huffman_bits[pattern_size])
 
-    def write(self, bits, num_bits):
+    def write(self, bits, num_bits, flush=True):
         bits &= (1 << num_bits) - 1
         self.bit_pos += num_bits
         self.buffer |= bits << (32 - self.bit_pos)
 
         bytes_written = 0
-        while self.bit_pos >= 8:
-            byte = self.buffer >> 24
-            self.f.write(byte.to_bytes(1, "big"))
-            self.buffer = (self.buffer & 0xFFFFFF) << 8
-            self.bit_pos -= 8
-            bytes_written += 1
+        if flush:
+            while self.bit_pos >= 8:
+                byte = self.buffer >> 24
+                self.f.write(byte.to_bytes(1, "big"))
+                self.buffer = (self.buffer & 0xFFFFFF) << 8
+                self.bit_pos -= 8
+                bytes_written += 1
         return bytes_written
 
     def flush(self, write_token=True):
@@ -137,11 +138,11 @@ class Compressor:
         self.flush_cb = None
 
         # Write header
-        self._bit_writer.write(window - 8, 3)
-        self._bit_writer.write(literal - 5, 2)
-        self._bit_writer.write(bool(dictionary), 1)
-        self._bit_writer.write(0, 1)  # Reserved
-        self._bit_writer.write(0, 1)  # No other header bytes
+        self._bit_writer.write(window - 8, 3, flush=False)
+        self._bit_writer.write(literal - 5, 2, flush=False)
+        self._bit_writer.write(bool(dictionary), 1, flush=False)
+        self._bit_writer.write(0, 1, flush=False)  # Reserved
+        self._bit_writer.write(0, 1, flush=False)  # No other header bytes
 
     def _compress_input_buffer_single(self) -> int:
         target = bytes(self._input_buffer)

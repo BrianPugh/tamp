@@ -59,7 +59,7 @@ class TestCompressor(unittest.TestCase):
             f.seek(0)
             actual = f.read()
         self.assertEqual(actual, expected)
-        self.assertEqual(bytes_written, len(expected) - 1)  # Not including header
+        self.assertEqual(bytes_written, len(expected))  # Not including header
 
     def test_compressor_input_buffer(self):
         expected = bytes(
