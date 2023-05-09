@@ -2,7 +2,7 @@ cimport ctamp
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
-from . import ExcessBitsError
+from . import ExcessBitsError, bit_size
 try:
     from typing import Union
 except ImportError:
@@ -50,7 +50,10 @@ cdef class Compressor:
         self._c_conf.literal = literal
         self._c_conf.use_custom_dictionary = bool(dictionary)
 
-        self._window_buffer = bytearray(1 << window)
+        if dictionary and bit_size(len(dictionary) - 1) != window:
+            raise ValueError("Dictionary-window size mismatch.")
+
+        self._window_buffer = dictionary if dictionary else bytearray(1 << window)
 
         res = ctamp.tamp_compressor_init(self._c_compressor, self._c_conf, <char *>self._window_buffer)
 
