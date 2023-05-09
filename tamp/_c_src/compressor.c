@@ -177,6 +177,11 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, char *output,
                 huffman_codes[huffman_index],
                 huffman_bits[huffman_index]
                 );
+        write_to_bit_buffer(
+                compressor,
+                match_index,
+                compressor->conf.window
+                );
     }
     // Populate Window
     for(uint8_t i=0; i < match_size; i++){
