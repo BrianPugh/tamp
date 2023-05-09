@@ -246,10 +246,16 @@ Both tamp and heatshrink have a few dozen bytes of overhead in addition to the p
 
 Runtime
 ^^^^^^^
-The desktop implementation is quite slow and could be significantly sped up (probably 1000x) with a C or Rust implementation.
-However, Tamp inherently targets smaller files due to it's operating requirements, on the order of tens of megabytes or less.
-Therefore, the slow runtime is still quite insignificant for small files.
-If the desktop runtime performance becomes an issue for your use-case, please open up a Github issue and we can prioritize an optimized implementation.
+As a rough benchmark, here is the performance (in seconds) of these different compression algorithms on the 100MB enwik8 dataset.
+These tests were performed on an M1 Macbook Air.
+
++---------------+--------------------------+----------+------+------------+
+| Action        | tamp (CPython Reference) | tamp (C) | zlib | heatshrink |
++===============+==========================+==========+======+============+
+| Compression   | 109.5                    |          | 4.84 | 6.22       |
++---------------+--------------------------+----------+------+------------+
+| Decompression | 54.0                     |          | 0.08 | 0.82       |
++---------------+--------------------------+----------+------+------------+
 
 When to use Tamp
 ================
