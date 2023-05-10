@@ -88,7 +88,7 @@ cdef class Compressor:
 
     cpdef int flush(self, write_token: bool = True) except -1:
         cdef ctamp.tamp_res res
-        cdef bytearray buffer = bytearray(20)
+        cdef bytearray buffer = bytearray(24)
         cdef size_t output_written_size = 0
 
         res = ctamp.tamp_compressor_flush(
