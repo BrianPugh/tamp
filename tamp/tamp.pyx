@@ -18,23 +18,15 @@ _ERROR_LOOKUP = {
 
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
-    cdef ctamp.TampConf* _c_conf
     cdef bytearray _window_buffer
     cdef object f
 
     def __cinit__(self):
-        self._c_conf = <ctamp.TampConf*>PyMem_Malloc(sizeof(ctamp.TampConf))
-        if self._c_conf is NULL:
-            raise MemoryError
-
         self._c_compressor = <ctamp.TampCompressor*>PyMem_Malloc(sizeof(ctamp.TampCompressor))
         if self._c_compressor is NULL:
-            PyMem_Free(self._c_conf)
             raise MemoryError
 
-
     def __dealloc__(self):
-        PyMem_Free(self._c_conf)
         PyMem_Free(self._c_compressor)
 
     def __init__(
@@ -45,21 +37,23 @@ cdef class Compressor:
         literal=8,
         dictionary=None,
     ):
+        cdef ctamp.TampConf conf
+
+        if dictionary and bit_size(len(dictionary) - 1) != window:
+            raise ValueError("Dictionary-window size mismatch.")
+
         if not hasattr(f, "write"):  # It's probably a path-like object.
             f = open(str(f), "wb")
 
         self.f = f
 
-        self._c_conf.window = window
-        self._c_conf.literal = literal
-        self._c_conf.use_custom_dictionary = bool(dictionary)
-
-        if dictionary and bit_size(len(dictionary) - 1) != window:
-            raise ValueError("Dictionary-window size mismatch.")
+        conf.window = window
+        conf.literal = literal
+        conf.use_custom_dictionary = bool(dictionary)
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
 
-        res = ctamp.tamp_compressor_init(self._c_compressor, self._c_conf, <unsigned char *>self._window_buffer)
+        res = ctamp.tamp_compressor_init(self._c_compressor, &conf, <unsigned char *>self._window_buffer)
 
     def write(self, const unsigned char[::1] data not None) -> int:
         cdef:
@@ -110,6 +104,8 @@ cdef class Compressor:
 
         if output_written_size:
             self.f.write(buffer[:output_written_size])
+
+        self.f.flush()
 
         return output_written_size
 

@@ -61,6 +61,8 @@ class BitWriter:
             self.buffer = 0
             bytes_written += 1
 
+        self.f.flush()
+
         return bytes_written
 
     def close(self):
