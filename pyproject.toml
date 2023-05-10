@@ -60,6 +60,10 @@ optional = true
 
 [tool.belay.group.dev.dependencies]
 argparse = "https://github.com/micropython/micropython-lib/blob/master/python-stdlib/argparse/argparse.py"
+collections = [
+    "https://github.com/mattytrentini/micropython-lib/blob/deque-improvements/python-stdlib/collections.deque/collections/deque.py",
+    "https://github.com/micropython/micropython-lib/blob/master/python-stdlib/collections/collections/__init__.py",
+]
 fnmatch = "https://github.com/micropython/micropython-lib/blob/master/python-stdlib/fnmatch/fnmatch.py"
 pathlib = "https://github.com/micropython/micropython-lib/blob/master/python-stdlib/pathlib/pathlib.py"
 shutil = "https://github.com/micropython/micropython-lib/blob/master/python-stdlib/shutil/shutil.py"
