@@ -240,7 +240,8 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# Line-Profiler
+# Profiling
+*.prof
 *.lprof
 
 # Compression benchmark datasets
@@ -250,3 +251,4 @@ enwik8*
 
 # Cython-generated files
 tamp/tamp.c
+*.html

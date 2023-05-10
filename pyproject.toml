@@ -52,6 +52,12 @@ mpremote = "^1.20.0"
 cython = "^0.29.34"
 pytest-subtests = "^0.10.0"
 
+[tool.poetry.group.profile]
+optional = true
+
+[tool.poetry.group.profile.dependencies]
+line-profiler = "<4.0.0"
+
 [tool.belay]
 name = "tamp"
 
