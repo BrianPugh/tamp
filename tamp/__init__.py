@@ -63,9 +63,12 @@ try:
     from .compressor_viper import Compressor, TextCompressor, compress
 except ImportError:
     try:
-        from .compressor import Compressor, TextCompressor, compress
+        from ._c import Compressor, TextCompressor, compress
     except ImportError:
-        pass
+        try:
+            from .compressor import Compressor, TextCompressor, compress
+        except ImportError:
+            pass
 
 try:
     from .decompressor_viper import Decompressor, TextDecompressor, decompress

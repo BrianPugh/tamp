@@ -10,7 +10,7 @@ except ImportError:
     pass
 
 
-CHUNK_SIZE = (1 << 20)
+cdef int CHUNK_SIZE = (1 << 20)
 
 _ERROR_LOOKUP = {
     ctamp.TAMP_EXCESS_BITS: ExcessBitsError,
@@ -19,6 +19,7 @@ _ERROR_LOOKUP = {
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
     cdef bytearray _window_buffer
+    cdef unsigned char *_window_buffer_ptr
     cdef object f
 
     def __cinit__(self):
@@ -33,8 +34,8 @@ cdef class Compressor:
         self,
         f,
         *,
-        window=10,
-        literal=8,
+        int window=10,
+        int literal=8,
         dictionary=None,
     ):
         cdef ctamp.TampConf conf
@@ -52,14 +53,19 @@ cdef class Compressor:
         conf.use_custom_dictionary = bool(dictionary)
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
+        self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
-        res = ctamp.tamp_compressor_init(self._c_compressor, &conf, <unsigned char *>self._window_buffer)
+        res = ctamp.tamp_compressor_init(self._c_compressor, &conf, self._window_buffer_ptr)
+        if res < 0:
+            # TODO
+            raise NotImplementedError
 
     def write(self, const unsigned char[::1] data not None) -> int:
         cdef:
             ctamp.tamp_res res
 
             bytearray output_buffer = bytearray(CHUNK_SIZE)
+            unsigned char *output_buffer_ptr = output_buffer
             const unsigned char* data_ptr = &data[0]
 
             size_t input_consumed_size = 0
@@ -67,10 +73,12 @@ cdef class Compressor:
             size_t output_buffer_written_size
             int written_to_disk_size = 0
 
+        output_buffer_mv = memoryview(output_buffer)
+
         while input_remaining_size:
             res = ctamp.tamp_compressor_compress(
                 self._c_compressor,
-                <unsigned char *>output_buffer,
+                output_buffer_ptr,
                 CHUNK_SIZE,
                 &output_buffer_written_size,
                 data_ptr,
@@ -79,7 +87,7 @@ cdef class Compressor:
             )
             if res < 0:
                 raise _ERROR_LOOKUP.get(res, NotImplementedError)
-            self.f.write(output_buffer[:output_buffer_written_size])
+            self.f.write(output_buffer_mv[:output_buffer_written_size])
             written_to_disk_size += output_buffer_written_size
             data_ptr += input_consumed_size
             input_remaining_size -= input_consumed_size
