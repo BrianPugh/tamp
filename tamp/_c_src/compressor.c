@@ -250,7 +250,7 @@ tamp_res tamp_compressor_compress(
             output += chunk_output_written_size;
             output_size -= chunk_output_written_size;
             if(output_written_size){
-                output_written_size += chunk_output_written_size;
+                (*output_written_size) += chunk_output_written_size;
             }
             if(res != TAMP_OK){
                 return res;
