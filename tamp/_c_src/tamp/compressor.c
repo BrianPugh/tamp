@@ -137,12 +137,10 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         // Make sure there's enough room in the bit buffer.
         size_t flush_bytes_written;
         res = partial_flush(compressor, output, output_size, &flush_bytes_written);
-        if(output_written_size){
+        if(output_written_size)
             (*output_written_size) += flush_bytes_written;
-        }
-        if(res != TAMP_OK){
+        if(res != TAMP_OK)
             return res;
-        }
         output_size -= flush_bytes_written;
         output += flush_bytes_written;
     }
@@ -191,14 +189,12 @@ void tamp_compressor_sink(
         *consumed_size = 0;
 
     for(size_t i=0; i < input_size; i++){
-        if(compressor->input_size == sizeof(compressor->input)){
+        if(compressor->input_size == sizeof(compressor->input))
             break;
-        }
         compressor->input[input_add(compressor->input_size)] = input[i];
         compressor->input_size += 1;
-        if(consumed_size){
+        if(consumed_size)
             (*consumed_size)++;
-        }
     }
 }
 
@@ -259,12 +255,12 @@ tamp_res tamp_compressor_flush(
     while(compressor->input_size){
         // Compress the remainder of the input buffer.
         res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
-        output_size -= chunk_output_written_size;
         if(output_written_size)
             (*output_written_size) += chunk_output_written_size;
-        output += chunk_output_written_size;
         if(res != TAMP_OK)
             return res;
+        output_size -= chunk_output_written_size;
+        output += chunk_output_written_size;
     }
 
     // Perform partial flush to see if we need a FLUSH token, and to subsequently
