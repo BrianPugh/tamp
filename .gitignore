@@ -252,3 +252,6 @@ enwik8*
 # Cython-generated files
 tamp/tamp.c
 *.html
+
+# mpy-cross
+*.mpy
