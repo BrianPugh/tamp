@@ -119,6 +119,32 @@ tamp_res tamp_compressor_compress(
         size_t *input_consumed_size
         );
 
+/**
+ * @brief Compress a chunk of data until input or output buffer is exhausted.
+ *
+ * While all buffers are flushed, no flush token is will be written to the output stream.
+ * If the output buffer is full, flushing will not be performed and TAMP_OUTPUT_FULL will be returned.
+ *
+ * @param[in,out] compressor TampCompressor object to perform compression with.
+ * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
+ * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
+ * @param[out] output_written_size Number of bytes written to output. May be NULL.
+ * @param[in] input Pointer to the input data to be compressed.
+ * @param[in] input_size Number of bytes in input data.
+ * @param[out] input_consumed_size Number of bytes of input data consumed. May be NULL.
+ *
+ * @return Tamp Status Code.
+ */
+tamp_res tamp_compressor_compress_and_flush(
+        TampCompressor *compressor,
+        unsigned char *output,
+        size_t output_size,
+        size_t *output_written_size,
+        const unsigned char *input,
+        size_t input_size,
+        size_t *input_consumed_size
+        );
+
 
 #ifdef __cplusplus
 }

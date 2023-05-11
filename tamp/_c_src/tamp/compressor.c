@@ -274,12 +274,15 @@ tamp_res tamp_compressor_flush(
     tamp_res res;
     size_t chunk_output_written_size;
 
+    if(output_written_size)
+        *output_written_size = 0;
+
     while(compressor->input_size){
         // Compress the remainder of the input buffer.
         res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
         output_size -= chunk_output_written_size;
         if(output_written_size){
-            *output_written_size += chunk_output_written_size;
+            (*output_written_size) += chunk_output_written_size;
         }
         output += chunk_output_written_size;
         if(res != TAMP_OK){
@@ -292,7 +295,7 @@ tamp_res tamp_compressor_flush(
     res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
     output_size -= chunk_output_written_size;
     if(output_written_size){
-        *output_written_size += chunk_output_written_size;
+        (*output_written_size) += chunk_output_written_size;
     }
     output += chunk_output_written_size;
     if(res != TAMP_OK)
@@ -315,6 +318,50 @@ tamp_res tamp_compressor_flush(
 
     if(compressor->bit_buffer_pos)  // There was not enough room in the output buffer to fully flush.
         return TAMP_OUTPUT_FULL;
+
+    return TAMP_OK;
+}
+
+tamp_res tamp_compressor_compress_and_flush(
+        TampCompressor *compressor,
+        unsigned char *output,
+        size_t output_size,
+        size_t *output_written_size,
+        const unsigned char *input,
+        size_t input_size,
+        size_t *input_consumed_size
+        ){
+    tamp_res res;
+    size_t flush_size;
+    size_t output_written_size_proxy;
+
+    if(!output_written_size)
+        output_written_size = &output_written_size_proxy;
+
+    res = tamp_compressor_compress(
+            compressor,
+            output,
+            output_size,
+            output_written_size,
+            input,
+            input_size,
+            input_consumed_size
+            );
+    if(res != TAMP_OK)
+        return res;
+
+    res = tamp_compressor_flush(
+            compressor,
+            output + *output_written_size,
+            output_size - *output_written_size,
+            &flush_size,
+            false
+            );
+
+    (*output_written_size) += flush_size;
+
+    if(res != TAMP_OK)
+        return res;
 
     return TAMP_OK;
 }
