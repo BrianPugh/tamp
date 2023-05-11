@@ -14,7 +14,7 @@ OBJS += $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRCS))
 OBJS += $(patsubst %.c,$(BUILDDIR)/%.o,$(MAIN_SRC))
 
 # Compiler and linker flags
-CFLAGS = -g -Wall -I$(SRCDIR)
+CFLAGS = -g -O3 -Wall -I$(SRCDIR)
 LDFLAGS = # Linker flags, e.g. -lm for math library
 
 # Default rule
