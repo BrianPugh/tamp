@@ -10,7 +10,7 @@ static const unsigned char common_characters[] = {
 };
 
 
-inline uint32_t xorshift32(uint32_t *state) {
+static inline uint32_t xorshift32(uint32_t *state) {
     uint32_t x = *state;
     x ^= x << 13;
     x ^= x >> 17;

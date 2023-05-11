@@ -99,6 +99,12 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     if(!conf){
         conf = &conf_default;
     }
+    if( conf->window < 8 || conf->window > 15)
+        return TAMP_INVALID_CONF;
+
+    if( conf->literal < 5 || conf->window > 8)
+        return TAMP_INVALID_CONF;
+
 
     memcpy(&compressor->conf, conf, sizeof(TampConf));
 
@@ -110,9 +116,8 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->input_pos = 0;
     compressor->window_pos = 0;
 
-    if(!compressor->conf.use_custom_dictionary){
+    if(!compressor->conf.use_custom_dictionary)
         initialize_dictionary(window, (1 << conf->window), 3758097560);
-    }
 
     // Write header to bit buffer
     write_to_bit_buffer(compressor, conf->window - 8, 3);
@@ -148,9 +153,8 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         output += flush_bytes_written;
     }
 
-    if(output_size == 0){
+    if(output_size == 0)
         return TAMP_OUTPUT_FULL;
-    }
 
     uint8_t match_size = 0;
     uint16_t match_index = 0;
@@ -201,9 +205,9 @@ void tamp_compressor_sink(
         size_t input_size,
         size_t *consumed_size
         ){
-    if(consumed_size){
+    if(consumed_size)
         *consumed_size = 0;
-    }
+
     for(size_t i=0; i < input_size; i++){
         if(compressor->input_size == sizeof(compressor->input)){
             break;
@@ -291,14 +295,12 @@ tamp_res tamp_compressor_flush(
         *output_written_size += chunk_output_written_size;
     }
     output += chunk_output_written_size;
-    if(res != TAMP_OK){
+    if(res != TAMP_OK)
         return res;
-    }
 
     // Maybe write the FLUSH token
-    if(compressor->bit_buffer_pos && write_token){
+    if(compressor->bit_buffer_pos && write_token)
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
-    }
 
     // Flush the remainder of the output bit-buffer
     while(compressor->bit_buffer_pos && output_size){
@@ -307,15 +309,12 @@ tamp_res tamp_compressor_flush(
         compressor->bit_buffer <<= 8;
         compressor->bit_buffer_pos -= MIN(compressor->bit_buffer_pos, 8);
         output_size--;
-        if(output_written_size){
+        if(output_written_size)
             (*output_written_size)++;
-        }
     }
 
-    if(compressor->bit_buffer_pos){
-        // There was not enough room in the output buffer to fully flush.
+    if(compressor->bit_buffer_pos)  // There was not enough room in the output buffer to fully flush.
         return TAMP_OUTPUT_FULL;
-    }
 
     return TAMP_OK;
 }

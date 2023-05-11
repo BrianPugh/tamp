@@ -14,6 +14,7 @@ typedef enum {
 
     /* Error codes < 0 */
     TAMP_EXCESS_BITS = -1,
+    TAMP_INVALID_CONF = -2,
 } tamp_res;
 
 typedef struct TampCompressor {
@@ -35,6 +36,8 @@ typedef struct TampCompressor {
  * @param[out] compressor Object to initialize.
  * @param[in] conf Compressor configuration. Set to NULL for default.
  * @param[in] window Pre-allocated window buffer. Size must agree with conf->window.
+ *                   If conf.use_custom_dictionary is true, then the window must be
+ *                   externally initialized.
  *
  * @return Tamp Status Code.
  */
