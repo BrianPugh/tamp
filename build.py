@@ -8,10 +8,10 @@ extension = Extension(
     "tamp._c",
     [
         "tamp/tamp.pyx",
-        "tamp/_c_src/compressor.c",
-        "tamp/_c_src/common.c",
+        "tamp/_c_src/tamp/compressor.c",
+        "tamp/_c_src/tamp/common.c",
     ],
-    include_dirs=["tamp/_c_src/"],
+    include_dirs=["tamp/_c_src/", "tamp/"],
     extra_compile_args=[
         "-O3",
         "-Werror",

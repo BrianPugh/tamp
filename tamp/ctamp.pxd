@@ -1,7 +1,7 @@
 from libcpp cimport bool
 from libc.stdint cimport uint8_t, uint32_t
 
-cdef extern from "common.h":
+cdef extern from "tamp/common.h":
     ctypedef struct TampConf:
         int window
         int literal
@@ -10,7 +10,7 @@ cdef extern from "common.h":
     void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
     int compute_min_pattern_size(uint8_t window, uint8_t literal);
 
-cdef extern from "compressor.h":
+cdef extern from "tamp/compressor.h":
     ctypedef struct TampCompressor:
         pass
 
