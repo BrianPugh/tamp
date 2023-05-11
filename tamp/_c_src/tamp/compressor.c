@@ -74,8 +74,10 @@ static inline void find_best_match(
         uint8_t *match_size
         ){
     *match_size = 0;
-    for(uint16_t window_index=0; window_index < WINDOW_SIZE; window_index++){
+    for(uint16_t window_index=0; window_index < (WINDOW_SIZE-*match_size); window_index++){
         for(uint8_t input_offset=0; input_offset < compressor->input_size; input_offset++){
+            if(window_index + input_offset >= WINDOW_SIZE)
+                break;
             unsigned char c = read_input(input_offset);
             if(compressor->window[window_index + input_offset] != c)
                 break;
@@ -312,7 +314,8 @@ tamp_res tamp_compressor_compress_and_flush(
 
     res = tamp_compressor_compress(
             compressor,
-            output, output_size,
+            output,
+            output_size,
             output_written_size,
             input,
             input_size,
