@@ -152,8 +152,8 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         return TAMP_OUTPUT_FULL;
     }
 
-    uint8_t match_size;
-    uint16_t match_index;
+    uint8_t match_size = 0;
+    uint16_t match_index = 0;
     find_best_match(compressor, &match_index, &match_size);
 
     if(match_size < compressor->min_pattern_size){
