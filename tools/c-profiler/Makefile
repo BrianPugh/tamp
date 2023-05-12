@@ -41,3 +41,9 @@ directories:
 .PHONY: clean
 clean:
 	@rm -rf $(BUILDDIR) $(TARGET)
+
+profile: all
+	xctrace record --template 'Time Profiler' --launch ./build/executable
+
+profile-simple: all
+	time ./build/executable
