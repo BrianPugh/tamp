@@ -66,13 +66,41 @@ static uint8_t single_search(
         uint16_t window_offset,
         uint8_t input_offset
         ){
-    // TODO; maybe factor out WINDOW_SIZE check.
-    for(;
-        input_offset < compressor->input_size && window_offset < WINDOW_SIZE && input_offset < MAX_PATTERN_SIZE;
-        input_offset++, window_offset++
-    ){
-        if(compressor->window[window_offset] != read_input(input_offset))
-            break;
+    if(window_offset + MAX_PATTERN_SIZE < WINDOW_SIZE && compressor->input_size >= MAX_PATTERN_SIZE){
+        /* Common "Happy" case unrolled */
+        if(compressor->window[window_offset++] != read_input(input_offset))
+            return input_offset;
+        if(compressor->window[window_offset++] != read_input(++input_offset))
+            return input_offset;
+        if(compressor->window[window_offset++] != read_input(++input_offset))
+            return input_offset;
+        if(compressor->window[window_offset++] != read_input(++input_offset))
+            return input_offset;
+        if(compressor->window[window_offset++] != read_input(++input_offset))
+            return input_offset;
+        if(compressor->window[window_offset++] != read_input(++input_offset))
+            return input_offset;
+        if(compressor->window[window_offset++] != read_input(++input_offset))
+            return input_offset;
+        if(compressor->window[window_offset++] != read_input(++input_offset))
+            return input_offset;
+        input_offset++;
+        for(;
+            input_offset < MAX_PATTERN_SIZE;
+            input_offset++, window_offset++
+        ){
+            if(compressor->window[window_offset] != read_input(input_offset))
+                break;
+        }
+    }
+    else{
+        for(;
+            input_offset < compressor->input_size && window_offset < WINDOW_SIZE && input_offset < MAX_PATTERN_SIZE;
+            input_offset++, window_offset++
+        ){
+            if(compressor->window[window_offset] != read_input(input_offset))
+                break;
+        }
     }
     return input_offset;
 }
@@ -144,7 +172,7 @@ static void find_best_match(
                     return;
             }
         }
-        if(((c32 >> 24) & mask) == first_c){
+        if((c32 >> 24) == first_c){
             proposed_match_size = single_search(compressor, (i + 1) << 2, 1);
             if(proposed_match_size > *match_size){
                 *match_size = proposed_match_size;
