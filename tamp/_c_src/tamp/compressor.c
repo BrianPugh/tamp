@@ -108,6 +108,8 @@ static uint8_t single_search(
 /**
  * @brief Find the best match for the current input buffer.
  *
+ * WARNING: this optimized implementation expects a little endian system.
+ *
  * @param[in,out] compressor TampCompressor object to perform search on.
  * @param[out] match_index  If match_size is 0, this value is undefined.
  * @param[out] match_size Size of best found match.
@@ -119,9 +121,10 @@ static void find_best_match(
         ){
     const uint32_t window_size_uint32 = (1 << (compressor->conf.window - 2));
     const uint32_t *window_uint32_ptr = (uint32_t *)compressor->window;
-    const uint8_t mask = 0xFF;
+    const uint8_t mask8 = 0xFF;
+    const uint16_t mask16 = 0xFFFF;
     const unsigned char first_c = read_input(0);
-    const unsigned char second_c = read_input(1);
+    const uint16_t first_second_c = (read_input(1) << 8) | first_c;
     const unsigned char third_c = read_input(2);
     const unsigned char fourth_c = read_input(3);
     uint8_t proposed_match_size;
@@ -134,9 +137,9 @@ static void find_best_match(
     for (uint16_t i=0; i < window_size_uint32; i++){
         // WARNING: this is all little-endian
         uint32_t c32 = window_uint32_ptr[i];
-        if((c32 & mask) == first_c && ((c32 >> 8) & mask) == second_c){
-            if(((c32 >> 16) & mask) == third_c && compressor->input_size >= 3){
-                if(((c32 >> 24) & mask) == fourth_c && compressor->input_size >= 4)
+        if((c32 & mask16) == first_second_c){
+            if(((c32 >> 16) & mask8) == third_c && compressor->input_size >= 3){
+                if(((c32 >> 24) & mask8) == fourth_c && compressor->input_size >= 4)
                     proposed_match_size = single_search(compressor, (i + 1) << 2, 4);
                 else
                     proposed_match_size = 3;
@@ -151,8 +154,8 @@ static void find_best_match(
                     return;
             }
         }
-        if(((c32 >> 8) & mask) == first_c && ((c32 >> 16) & mask) == second_c){
-            if(((c32 >> 24) & mask) == third_c && compressor->input_size >= 3)
+        if(((c32 >> 8) & mask16) == first_second_c){
+            if(((c32 >> 24) & mask8) == third_c && compressor->input_size >= 3)
                 proposed_match_size = single_search(compressor, (i + 1) << 2, 3);
             else
                 proposed_match_size = 2;
@@ -163,7 +166,7 @@ static void find_best_match(
                     return;
             }
         }
-        if(((c32 >> 16) & mask) == first_c && ((c32 >> 24) & mask) == second_c){
+        if(((c32 >> 16) & mask16) == first_second_c){
             proposed_match_size = single_search(compressor, (i + 1) << 2, 2);
             if(proposed_match_size > *match_size){
                 *match_size = proposed_match_size;
