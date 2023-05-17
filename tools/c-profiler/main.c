@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
         EXIT(1, "OOM");
 
     if (!(uncompressed_file = fopen("../../build/enwik8", "rb")))
-        EXIT(1, "Unable to open uncompressed_file %s", "build/enwik8");
+        EXIT(1, "Unable to open uncompressed_file %s", "../../build/enwik8");
     if (!(compressed_file = fopen("output.tamp", "wb")))
         EXIT(1, "Unable to open compressed_file");
 

@@ -7,14 +7,13 @@
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 
 #define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
 #define WINDOW_SIZE (1 << compressor->conf.window)
-#define window_add(offset) (\
-            (compressor->window_pos + offset) % WINDOW_SIZE\
-        )
+// 0xF because sizeof(TampCompressor.input) == 16;
 #define input_add(offset) (\
-            (compressor->input_pos + offset) % sizeof(compressor->input)\
+            (compressor->input_pos + offset) & 0xF \
         )
 #define read_input(offset) ( \
         compressor->input[input_add(offset)] \
@@ -63,10 +62,11 @@ static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *
 
 static uint8_t single_search(
         TampCompressor *compressor,
+        uint16_t window_size,
         uint16_t window_offset,
         uint8_t input_offset
         ){
-    if(window_offset + MAX_PATTERN_SIZE < WINDOW_SIZE && compressor->input_size >= MAX_PATTERN_SIZE){
+    if(window_offset + MAX_PATTERN_SIZE < window_size && compressor->input_size >= MAX_PATTERN_SIZE){
         /* Common "Happy" case unrolled */
         if(compressor->window[window_offset++] != read_input(input_offset))
             return input_offset;
@@ -95,7 +95,7 @@ static uint8_t single_search(
     }
     else{
         for(;
-            input_offset < compressor->input_size && window_offset < WINDOW_SIZE && input_offset < MAX_PATTERN_SIZE;
+            input_offset < compressor->input_size && window_offset < window_size && input_offset < MAX_PATTERN_SIZE;
             input_offset++, window_offset++
         ){
             if(compressor->window[window_offset] != read_input(input_offset))
@@ -119,8 +119,9 @@ static void find_best_match(
         uint16_t *match_index,
         uint8_t *match_size
         ){
-    const uint32_t window_size_uint32 = (1 << (compressor->conf.window - 2));
     const uint32_t *window_uint32_ptr = (uint32_t *)compressor->window;
+    const uint16_t window_size_uint32 = (1 << (compressor->conf.window - 2));
+    const uint16_t window_size = (1 << compressor->conf.window);
     const uint8_t mask8 = 0xFF;
     const uint16_t mask16 = 0xFFFF;
     const unsigned char first_c = read_input(0);
@@ -140,7 +141,7 @@ static void find_best_match(
         if((c32 & mask16) == first_second_c){
             if(((c32 >> 16) & mask8) == third_c && compressor->input_size >= 3){
                 if(((c32 >> 24) & mask8) == fourth_c && compressor->input_size >= 4)
-                    proposed_match_size = single_search(compressor, (i + 1) << 2, 4);
+                    proposed_match_size = single_search(compressor, window_size, (i + 1) << 2, 4);
                 else
                     proposed_match_size = 3;
             }
@@ -156,7 +157,7 @@ static void find_best_match(
         }
         if(((c32 >> 8) & mask16) == first_second_c){
             if(((c32 >> 24) & mask8) == third_c && compressor->input_size >= 3)
-                proposed_match_size = single_search(compressor, (i + 1) << 2, 3);
+                proposed_match_size = single_search(compressor, window_size, (i + 1) << 2, 3);
             else
                 proposed_match_size = 2;
             if(proposed_match_size > *match_size){
@@ -167,7 +168,7 @@ static void find_best_match(
             }
         }
         if(((c32 >> 16) & mask16) == first_second_c){
-            proposed_match_size = single_search(compressor, (i + 1) << 2, 2);
+            proposed_match_size = single_search(compressor, window_size, (i + 1) << 2, 2);
             if(proposed_match_size > *match_size){
                 *match_size = proposed_match_size;
                 *match_index = (i << 2) + 2;
@@ -176,7 +177,7 @@ static void find_best_match(
             }
         }
         if((c32 >> 24) == first_c){
-            proposed_match_size = single_search(compressor, (i + 1) << 2, 1);
+            proposed_match_size = single_search(compressor, window_size, (i + 1) << 2, 1);
             if(proposed_match_size > *match_size){
                 *match_size = proposed_match_size;
                 *match_index = (i << 2) + 3;
@@ -224,6 +225,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 
 tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
+    const uint16_t window_mask = (1 << compressor->conf.window) - 1;
 
     if(output_written_size)
         *output_written_size = 0;
@@ -268,7 +270,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
     // Populate Window
     for(uint8_t i=0; i < match_size; i++){
         compressor->window[compressor->window_pos] = read_input(0);
-        compressor->window_pos = window_add(1);
+        compressor->window_pos = (compressor->window_pos + 1) & window_mask;
         compressor->input_pos = input_add(1);
         compressor->input_size--;
     }
