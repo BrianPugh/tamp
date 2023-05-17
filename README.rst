@@ -249,13 +249,18 @@ Runtime
 As a rough benchmark, here is the performance (in seconds) of these different compression algorithms on the 100MB enwik8 dataset.
 These tests were performed on an M1 Macbook Air.
 
-+---------------+--------------------------+----------+------+------------+
-| Action        | tamp (CPython Reference) | tamp (C) | zlib | heatshrink |
-+===============+==========================+==========+======+============+
-| Compression   | 109.5                    |          | 4.84 | 6.22       |
-+---------------+--------------------------+----------+------+------------+
-| Decompression | 54.0                     |          | 0.08 | 0.82       |
-+---------------+--------------------------+----------+------+------------+
++---------------+--------------------------+----------+------+-------------------------+----------------------------+
+| Action        | tamp (CPython Reference) | tamp (C) | zlib | heatshrink (with index) | heatshrink (without index) |
++===============+==========================+==========+======+=========================+============================+
+| Compression   | 109.5                    | 17.75    | 4.84 | 6.22                    | 41.729                     |
++---------------+--------------------------+----------+------+-------------------------+----------------------------+
+| Decompression | 54.0                     |          | 0.08 | 0.82                    | 0.82                       |
++---------------+--------------------------+----------+------+-------------------------+----------------------------+
+
+Heatshrink v0.4.1 was used in these benchmarks.
+When heathshrink uses an index, an additional ``(1 << (windowBits + 1))`` bytes of memory are used, tripling the memory requirement.
+Tamp could use a similar indexing to increase compression speed, but has chosen not to to focus on the primary goal of a low-memory compressor.
+
 
 When to use Tamp
 ================
