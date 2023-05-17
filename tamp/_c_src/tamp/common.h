@@ -9,8 +9,18 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+typedef enum {
+    /* Normal status >= 0 */
+    TAMP_OK = 0,
+    TAMP_OUTPUT_FULL = 1,  // Wasn't able to complete action due to full output buffer.
+
+    /* Error codes < 0 */
+    TAMP_EXCESS_BITS = -1,
+    TAMP_INVALID_CONF = -2,
+} tamp_res;
+
 typedef struct TampConf {
-    uint16_t window:4;  // number of window bits
+    uint16_t window:4;   // number of window bits
     uint16_t literal:4;  // number of literal bits
     uint16_t use_custom_dictionary:1;  // Use a custom initialized dictionary.
 } TampConf;
@@ -22,17 +32,17 @@ typedef struct TampConf {
  * @param[in] size Size of output buffer.
  * @param[in] seed Pseudorandom generator initial seed.
  */
-void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
+void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
 
 /**
- * @brief
+ * @brief Compute the minimum viable pattern size given window and literal config parameters.
  *
  * @param[in] window Number of window bits.
  * @param[in] literal Number of literal bits.
  *
  * @return The minimum pattern size in bytes.
  */
-int8_t compute_min_pattern_size(uint8_t window, uint8_t literal);
+int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal);
 
 #ifdef __cplusplus
 }

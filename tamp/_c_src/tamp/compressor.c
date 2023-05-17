@@ -204,13 +204,13 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->window = window;
     compressor->bit_buffer = 0;
     compressor->bit_buffer_pos = 0;
-    compressor->min_pattern_size = compute_min_pattern_size(conf->window, conf->literal);
+    compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
     compressor->input_size = 0;
     compressor->input_pos = 0;
     compressor->window_pos = 0;
 
     if(!compressor->conf.use_custom_dictionary)
-        initialize_dictionary(window, (1 << conf->window), 3758097560);
+        tamp_initialize_dictionary(window, (1 << conf->window), 3758097560);
 
     // Write header to bit buffer
     write_to_bit_buffer(compressor, conf->window - 8, 3);

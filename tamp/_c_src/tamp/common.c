@@ -19,7 +19,8 @@ static inline uint32_t xorshift32(uint32_t *state) {
     return x;
 }
 
-void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed){
+
+void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed){
     if (seed == 0) {
         memset(buffer, 0, size);
         return;
@@ -38,10 +39,7 @@ void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed){
 }
 
 
-/**
- * @brief Compute whether the minimum pattern length should be 2 or 3.
- */
-int8_t compute_min_pattern_size(uint8_t window, uint8_t literal) {
+int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal) {
     switch(literal){
         case 5:
             return 2 + (window > 10);

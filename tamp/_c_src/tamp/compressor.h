@@ -1,5 +1,5 @@
-#ifndef TAMP_COMPRESS_H
-#define TAMP_COMPRESS_H
+#ifndef TAMP_COMPRESSOR_H
+#define TAMP_COMPRESSOR_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -7,17 +7,7 @@ extern "C" {
 
 #include "common.h"
 
-typedef enum {
-    /* Normal status >= 0 */
-    TAMP_OK = 0,
-    TAMP_OUTPUT_FULL = 1,  // Wasn't able to complete action due to full output buffer.
-
-    /* Error codes < 0 */
-    TAMP_EXCESS_BITS = -1,
-    TAMP_INVALID_CONF = -2,
-} tamp_res;
-
-typedef struct TampCompressor {
+typedef struct TampCompressor{
     unsigned char *window;
     unsigned char input[16];
     uint32_t bit_buffer;
