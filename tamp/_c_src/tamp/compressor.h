@@ -55,7 +55,7 @@ void tamp_compressor_sink(
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
+ * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  *
  * @return Tamp Status Code.
@@ -72,7 +72,7 @@ tamp_res tamp_compressor_compress_poll(
  *
  * @param[in,out] compressor TampCompressor object to flush.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
+ * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  * @param[in] write_token Write the FLUSH token, if appropriate. Set to true if you want to continue using the compressor. Set to false if you are done with the compressor, usually at the end of a stream.
  *
@@ -91,7 +91,7 @@ tamp_res tamp_compressor_flush(
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
+ * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  * @param[in] input Pointer to the input data to be compressed.
  * @param[in] input_size Number of bytes in input data.
@@ -117,7 +117,7 @@ tamp_res tamp_compressor_compress(
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
+ * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  * @param[in] input Pointer to the input data to be compressed.
  * @param[in] input_size Number of bytes in input data.
