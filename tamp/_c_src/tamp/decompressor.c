@@ -178,7 +178,7 @@ tamp_res tamp_decompressor_decompress(
             window_offset += decompressor->skip_bytes;
 
             // Check if we are output-buffer-limited, and if so to set skip_bytes and restore the bit_buffer
-            if(match_size > output_size){
+            if((uint8_t)match_size > output_size){
                 decompressor->skip_bytes += output_size;
                 match_size = output_size;
                 decompressor->bit_buffer = bit_buffer_backup;

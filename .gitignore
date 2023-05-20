@@ -252,6 +252,7 @@ enwik8*
 # Cython-generated files
 tamp/_c_compressor.c
 tamp/_c_decompressor.c
+tamp/_c_common.c
 *.html
 
 # mpy-cross

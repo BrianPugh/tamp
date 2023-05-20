@@ -7,17 +7,24 @@ cdef extern from "tamp/common.h":
         int literal
         bool use_custom_dictionary
 
+    ctypedef enum tamp_res:
+        # Normal/Recoverable status >= 0
+        TAMP_OK = 0,
+        TAMP_OUTPUT_FULL = 1,  # Wasn't able to complete action due to full output buffer.
+
+        # Error Codes < 0
+        TAMP_EXCESS_BITS = -1,  # Provided symbol has more bits than conf->literal
+        TAMP_INVALID_CONF = -2,  # Invalid configuration parameters.
+        TAMP_INPUT_EXHAUSTED = -3, # Wasn't able to complete action due to exhausted input buffer.
+        TAMP_INVALID_SYMBOL = -4,  # Unknown huffman code encountered.
+
     void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
     int compute_min_pattern_size(uint8_t window, uint8_t literal);
+
 
 cdef extern from "tamp/compressor.h":
     ctypedef struct TampCompressor:
         pass
-
-    ctypedef enum tamp_res:
-        TAMP_OK = 0
-        TAMP_OUTPUT_FULL = 1
-        TAMP_EXCESS_BITS = -1
 
     tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window);
 
@@ -52,3 +59,31 @@ cdef extern from "tamp/compressor.h":
             size_t input_size,
             size_t *input_consumed_size
             );
+
+
+cdef extern from "tamp/decompressor.h":
+    ctypedef struct TampDecompressor:
+        pass
+
+    tamp_res tamp_decompressor_read_header(
+            TampConf *conf,
+            const unsigned char *input,
+            size_t input_size,
+            size_t *input_consumed_size
+    );
+
+    tamp_res tamp_decompressor_init(
+            TampDecompressor *decompressor,
+            const TampConf *conf,
+            unsigned char *window
+    );
+
+    tamp_res tamp_decompressor_decompress(
+            TampDecompressor *decompressor,
+            unsigned char *output,
+            size_t output_size,
+            size_t *output_written_size,
+            const unsigned char *input,
+            size_t input_size,
+            size_t *input_consumed_size
+    );

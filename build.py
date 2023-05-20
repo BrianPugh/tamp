@@ -8,8 +8,24 @@ extensions = [
     Extension(
         "tamp._c_compressor",
         [
+            "tamp/_c_common.pyx",
             "tamp/_c_compressor.pyx",
             "tamp/_c_src/tamp/compressor.c",
+            "tamp/_c_src/tamp/common.c",
+        ],
+        include_dirs=["tamp/_c_src/", "tamp/"],
+        extra_compile_args=[
+            "-O3",
+            "-Werror",
+            "-Wno-unreachable-code-fallthrough",  # https://github.com/cython/cython/issues/5041
+        ],
+    ),
+    Extension(
+        "tamp._c_decompressor",
+        [
+            "tamp/_c_common.pyx",
+            "tamp/_c_decompressor.pyx",
+            "tamp/_c_src/tamp/decompressor.c",
             "tamp/_c_src/tamp/common.c",
         ],
         include_dirs=["tamp/_c_src/", "tamp/"],

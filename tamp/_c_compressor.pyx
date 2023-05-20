@@ -2,19 +2,11 @@ cimport ctamp
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
-from . import ExcessBitsError, bit_size
+from . import bit_size
+from ._c_common import CHUNK_SIZE, ERROR_LOOKUP
 
-try:
-    from typing import Union
-except ImportError:
-    pass
+from typing import Union
 
-
-cdef int CHUNK_SIZE = (1 << 20)
-
-_ERROR_LOOKUP = {
-    ctamp.TAMP_EXCESS_BITS: ExcessBitsError,
-}
 
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
@@ -86,7 +78,7 @@ cdef class Compressor:
                 &input_consumed_size
             )
             if res < 0:
-                raise _ERROR_LOOKUP.get(res, NotImplementedError)
+                raise ERROR_LOOKUP.get(res, NotImplementedError)
             self.f.write(output_buffer_mv[:output_buffer_written_size])
             written_to_disk_size += output_buffer_written_size
             data_ptr += input_consumed_size
@@ -108,7 +100,7 @@ cdef class Compressor:
         )
 
         if res < 0:
-            raise _ERROR_LOOKUP.get(res, NotImplementedError)
+            raise ERROR_LOOKUP.get(res, NotImplementedError)
 
         if output_written_size:
             self.f.write(buffer[:output_written_size])
