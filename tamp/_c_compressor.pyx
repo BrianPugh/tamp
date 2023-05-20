@@ -3,7 +3,8 @@ from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
 from . import bit_size
-from ._c_common import CHUNK_SIZE, ERROR_LOOKUP
+from ._c_common cimport CHUNK_SIZE
+from ._c_common import ERROR_LOOKUP
 
 from typing import Union
 
@@ -129,22 +130,6 @@ class TextCompressor(Compressor):
 
 
 def compress(data: Union[bytes, str], *args, **kwargs) -> bytes:
-    """Single-call to compress data.
-
-    Parameters
-    ----------
-    data: Union[str, bytes]
-        Data to compress.
-    *args: tuple
-        Passed along to :class:`Compressor`.
-    **kwargs : dict
-        Passed along to :class:`Compressor`.
-
-    Returns
-    -------
-    bytes
-        Compressed data
-    """
     with BytesIO() as f:
         if isinstance(data, str):
             c = TextCompressor(f, *args, **kwargs)
