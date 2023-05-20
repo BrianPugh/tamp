@@ -15,6 +15,7 @@ cdef class Decompressor:
         ctamp.TampDecompressor* _c_decompressor
         bytearray _window_buffer
         unsigned char *_window_buffer_ptr
+        object input_buffer
         unsigned char *input_buffer_ptr
         size_t input_size
         size_t input_consumed
@@ -86,18 +87,20 @@ cdef class Decompressor:
                     output_buffer_ptr,
                     output_size,
                     &output_written_size,
-                    &self.input_buffer_ptr[self.input_consumed],
+                    self.input_buffer_ptr + self.input_consumed,
                     self.input_size,
                     &input_chunk_consumed
                 )
-                if res < 0:
-                    raise ERROR_LOOKUP.get(res, NotImplementedError)
-
-                output_list.append(output_buffer[:output_written_size])
-
                 self.input_size -= input_chunk_consumed
                 self.input_consumed += input_chunk_consumed
                 size -= output_written_size
+
+                output_list.append(output_buffer[:output_written_size])
+
+                if res < 0 and res != ctamp.TAMP_INPUT_EXHAUSTED:
+                    print(res)
+                    raise ERROR_LOOKUP.get(res, NotImplementedError)
+
 
         return b"".join(output_list)
 

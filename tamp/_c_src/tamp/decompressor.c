@@ -113,6 +113,9 @@ tamp_res tamp_decompressor_decompress(
     tamp_res res;
     const uint16_t window_mask = (1 << decompressor->conf.window) - 1;
 
+    if(output_written_size)
+        *output_written_size = 0;
+
     if(!decompressor->configured){
         //Read in header
         size_t header_consumed_size;
@@ -201,6 +204,9 @@ tamp_res tamp_decompressor_decompress(
 
         output += match_size;
         output_size -= match_size;
+        if(output_written_size)
+            (*output_written_size) += match_size;
+
     }
     return TAMP_OK;
 }
