@@ -33,6 +33,18 @@ extensions = [
             "-Wno-unreachable-code-fallthrough",  # https://github.com/cython/cython/issues/5041
         ],
     ),
+    Extension(
+        "tamp._c_common",
+        [
+            "tamp/_c_common.pyx",
+        ],
+        include_dirs=["tamp/_c_src/", "tamp/"],
+        extra_compile_args=[
+            "-O3",
+            "-Werror",
+            "-Wno-unreachable-code-fallthrough",  # https://github.com/cython/cython/issues/5041
+        ],
+    ),
 ]
 
 include_dirs = set()

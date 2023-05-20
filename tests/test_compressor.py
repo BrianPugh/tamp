@@ -29,16 +29,31 @@ from tamp.compressor import Compressor as PyCompressor
 from tamp.compressor import compress as py_compress
 
 try:
-    from tamp._c import Compressor as CCompressor
-    from tamp._c import compress as c_compress
+    import micropython
+except ImportError:
+    micropython = None
+
+if micropython is None:
+    ViperCompressor = None
+    viper_compress = None
+else:
+    from tamp.compressor_viper import Compressor as ViperCompressor
+    from tamp.compressor_viper import compress as viper_compress
+
+try:
+    from tamp._c_compressor import Compressor as CCompressor
+    from tamp._c_compressor import compress as c_compress
 except ImportError:
     CCompressor = None
     c_compress = None
 
+Compressors = (PyCompressor, CCompressor, ViperCompressor)
+compresses = (py_compress, c_compress, viper_compress)
+
 
 class TestCompressor(unittest.TestCase):
     def test_compressor_default(self):
-        for Compressor in (PyCompressor, CCompressor):
+        for Compressor in Compressors:
             if Compressor is None:
                 continue
             with self.subTest(Compressor=Compressor):
@@ -74,7 +89,7 @@ class TestCompressor(unittest.TestCase):
                 self.assertEqual(bytes_written, len(expected))
 
     def test_compressor_input_buffer(self):
-        for Compressor in (PyCompressor, CCompressor):
+        for Compressor in Compressors:
             if Compressor is None:
                 continue
 
@@ -110,7 +125,7 @@ class TestCompressor(unittest.TestCase):
                 self.assertEqual(actual, expected)
 
     def test_compressor_7bit(self):
-        for Compressor in (PyCompressor, CCompressor):
+        for Compressor in Compressors:
             if Compressor is None:
                 continue
 
@@ -144,7 +159,7 @@ class TestCompressor(unittest.TestCase):
                 self.assertEqual(actual, expected)
 
     def test_compressor_predefined_dictionary(self):
-        for Compressor in (PyCompressor, CCompressor):
+        for Compressor in Compressors:
             if Compressor is None:
                 continue
 
@@ -176,7 +191,7 @@ class TestCompressor(unittest.TestCase):
                 self.assertEqual(actual, expected)
 
     def test_compressor_predefined_dictionary_incorrect_size(self):
-        for Compressor in (PyCompressor, CCompressor):
+        for Compressor in Compressors:
             if Compressor is None:
                 continue
 
@@ -187,7 +202,7 @@ class TestCompressor(unittest.TestCase):
 
     def test_oob_2_byte_pattern(self):
         """Viper implementation had a bug where a pattern of length 2 could be detected at the end of a string (going out of bounds by 1 byte)."""
-        for Compressor in (PyCompressor, CCompressor):
+        for Compressor in Compressors:
             if Compressor is None:
                 continue
 
@@ -216,7 +231,7 @@ class TestCompressor(unittest.TestCase):
                 assert actual == expected
 
     def test_excess_bits(self):
-        for Compressor in (PyCompressor, CCompressor):
+        for Compressor in Compressors:
             if Compressor is None:
                 continue
 
@@ -228,7 +243,7 @@ class TestCompressor(unittest.TestCase):
                     compressor.flush()
 
     def test_single_shot_compress_text(self):
-        for compress in (py_compress, c_compress):
+        for compress in compresses:
             if compress is None:
                 continue
 

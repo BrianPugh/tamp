@@ -11,10 +11,14 @@ from typing import Union
 
 
 cdef class Decompressor:
-    cdef ctamp.TampDecompressor* _c_decompressor
-    cdef bytearray _window_buffer
-    cdef unsigned char *_window_buffer_ptr
-    cdef object f
+    cdef:
+        ctamp.TampDecompressor* _c_decompressor
+        bytearray _window_buffer
+        unsigned char *_window_buffer_ptr
+        unsigned char *input_buffer_ptr
+        size_t input_size
+        size_t input_consumed
+        object f
 
     def __cinit__(self):
         self._c_decompressor = <ctamp.TampDecompressor*>PyMem_Malloc(sizeof(ctamp.TampDecompressor))
@@ -25,15 +29,77 @@ cdef class Decompressor:
         PyMem_Free(self._c_decompressor)
 
     def __init__(self, f, *, dictionary=None):
+        cdef:
+            ctamp.TampConf conf
+            size_t input_consumed_size;
+
         if not hasattr(f, "write"):  # It's probably a path-like object.
             f = open(str(f), "wb")
 
         self.f = f
 
-        raise NotImplementedError
+        self.input_buffer = bytearray(CHUNK_SIZE)
+        self.input_buffer_ptr = self.input_buffer
+        self.input_size = 0
+        self.input_consumed = 0
 
-    def read(self, size=-1) -> bytearray:
-        raise NotImplementedError
+        compressed_data = f.read(1)
+
+        res = ctamp.tamp_decompressor_read_header(&conf, compressed_data, len(compressed_data), &input_consumed_size);
+        if res < 0:
+            raise ERROR_LOOKUP.get(res, NotImplementedError)
+
+        self._window_buffer = dictionary if dictionary else bytearray(1 << conf.window)
+        self._window_buffer_ptr = <unsigned char *>self._window_buffer
+
+        res = ctamp.tamp_decompressor_init(self._c_decompressor, &conf, self._window_buffer_ptr)
+        if res < 0:
+            raise ERROR_LOOKUP.get(res, NotImplementedError)
+
+    def read(self, size: int=-1) -> bytearray:
+        cdef:
+            bytearray output_buffer = bytearray(CHUNK_SIZE)
+            unsigned char *output_buffer_ptr = output_buffer
+
+            size_t input_chunk_consumed
+            size_t output_size
+            size_t output_written_size
+
+        if size < 0:
+            size = 0xFFFFFFFF
+
+        output_list = []
+
+        while size:
+            if not self.input_size:
+                self.input_size = self.f.readinto(self.input_buffer)
+                self.input_consumed = 0
+
+            output_size = min(CHUNK_SIZE, size)
+
+            if not self.input_size:
+                break
+
+            while self.input_size:
+                res = ctamp.tamp_decompressor_decompress(
+                    self._c_decompressor,
+                    output_buffer_ptr,
+                    output_size,
+                    &output_written_size,
+                    &self.input_buffer_ptr[self.input_consumed],
+                    self.input_size,
+                    &input_chunk_consumed
+                )
+                if res < 0:
+                    raise ERROR_LOOKUP.get(res, NotImplementedError)
+
+                output_list.append(output_buffer[:output_written_size])
+
+                self.input_size -= input_chunk_consumed
+                self.input_consumed += input_chunk_consumed
+                size -= output_written_size
+
+        return b"".join(output_list)
 
     def close(self):
         raise NotImplementedError

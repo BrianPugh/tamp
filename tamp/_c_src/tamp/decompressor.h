@@ -37,7 +37,7 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
  * @param[in] conf Compressor configuration. Set to NULL to perform an implicit header read.
  * @param[in] window Pre-allocated window buffer. Size must agree with conf->window.
  *                   If conf.use_custom_dictionary is true, then the window must be
- *                   externally initialized.
+ *                   externally initialized and be at least as big as conf->window.
  */
 tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window);
 

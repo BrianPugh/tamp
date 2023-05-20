@@ -18,11 +18,8 @@ else:
     from tamp.decompressor_viper import Decompressor as ViperDecompressor
 
 try:
-    from tamp._c import Compressor as CCompressor
-
-    # from tamp._c import Decompressor as CDeompressor
-    CDecompressor = None  # TODO: enable
-
+    from tamp._c_compressor import Compressor as CCompressor
+    from tamp._c_decompressor import Decompressor as CDecompressor
 except ImportError:
     CCompressor = None
     CDecompressor = None
