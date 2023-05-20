@@ -250,7 +250,8 @@ enwik8*
 *.tamp
 
 # Cython-generated files
-tamp/tamp.c
+tamp/_c_compressor.c
+tamp/_c_decompressor.c
 *.html
 
 # mpy-cross
