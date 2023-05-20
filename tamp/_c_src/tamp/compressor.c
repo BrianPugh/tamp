@@ -195,7 +195,6 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
         conf = &conf_default;
     if( conf->window < 8 || conf->window > 15)
         return TAMP_INVALID_CONF;
-
     if( conf->literal < 5 || conf->literal > 8)
         return TAMP_INVALID_CONF;
 
