@@ -98,11 +98,10 @@ cdef class Decompressor:
                 output_list.append(output_buffer[:output_written_size])
 
                 if res < 0 and res != ctamp.TAMP_INPUT_EXHAUSTED:
-                    print(res)
                     raise ERROR_LOOKUP.get(res, NotImplementedError)
 
 
-        return b"".join(output_list)
+        return bytearray().join(output_list)
 
     def close(self):
         raise NotImplementedError

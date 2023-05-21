@@ -11,10 +11,10 @@ typedef struct {
     unsigned char *window;
     TampConf conf;
     uint32_t bit_buffer;
-    uint32_t bit_buffer_pos:5;
+    uint32_t bit_buffer_pos:6;
     uint32_t min_pattern_size:2;
-    uint32_t configured:1;  // Whether or not conf has been properly set
     uint32_t window_pos:15;
+    uint32_t configured:1;  // Whether or not conf has been properly set
     uint32_t skip_bytes:4;  // Skip this many decompressed bytes (from previous output-buffer-limited decompression).
 } TampDecompressor;
 

@@ -1,6 +1,7 @@
 #include <string.h>
 #include "decompressor.h"
 #include "common.h"
+#include <stdio.h>
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -26,36 +27,21 @@ static int8_t huffman_decode(TampDecompressor *decompressor){
         decompressor->bit_buffer <<= 1;
         decompressor->bit_buffer_pos -= 1;
         switch(code){
-            case 0:
-                return 0;
-            case 3:
-                return 1;
-            case 8:
-                return 2;
-            case 11:
-                return 3;
-            case 20:
-                return 4;
-            case 36:
-                return 5;
-            case 38:
-                return 6;
-            case 43:
-                return 7;
-            case 75:
-                return 8;
-            case 84:
-                return 9;
-            case 148:
-                return 10;
-            case 149:
-                return 11;
-            case 170:
-                return 12;
-            case 39:
-                return 13;
-            case 171:
-                return FLUSH;
+            case 0:   return 0;
+            case 3:   return 1;
+            case 8:   return 2;
+            case 11:  return 3;
+            case 20:  return 4;
+            case 36:  return 5;
+            case 38:  return 6;
+            case 43:  return 7;
+            case 75:  return 8;
+            case 84:  return 9;
+            case 148: return 10;
+            case 149: return 11;
+            case 170: return 12;
+            case 39:  return 13;
+            case 171: return FLUSH;
         }
     }
     return TAMP_INVALID_SYMBOL;
@@ -80,15 +66,18 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
 
 tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window){
     decompressor->window = window;
+    decompressor->window_pos = 0;
     decompressor->bit_buffer = 0;
     decompressor->bit_buffer_pos = 0;
     decompressor->skip_bytes = 0;
 
     if(conf){
-        if( conf->window < 8 || conf->window > 15)
+        if(conf->window < 8 || conf->window > 15)
             return TAMP_INVALID_CONF;
-        if( conf->literal < 5 || conf->literal > 8)
+        if(conf->literal < 5 || conf->literal > 8)
             return TAMP_INVALID_CONF;
+        if(!conf->use_custom_dictionary )
+            tamp_initialize_dictionary(window, (1 << conf->window));
 
         decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
         memcpy(&decompressor->conf, conf, sizeof(TampConf));
@@ -115,6 +104,8 @@ tamp_res tamp_decompressor_decompress(
 
     if(output_written_size)
         *output_written_size = 0;
+    if(input_consumed_size)
+        *input_consumed_size = 0;
 
     if(!decompressor->configured){
         //Read in header
@@ -151,7 +142,7 @@ tamp_res tamp_decompressor_decompress(
             // Copy literal to output
             *output = decompressor->bit_buffer >> (32 - decompressor->conf.literal);
             decompressor->bit_buffer <<= decompressor->conf.literal;
-            decompressor->bit_buffer_pos -= decompressor->conf.literal;
+            decompressor->bit_buffer_pos -= (1 + decompressor->conf.literal);
         }
         else{
             // is token; attempt a decode
@@ -160,6 +151,7 @@ tamp_res tamp_decompressor_decompress(
             uint16_t window_offset;
 
             decompressor->bit_buffer <<= 1;  // shift out the is_literal flag
+            decompressor->bit_buffer_pos--;
 
             match_size = huffman_decode(decompressor);
             if(match_size < 0){
@@ -172,6 +164,7 @@ tamp_res tamp_decompressor_decompress(
                 decompressor->bit_buffer_pos = bit_buffer_pos_backup;
                 return TAMP_INPUT_EXHAUSTED;
             }
+            match_size += decompressor->min_pattern_size;
             window_offset = decompressor->bit_buffer >> (32 - decompressor->conf.window);
             decompressor->bit_buffer <<= decompressor->conf.window;
             decompressor->bit_buffer_pos -= decompressor->conf.window;

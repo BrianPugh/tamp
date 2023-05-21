@@ -28,7 +28,7 @@ decompresses = (py_decompress, c_decompress, viper_decompress)
 
 
 class TestDecompressor(unittest.TestCase):
-    def test_decompressor(self):
+    def test_decompressor_basic(self):
         for Decompressor in Decompressors:
             if Decompressor is None:
                 continue

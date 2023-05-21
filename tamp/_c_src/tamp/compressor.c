@@ -1,6 +1,5 @@
 #include "compressor.h"
 #include "common.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -209,7 +208,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->window_pos = 0;
 
     if(!compressor->conf.use_custom_dictionary)
-        tamp_initialize_dictionary(window, (1 << conf->window), 3758097560);
+        tamp_initialize_dictionary(window, (1 << conf->window));
 
     // Write header to bit buffer
     write_to_bit_buffer(compressor, conf->window - 8, 3);

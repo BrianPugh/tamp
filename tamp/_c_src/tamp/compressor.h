@@ -12,11 +12,11 @@ typedef struct TampCompressor{
     TampConf conf;
     unsigned char input[16];
     uint32_t bit_buffer;
-    uint32_t bit_buffer_pos:5;
+    uint32_t bit_buffer_pos:6;
     uint32_t min_pattern_size:2;
+    uint32_t window_pos:15;
     uint32_t input_size:5;
     uint32_t input_pos:4;
-    uint32_t window_pos:15;
 } TampCompressor;
 
 

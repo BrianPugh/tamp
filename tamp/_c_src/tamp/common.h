@@ -34,7 +34,17 @@ typedef struct TampConf {
  * @param[in] size Size of output buffer.
  * @param[in] seed Pseudorandom generator initial seed.
  */
-void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
+void tamp_initialize_dictionary(unsigned char *buffer, size_t size);
+
+/**
+ * @brief Pre-populate a window buffer with common characters with a non-standard seed.
+ *
+ * @param[out] buffer Populated output buffer.
+ * @param[in] size Size of output buffer.
+ * @param[in] seed Pseudorandom generator initial seed.
+ */
+void tamp_initialize_dictionary_seed(unsigned char *buffer, size_t size, uint32_t seed);
+
 
 /**
  * @brief Compute the minimum viable pattern size given window and literal config parameters.

@@ -19,8 +19,11 @@ static inline uint32_t xorshift32(uint32_t *state) {
     return x;
 }
 
+inline void tamp_initialize_dictionary(unsigned char *buffer, size_t size){
+    tamp_initialize_dictionary_seed(buffer, size, 3758097560);
+}
 
-void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed){
+void tamp_initialize_dictionary_seed(unsigned char *buffer, size_t size, uint32_t seed){
     if (seed == 0) {
         memset(buffer, 0, size);
         return;
@@ -41,15 +44,10 @@ void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint32_t see
 
 int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal) {
     switch(literal){
-        case 5:
-            return 2 + (window > 10);
-        case 6:
-            return 2 + (window > 12);
-        case 7:
-            return 2 + (window > 14);
-        case 8:
-            return 2;
-        default:
-            return -1;
+        case 5:  return 2 + (window > 10);
+        case 6:  return 2 + (window > 12);
+        case 7:  return 2 + (window > 14);
+        case 8:  return 2;
+        default: return -1;
     }
 }
