@@ -155,11 +155,19 @@ tamp_res tamp_decompressor_decompress(
 
             match_size = huffman_decode(decompressor);
             if(match_size < 0){
+                // An error occurred decoding the match-size Huffman code.
                 decompressor->bit_buffer = bit_buffer_backup;
                 decompressor->bit_buffer_pos = bit_buffer_pos_backup;
                 return match_size;
             }
+            if(match_size == FLUSH){
+                // flush bit_buffer to the nearest byte and skip the remainder of decoding
+                decompressor->bit_buffer <<= decompressor->bit_buffer_pos & 7;
+                decompressor->bit_buffer_pos &= ~7;  // Round bit_buffer_pos down to nearest multiple of 8.
+                continue;
+            }
             if(decompressor->bit_buffer_pos < decompressor->conf.window){
+                // There are not enough bits to decode window offset
                 decompressor->bit_buffer = bit_buffer_backup;
                 decompressor->bit_buffer_pos = bit_buffer_pos_backup;
                 return TAMP_INPUT_EXHAUSTED;

@@ -49,6 +49,8 @@ cdef class Decompressor:
         res = ctamp.tamp_decompressor_read_header(&conf, compressed_data, len(compressed_data), &input_consumed_size);
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
+        if conf.use_custom_dictionary and dictionary is None:
+            raise ValueError
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << conf.window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
@@ -81,7 +83,7 @@ cdef class Decompressor:
             if not self.input_size:
                 break
 
-            while self.input_size:
+            while self.input_size and size:
                 res = ctamp.tamp_decompressor_decompress(
                     self._c_decompressor,
                     output_buffer_ptr,
