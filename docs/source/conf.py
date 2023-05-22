@@ -124,6 +124,9 @@ def linkcode_resolve(domain, info):
     except TypeError:
         # e.g. object is a typing.Union
         return None
+    except OSError:
+        # Source code is not available (e.g. cython)
+        return None
     if file is None:
         return None
     file = Path(file).resolve().relative_to(git_repo.working_dir)
