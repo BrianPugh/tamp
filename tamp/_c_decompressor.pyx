@@ -34,8 +34,8 @@ cdef class Decompressor:
             ctamp.TampConf conf
             size_t input_consumed_size;
 
-        if not hasattr(f, "write"):  # It's probably a path-like object.
-            f = open(str(f), "wb")
+        if not hasattr(f, "read"):  # It's probably a path-like object.
+            f = open(str(f), "rb")
 
         self.f = f
 
@@ -106,7 +106,7 @@ cdef class Decompressor:
         return bytearray().join(output_list)
 
     def close(self):
-        raise NotImplementedError
+        self.f.close()
 
     def __enter__(self):
         return self
