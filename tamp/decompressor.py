@@ -36,12 +36,13 @@ class BitReader:
         proposed_code = 0
         lookup = huffman_lookup
         read = self.read
-        while True:
+        for _ in range(8):
             proposed_code |= read(1)
             try:
                 return lookup[proposed_code]
             except KeyError:
                 proposed_code <<= 1
+        raise RuntimeError("Unable to decode huffman code. Should never happen.")
 
     def read(self, num_bits):
         while self.bit_pos < num_bits:

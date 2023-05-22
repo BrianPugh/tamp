@@ -46,3 +46,14 @@ class TestBitWriterAndReader(unittest.TestCase):
                 writer.flush(write_token=False)
 
                 self.assertEqual(f.tell(), 2)
+
+
+class TestHuffmanReader(unittest.TestCase):
+    def test_always_valid(self):
+        """There should never be an instance where 8bits have been read and
+        no huffman code has been decoded. This verifies that.
+        """
+        random_bytes = bytes(random.randint(0, 255) for _ in range(1024 * 1024))
+        with io.BytesIO(random_bytes) as f:
+            reader = BitReader(f)
+            reader.read_huffman()
