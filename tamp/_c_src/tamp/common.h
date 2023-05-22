@@ -13,12 +13,12 @@ typedef enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,
     TAMP_OUTPUT_FULL = 1,  // Wasn't able to complete action due to full output buffer.
+    TAMP_INPUT_EXHAUSTED = 2, // Wasn't able to complete action due to exhausted input buffer.
 
     /* Error codes < 0 */
     TAMP_ERROR = -1,  // Generic error
     TAMP_EXCESS_BITS = -2,  // Provided symbol has more bits than conf->literal
     TAMP_INVALID_CONF = -3,  // Invalid configuration parameters.
-    TAMP_INPUT_EXHAUSTED = -4, // Wasn't able to complete action due to exhausted input buffer.
 } tamp_res;
 
 typedef struct TampConf {

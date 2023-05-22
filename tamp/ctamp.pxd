@@ -11,12 +11,12 @@ cdef extern from "tamp/common.h":
         # Normal/Recoverable status >= 0
         TAMP_OK = 0,
         TAMP_OUTPUT_FULL = 1,  # Wasn't able to complete action due to full output buffer.
+        TAMP_INPUT_EXHAUSTED = 2, # Wasn't able to complete action due to exhausted input buffer.
 
         # Error Codes < 0
         TAMP_ERROR = -1,  # Generic error
         TAMP_EXCESS_BITS = -2,  # Provided symbol has more bits than conf->literal
         TAMP_INVALID_CONF = -3,  # Invalid configuration parameters.
-        TAMP_INPUT_EXHAUSTED = -4, # Wasn't able to complete action due to exhausted input buffer.
 
     void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
     int compute_min_pattern_size(uint8_t window, uint8_t literal);

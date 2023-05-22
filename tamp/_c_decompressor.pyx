@@ -47,7 +47,7 @@ cdef class Decompressor:
         compressed_data = f.read(1)
 
         res = ctamp.tamp_decompressor_read_header(&conf, compressed_data, len(compressed_data), &input_consumed_size);
-        if res < 0:
+        if res != ctamp.TAMP_OK:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
         if conf.use_custom_dictionary and dictionary is None:
             raise ValueError
@@ -99,7 +99,7 @@ cdef class Decompressor:
 
                 output_list.append(output_buffer[:output_written_size])
 
-                if res < 0 and res != ctamp.TAMP_INPUT_EXHAUSTED:
+                if res < 0:
                     raise ERROR_LOOKUP.get(res, NotImplementedError)
 
 

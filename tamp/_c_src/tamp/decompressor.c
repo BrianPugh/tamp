@@ -13,7 +13,7 @@
  * @brief Decode a huffman match-size symbol from the decompressor's bit_buffer.
  *
  * Internally updates bit_buffer and bit_buffer_pos.
- * In the event of TAMP_INPUT_EXHAUSTED, bit_buffer is NOT restored.
+ * Returns -1 if input has been exhausted; buffer will NOT be restored.
  *
  * @return Tamp Status Code.
  *     TAMP_INVALID_SYMBOL if no valid symbol decoded. Buffer is NOT restored.
@@ -23,7 +23,7 @@ static int8_t huffman_decode(TampDecompressor *decompressor){
 
     for(uint8_t i=0; i < 8; i++){
         if(decompressor->bit_buffer_pos == 0)
-            return TAMP_INPUT_EXHAUSTED;
+            return -1;
         code = (code << 1) | (decompressor->bit_buffer >> 31);
         decompressor->bit_buffer <<= 1;
         decompressor->bit_buffer_pos -= 1;
@@ -47,7 +47,7 @@ static int8_t huffman_decode(TampDecompressor *decompressor){
     }
     // Huffman Trees are complete, so this should never happen.
     assert(false);
-    return TAMP_ERROR;  // for the compiler to not yell about return-values
+    return -2;  // for the compiler to not yell about return-values
 }
 
 tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *input, size_t input_size, size_t *input_consumed_size) {
@@ -156,12 +156,11 @@ tamp_res tamp_decompressor_decompress(
             decompressor->bit_buffer <<= 1;  // shift out the is_literal flag
             decompressor->bit_buffer_pos--;
 
-            match_size = huffman_decode(decompressor);
-            if(match_size < 0){
-                // An error occurred decoding the match-size Huffman code.
+            if((match_size = huffman_decode(decompressor)) < 0){
+                // Insufficient input
                 decompressor->bit_buffer = bit_buffer_backup;
                 decompressor->bit_buffer_pos = bit_buffer_pos_backup;
-                return match_size;
+                return TAMP_INPUT_EXHAUSTED;
             }
             if(match_size == FLUSH){
                 // flush bit_buffer to the nearest byte and skip the remainder of decoding
