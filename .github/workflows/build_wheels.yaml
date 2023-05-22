@@ -40,7 +40,7 @@ jobs:
         env:
           CIBW_ARCHS: auto
           CIBW_BUILD: cp38-* cp39-* cp310-* cp311*
-        run: python -m cibuildwheel pkg/pypi --output-dir wheelhouse
+        run: python -m cibuildwheel --output-dir wheelhouse
 
       - uses: actions/upload-artifact@v3
         with:
