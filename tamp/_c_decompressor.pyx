@@ -59,7 +59,7 @@ cdef class Decompressor:
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
 
-    def read(self, size: int=-1) -> bytearray:
+    def read(self, int size = -1) -> bytearray:
         cdef:
             bytearray output_buffer = bytearray(CHUNK_SIZE)
             unsigned char *output_buffer_ptr = output_buffer
