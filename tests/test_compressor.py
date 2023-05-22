@@ -266,3 +266,14 @@ class TestCompressor(unittest.TestCase):
                     # fmt: on
                 )
                 self.assertEqual(compress("foo foo foo"), expected)
+
+    def test_invalid_conf(self):
+        for Compressor in Compressors:
+            if Compressor is None:
+                continue
+
+            with self.subTest(Compressor=Compressor), io.BytesIO() as f:
+                with self.assertRaises(ValueError):
+                    Compressor(f, literal=4)
+                with self.assertRaises(ValueError):
+                    Compressor(f, window=16)

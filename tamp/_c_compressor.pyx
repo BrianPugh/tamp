@@ -50,8 +50,7 @@ cdef class Compressor:
 
         res = ctamp.tamp_compressor_init(self._c_compressor, &conf, self._window_buffer_ptr)
         if res < 0:
-            # TODO
-            raise NotImplementedError
+            raise ERROR_LOOKUP.get(res, NotImplementedError)
 
     def write(self, const unsigned char[::1] data not None) -> int:
         cdef:

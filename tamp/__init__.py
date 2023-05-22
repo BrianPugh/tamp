@@ -47,6 +47,8 @@ def initialize_dictionary(size, seed=None):
 
 def compute_min_pattern_size(window, literal):
     """Compute whether the minimum pattern length should be 2 or 3."""
+    if window > 15 or window < 8:
+        raise ValueError
     if literal == 5:
         return 2 + (window > 10)
     elif literal == 6:
