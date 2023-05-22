@@ -243,6 +243,7 @@ Temporary Items
 # Profiling
 *.prof
 *.lprof
+*.tmp
 
 # Compression benchmark datasets
 enwik8*

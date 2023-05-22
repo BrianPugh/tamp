@@ -108,33 +108,24 @@ class Decompressor:
                     f_buf |= int(f.read(1)[0]) << (22 - f_pos)
                     f_pos += 8
 
-                    proposed_code = f_buf >> 29
-                    f_buf = (f_buf << 1) & full_mask
-                    f_pos -= 1
-                    if proposed_code:  # 0b1
-                        proposed_code = (proposed_code << 1) | (f_buf >> 29)
-                        f_buf = (f_buf << 1) & full_mask
-                        f_pos -= 1
-                        if proposed_code == 0b11:
+                    if f_buf >> 29:
+                        if (f_buf >> 28) == 0b11:
                             match_size = 1
+                            delta = 2
                         else:
-                            proposed_code = (proposed_code << 2) | (f_buf >> 28)
-                            f_buf = (f_buf << 2) & full_mask
-                            f_pos -= 2
+                            proposed_code = f_buf >> 26
+                            delta = 4
                             if proposed_code == 0b1000:
                                 match_size = 2
                             elif proposed_code == 0b1011:
                                 match_size = 3
                             else:
-                                proposed_code = (proposed_code << 1) | (f_buf >> 29)
-                                f_buf = (f_buf << 1) & full_mask
-                                f_pos -= 1
-                                if proposed_code == 0b10100:
+                                if (f_buf >> 25) == 0b10100:
                                     match_size = 4
+                                    delta = 5
                                 else:
-                                    proposed_code = (proposed_code << 1) | (f_buf >> 29)
-                                    f_buf = (f_buf << 1) & full_mask
-                                    f_pos -= 1
+                                    proposed_code = f_buf >> 24
+                                    delta = 6
                                     if proposed_code == 0b100100:
                                         match_size = 5
                                     elif proposed_code == 0b100110:
@@ -144,17 +135,15 @@ class Decompressor:
                                     elif proposed_code == 0b100111:
                                         match_size = 13
                                     else:
-                                        proposed_code = (proposed_code << 1) | (f_buf >> 29)
-                                        f_buf = (f_buf << 1) & full_mask
-                                        f_pos -= 1
+                                        proposed_code = f_buf >> 23
+                                        delta = 7
                                         if proposed_code == 0b1001011:
                                             match_size = 8
                                         elif proposed_code == 0b1010100:
                                             match_size = 9
                                         else:
-                                            proposed_code = (proposed_code << 1) | (f_buf >> 29)
-                                            f_buf = (f_buf << 1) & full_mask
-                                            f_pos -= 1
+                                            proposed_code = f_buf >> 22
+                                            delta = 8
                                             if proposed_code == 0b10010100:
                                                 match_size = 10
                                             elif proposed_code == 0b10010101:
@@ -168,6 +157,10 @@ class Decompressor:
                                                 break  # no valid code detected
                     else:  # 0b0
                         match_size = 0
+                        delta = 1
+
+                    f_buf = (f_buf << delta) & full_mask
+                    f_pos -= delta
 
                     match_size += min_pattern_size
                     while f_pos < w_bits:
