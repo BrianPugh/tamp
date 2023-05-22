@@ -74,9 +74,12 @@ try:
     from .decompressor_viper import Decompressor, TextDecompressor, decompress
 except ImportError:
     try:
-        from .decompressor import Decompressor, TextDecompressor, decompress
+        from ._c_decompressor import Decompressor, TextDecompressor, decompress
     except ImportError:
-        pass
+        try:
+            from .decompressor import Decompressor, TextDecompressor, decompress
+        except ImportError:
+            pass
 
 
 def open(f, mode="rb", **kwargs):
