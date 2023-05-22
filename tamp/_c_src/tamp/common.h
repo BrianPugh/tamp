@@ -15,10 +15,10 @@ typedef enum {
     TAMP_OUTPUT_FULL = 1,  // Wasn't able to complete action due to full output buffer.
 
     /* Error codes < 0 */
-    TAMP_EXCESS_BITS = -1,  // Provided symbol has more bits than conf->literal
-    TAMP_INVALID_CONF = -2,  // Invalid configuration parameters.
-    TAMP_INPUT_EXHAUSTED = -3, // Wasn't able to complete action due to exhausted input buffer.
-    TAMP_INVALID_SYMBOL = -4,  // Unknown huffman code encountered.
+    TAMP_ERROR = -1,  // Generic error
+    TAMP_EXCESS_BITS = -2,  // Provided symbol has more bits than conf->literal
+    TAMP_INVALID_CONF = -3,  // Invalid configuration parameters.
+    TAMP_INPUT_EXHAUSTED = -4, // Wasn't able to complete action due to exhausted input buffer.
 } tamp_res;
 
 typedef struct TampConf {

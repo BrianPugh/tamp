@@ -2,6 +2,7 @@
 #include "decompressor.h"
 #include "common.h"
 #include <stdio.h>
+#include "assert.h"
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -44,7 +45,9 @@ static int8_t huffman_decode(TampDecompressor *decompressor){
             case 171: return FLUSH;
         }
     }
-    return TAMP_INVALID_SYMBOL;
+    // Huffman Trees are complete, so this should never happen.
+    assert(false);
+    return TAMP_ERROR;  // for the compiler to not yell about return-values
 }
 
 tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *input, size_t input_size, size_t *input_consumed_size) {
