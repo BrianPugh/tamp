@@ -17,6 +17,7 @@ description = ""
 authors = ["Brian Pugh"]
 readme = "README.rst"
 packages = [{include = "tamp"}]
+include = ["tamp/*.so", "tamp/*.dll"]
 
 [tool.poetry.build]
 generate-setup-file = false
