@@ -4,6 +4,14 @@ from pathlib import Path
 
 from Cython.Build import build_ext, cythonize
 
+extra_compile_args = [
+    "-O3",
+    "-Werror",
+    "-Wno-unreachable-code-fallthrough",  # https://github.com/cython/cython/issues/5041
+    "-Wno-deprecated-declarations",  # https://github.com/cython/cython/issues/3474
+]
+include_dirs = ["tamp/_c_src/", "tamp/"]
+
 extensions = [
     Extension(
         "tamp._c_compressor",
@@ -12,12 +20,8 @@ extensions = [
             "tamp/_c_src/tamp/compressor.c",
             "tamp/_c_src/tamp/common.c",
         ],
-        include_dirs=["tamp/_c_src/", "tamp/"],
-        extra_compile_args=[
-            "-O3",
-            "-Werror",
-            "-Wno-unreachable-code-fallthrough",  # https://github.com/cython/cython/issues/5041
-        ],
+        include_dirs=include_dirs,
+        extra_compile_args=extra_compile_args,
     ),
     Extension(
         "tamp._c_decompressor",
@@ -26,24 +30,16 @@ extensions = [
             "tamp/_c_src/tamp/decompressor.c",
             "tamp/_c_src/tamp/common.c",
         ],
-        include_dirs=["tamp/_c_src/", "tamp/"],
-        extra_compile_args=[
-            "-O3",
-            "-Werror",
-            "-Wno-unreachable-code-fallthrough",  # https://github.com/cython/cython/issues/5041
-        ],
+        include_dirs=include_dirs,
+        extra_compile_args=extra_compile_args,
     ),
     Extension(
         "tamp._c_common",
         [
             "tamp/_c_common.pyx",
         ],
-        include_dirs=["tamp/_c_src/", "tamp/"],
-        extra_compile_args=[
-            "-O3",
-            "-Werror",
-            "-Wno-unreachable-code-fallthrough",  # https://github.com/cython/cython/issues/5041
-        ],
+        include_dirs=include_dirs,
+        extra_compile_args=extra_compile_args,
     ),
 ]
 
