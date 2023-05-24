@@ -14,6 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
 
     steps:
       - name: Check out repository
@@ -33,21 +34,66 @@ jobs:
       - name: Install poetry
         uses: snok/install-poetry@v1
         with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+          virtualenvs-create: false
+          virtualenvs-in-project: false
           installer-parallel: false # Currently there seems to be some race-condition in windows
 
-      - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==2.12.3
-
       - name: Build wheels
+        uses: pypa/cibuildwheel@v2.12.3
         env:
-          CIBW_ARCHS_MACOS: x86_64 arm64
+          CIBW_ARCHS_MACOS: x86_64
           CIBW_ARCHS_WINDOWS: AMD64 x86 ARM64
           CIBW_ARCHS_LINUX: x86_64 i686 aarch64 ppc64le s390x
-          CIBW_BUILD: cp38-* cp39-* cp310-* cp311*
-        run: python -m cibuildwheel --output-dir wheelhouse
+          CIBW_BUILD: ${{ matrix.cibw_build }}
 
       - uses: actions/upload-artifact@v3
         with:
           path: wheelhouse/*.whl
+
+  build_wheels_macos_arm64:
+    name: Build MacOS arm64 wheels
+    runs-on: macos-12
+    strategy:
+      matrix:
+        cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.12.3
+        env:
+          CIBW_BUILD: ${{ matrix.cibw_build }}
+          CIBW_ARCHS_MACOS: arm64
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: |
+            echo "Target delocate archs: {delocate_archs}"
+
+            ORIGINAL_WHEEL={wheel}
+
+            echo "Running delocate-listdeps to list linked original wheel dependencies"
+            delocate-listdeps --all $ORIGINAL_WHEEL
+
+            echo "Renaming .whl file when architecture is 'macosx_arm64'"
+            RENAMED_WHEEL=${ORIGINAL_WHEEL//x86_64/arm64}
+
+            echo "Wheel will be renamed to $RENAMED_WHEEL"
+            mv $ORIGINAL_WHEEL $RENAMED_WHEEL
+
+            echo "Running delocate-wheel command on $RENAMED_WHEEL"
+            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v $RENAMED_WHEEL
+
+            echo "Running delocate-listdeps to list linked wheel dependencies"
+            WHEEL_SIMPLE_FILENAME="${RENAMED_WHEEL##*/}"
+            delocate-listdeps --all {dest_dir}/$WHEEL_SIMPLE_FILENAME
+
+            echo "DONE."
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: ./wheelhouse/*.whl
