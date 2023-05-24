@@ -90,7 +90,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest]
         cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
         cibw_archs: ["x86_64"]
 
@@ -121,10 +121,12 @@ jobs:
 
   build_wheels_macos_arm64:
     name: Build MacOS arm64 wheels
-    runs-on: macos-12
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [macos-latest]
         cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
+        cibw_archs: ["arm64"]
 
     steps:
       - name: Check out repository
@@ -138,8 +140,8 @@ jobs:
         uses: pypa/cibuildwheel@v2.12.3
         env:
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_ARCHS_MACOS: arm64
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: |
+          CIBW_ARCHS: ${{ matrix.cibw_archs }}
+          CIBW_REPAIR_WHEEL_COMMAND: |
             echo "Target delocate archs: {delocate_archs}"
 
             ORIGINAL_WHEEL={wheel}
