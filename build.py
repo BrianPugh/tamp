@@ -8,8 +8,6 @@ from Cython.Build import build_ext, cythonize
 if os.name == "nt":  # Windows
     extra_compile_args = [
         "/O2",
-        "/WX",
-        "/wd4244",
     ]
 else:  # UNIX-based systems
     extra_compile_args = [
