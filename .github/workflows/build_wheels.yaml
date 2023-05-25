@@ -8,7 +8,7 @@ on:
 
 jobs:
   build_wheels_windows:
-    name: Build ${{ matrix.cibw_build }} wheels on ${{ matrix.os }}
+    name: "OS: ${{ matrix.os }}   Python: ${{ matrix.cibw_build }}   Arch: ${{ matrix.cibw_archs }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -16,10 +16,16 @@ jobs:
         os: [windows-latest]
         cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*"]
         cibw_archs: ["AMD64", "x86", "ARM64"]
+        exclude:
+          - os: windows-latest
+            cibw_build: "cp38-*"
+            cibw_archs: "ARM64"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Set up python 3.11
         uses: actions/setup-python@v4
@@ -44,7 +50,7 @@ jobs:
           path: wheelhouse/*.whl
 
   build_wheels_linux:
-    name: Build ${{ matrix.cibw_build }} wheels on ${{ matrix.os }}
+    name: "OS: ${{ matrix.os }}   Python: ${{ matrix.cibw_build }}   Arch: ${{ matrix.cibw_archs }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -56,6 +62,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Set up QEMU
         if: matrix.cibw_archs != 'x86_64'
@@ -85,7 +93,7 @@ jobs:
           path: wheelhouse/*.whl
 
   build_wheels_macos:
-    name: Build ${{ matrix.cibw_build }} wheels on ${{ matrix.os }}
+    name: "OS: ${{ matrix.os }}   Python: ${{ matrix.cibw_build }}   Arch: ${{ matrix.cibw_archs }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -97,6 +105,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Set up python 3.11
         uses: actions/setup-python@v4
@@ -120,7 +130,7 @@ jobs:
           path: wheelhouse/*.whl
 
   build_wheels_macos_arm64:
-    name: Build MacOS arm64 wheels
+    name: "OS: ${{ matrix.os }}   Python: ${{ matrix.cibw_build }}   Arch: ${{ matrix.cibw_archs }}"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -131,6 +141,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v4
         with:
