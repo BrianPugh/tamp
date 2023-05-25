@@ -22,6 +22,11 @@ jobs:
             cibw_archs: "ARM64"
 
     steps:
+      - name: "Set environment variables (Windows)"
+        shell: pwsh
+        run: |
+          (Get-ItemProperty "HKLM:System\CurrentControlSet\Control\FileSystem").LongPathsEnabled
+
       - name: Check out repository
         uses: actions/checkout@v3
         with:
