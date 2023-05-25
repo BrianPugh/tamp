@@ -8,7 +8,7 @@ on:
 
 jobs:
   build_wheels_windows:
-    name: "OS: ${{ matrix.os }}   Python: ${{ matrix.cibw_build }}   Arch: ${{ matrix.cibw_archs }}"
+    name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,13 +49,15 @@ jobs:
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: pytest {package}/tests
 
       - uses: actions/upload-artifact@v3
         with:
           path: wheelhouse/*.whl
 
   build_wheels_linux:
-    name: "OS: ${{ matrix.os }}   Python: ${{ matrix.cibw_build }}   Arch: ${{ matrix.cibw_archs }}"
+    name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -92,13 +94,15 @@ jobs:
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: pytest {package}/tests
 
       - uses: actions/upload-artifact@v3
         with:
           path: wheelhouse/*.whl
 
   build_wheels_macos:
-    name: "OS: ${{ matrix.os }}   Python: ${{ matrix.cibw_build }}   Arch: ${{ matrix.cibw_archs }}"
+    name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -129,13 +133,15 @@ jobs:
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: pytest {package}/tests
 
       - uses: actions/upload-artifact@v3
         with:
           path: wheelhouse/*.whl
 
   build_wheels_macos_arm64:
-    name: "OS: ${{ matrix.os }}   Python: ${{ matrix.cibw_build }}   Arch: ${{ matrix.cibw_archs }}"
+    name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -158,6 +164,8 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: pytest {package}/tests
           CIBW_REPAIR_WHEEL_COMMAND: |
             echo "Target delocate archs: {delocate_archs}"
 
