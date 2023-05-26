@@ -6,6 +6,7 @@ venv:
 
 clean:
 	@rm -rf build
+	@rm -rf dist
 	@rm -rf tamp/*.so
 	@rm -rf tamp/_c_compressor.c
 	@rm -rf tamp/_c_decompressor.c

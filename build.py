@@ -23,9 +23,9 @@ extensions = [
     Extension(
         "tamp._c_compressor",
         [
-            "tamp/_c_compressor.pyx",
-            "tamp/_c_src/tamp/compressor.c",
             "tamp/_c_src/tamp/common.c",
+            "tamp/_c_src/tamp/compressor.c",
+            "tamp/_c_compressor.pyx",
         ],
         include_dirs=include_dirs,
         extra_compile_args=extra_compile_args,
@@ -34,9 +34,9 @@ extensions = [
     Extension(
         "tamp._c_decompressor",
         [
-            "tamp/_c_decompressor.pyx",
-            "tamp/_c_src/tamp/decompressor.c",
             "tamp/_c_src/tamp/common.c",
+            "tamp/_c_src/tamp/decompressor.c",
+            "tamp/_c_decompressor.pyx",
         ],
         include_dirs=include_dirs,
         extra_compile_args=extra_compile_args,
