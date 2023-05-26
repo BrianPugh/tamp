@@ -1,9 +1,10 @@
 import os
 import shutil
-from distutils.core import Distribution, Extension
 from pathlib import Path
 
 from Cython.Build import build_ext, cythonize
+from setuptools import Extension
+from setuptools.dist import Distribution
 
 if os.name == "nt":  # Windows
     extra_compile_args = [
