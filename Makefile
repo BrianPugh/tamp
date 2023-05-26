@@ -5,7 +5,11 @@ venv:
 	@. .venv/bin/activate
 
 clean:
-	rm -rf build
+	@rm -rf build
+	@rm -rf tamp/*.so
+	@rm -rf tamp/_c_compressor.c
+	@rm -rf tamp/_c_decompressor.c
+	@rm -rf tamp/_c_common.c
 
 build/enwik8:
 	if [ ! -f build/enwik8 ]; then \
