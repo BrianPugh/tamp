@@ -12,6 +12,7 @@ class TestFileInterface(unittest.TestCase):
             fn = tmp_dir / "file.tamp"
             f = tamp.open(fn, "wb")
             self.assertIsInstance(f, tamp.Compressor)
+            f.close()
 
     def test_open_wb_then_rb(self):
         with TemporaryDirectory() as tmp_dir:
@@ -23,6 +24,7 @@ class TestFileInterface(unittest.TestCase):
 
             f = tamp.open(fn, "rb")
             self.assertIsInstance(f, tamp.Decompressor)
+            f.close()
 
     def test_open_context_manager_read_write(self):
         with TemporaryDirectory() as tmp_dir:
