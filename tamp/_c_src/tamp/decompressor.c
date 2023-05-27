@@ -20,7 +20,7 @@
 static int8_t huffman_decode(TampDecompressor *decompressor){
     uint8_t code = 0;
 
-    for(uint8_t i=0; i < 8; i++){
+    while(true){
         if(decompressor->bit_buffer_pos == 0)
             return -1;
         code = (code << 1) | (decompressor->bit_buffer >> 31);
@@ -44,9 +44,6 @@ static int8_t huffman_decode(TampDecompressor *decompressor){
             case 171: return FLUSH;
         }
     }
-    // Huffman Trees are complete, so this should never happen.
-    assert(false);
-    return -2;  // for the compiler to not yell about return-values
 }
 
 tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *input, size_t input_size, size_t *input_consumed_size) {
@@ -75,6 +72,8 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
     decompressor->bit_buffer_pos = 0;
     decompressor->skip_bytes = 0;
 
+    decompressor->configured = false;  // Defer configuration to tamp_decompressor_decompress
+                                       //
     if(conf){
         if(conf->window < 8 || conf->window > 15)
             return TAMP_INVALID_CONF;
@@ -87,10 +86,7 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
         memcpy(&decompressor->conf, conf, sizeof(TampConf));
         decompressor->configured = true;
     }
-    else{
-        // Defer configuration to tamp_decompressor_decompress
-        decompressor->configured = false;
-    }
+
     return TAMP_OK;
 }
 
@@ -105,11 +101,16 @@ tamp_res tamp_decompressor_decompress(
         ){
     tamp_res res;
     const uint16_t window_mask = (1 << decompressor->conf.window) - 1;
+    size_t input_consumed_size_proxy;
+    size_t output_written_size_proxy;
 
-    if(output_written_size)
-        *output_written_size = 0;
-    if(input_consumed_size)
-        *input_consumed_size = 0;
+    if(!output_written_size)
+        output_written_size = &output_written_size_proxy;
+    if(!input_consumed_size)
+        input_consumed_size = &input_consumed_size_proxy;
+
+    *input_consumed_size = 0;
+    *output_written_size = 0;
 
     if(!decompressor->configured){
         //Read in header
@@ -119,8 +120,7 @@ tamp_res tamp_decompressor_decompress(
             return res;
         input_size -= header_consumed_size;
         input++;
-        if(input_consumed_size)
-            (*input_consumed_size) += header_consumed_size;
+        (*input_consumed_size) += header_consumed_size;
     }
     while(input_size || decompressor->bit_buffer_pos){
         int8_t match_size = 1;
@@ -130,8 +130,7 @@ tamp_res tamp_decompressor_decompress(
             decompressor->bit_buffer |=  *input << (32 - decompressor->bit_buffer_pos);
             input_size--;
             input++;
-            if(input_consumed_size)
-                (*input_consumed_size)++;
+            (*input_consumed_size)++;
         }
 
         if(output_size == 0)
@@ -208,8 +207,7 @@ tamp_res tamp_decompressor_decompress(
 
         output += match_size;
         output_size -= match_size;
-        if(output_written_size)
-            (*output_written_size) += match_size;
+        (*output_written_size) += match_size;
 
     }
     return TAMP_OK;
