@@ -1,4 +1,5 @@
 cimport ctamp
+from cpython.exc cimport PyErr_CheckSignals
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
@@ -101,6 +102,9 @@ cdef class Decompressor:
 
                 if res < 0:
                     raise ERROR_LOOKUP.get(res, NotImplementedError)
+
+                # Check signals for things like KeyboardInterrupt
+                PyErr_CheckSignals()
 
 
         return bytearray().join(output_list)

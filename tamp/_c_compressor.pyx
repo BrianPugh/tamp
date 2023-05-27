@@ -1,4 +1,5 @@
 cimport ctamp
+from cpython.exc cimport PyErr_CheckSignals
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
@@ -83,6 +84,9 @@ cdef class Compressor:
             written_to_disk_size += output_buffer_written_size
             data_ptr += input_consumed_size
             input_remaining_size -= input_consumed_size
+
+            # Check signals for things like KeyboardInterrupt
+            PyErr_CheckSignals()
 
         return written_to_disk_size
 
