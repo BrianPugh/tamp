@@ -224,6 +224,7 @@ jobs:
           path: ./wheelhouse/*.whl
 
   upload_to_pypi:
+    if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     needs:
       [
         "build_sdist",
@@ -235,7 +236,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v3
-      - uses: pypa/gh-action-pypi-publish@v1
+      - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_TOKEN }}
           packages_dir: artifact/
