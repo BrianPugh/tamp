@@ -7,6 +7,33 @@ on:
       - "v*.*.*"
 
 jobs:
+  build_sdist:
+    name: "sdist"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set up python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: false
+          virtualenvs-in-project: false
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: wheelhouse/*.whl
+
   build_wheels_windows:
     name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
     runs-on: ${{ matrix.os }}
@@ -49,6 +76,7 @@ jobs:
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
+          CIBW_TEST_SKIP: "*-win_arm64"
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest {package}/tests
 
@@ -165,6 +193,7 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
+          CIBW_TEST_SKIP: "*-macosx_arm64"
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest {package}/tests
           CIBW_REPAIR_WHEEL_COMMAND: |
@@ -193,3 +222,21 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           path: ./wheelhouse/*.whl
+
+  upload_to_pypi:
+    needs:
+      [
+        "build_sdist",
+        "build_wheels_windows",
+        "build_wheels_linux",
+        "build_wheels_macos",
+        "build_wheels_macos_arm64",
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+      - uses: pypa/gh-action-pypi-publish@v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+          packages_dir: artifact/
+          skip_existing: true
