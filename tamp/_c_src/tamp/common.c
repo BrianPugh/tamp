@@ -19,7 +19,7 @@ static inline uint32_t xorshift32(uint32_t *state) {
     return x;
 }
 
-inline void tamp_initialize_dictionary(unsigned char *buffer, size_t size){
+void tamp_initialize_dictionary(unsigned char *buffer, size_t size){
     tamp_initialize_dictionary_seed(buffer, size, 3758097560);
 }
 
