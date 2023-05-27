@@ -17,13 +17,25 @@ Tamp is a low-memory, micropython-optimized, DEFLATE-inspired lossless compressi
 Features
 ========
 
-* Pure python implementation.
+* Various implementations available:
+
+  * Pure Python:
+
+    * ``tamp/compressor.py``, ``tamp/decompressor.py``
+
+    * When available, Tamp will use a python-bound C implementation for speed.
+
+  * C library:
+
+    * ``tamp/_c_src/``
 
 * High compression ratios and low memory use.
 
-* Small compression and decompression implementations.
+* Compact compression and decompression implementations.
 
 * Mid-stream flushing.
+
+  * Allows for submission of messages while continuing to compress subsequent data.
 
 * Customizable dictionary for greater compression of small messages.
 

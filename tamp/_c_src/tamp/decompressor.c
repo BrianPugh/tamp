@@ -1,7 +1,6 @@
 #include <string.h>
 #include "decompressor.h"
 #include "common.h"
-#include <stdio.h>
 #include "assert.h"
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))

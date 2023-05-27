@@ -71,3 +71,31 @@ on-device-decompression-benchmark: venv build/enwik8-100kb.tamp
 	mpremote connect port:$$port cp :enwik8-100kb-decompressed build/on-device-enwik8-100kb-decompressed; \
 	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed; \
 	echo "Success!"
+
+
+#############
+# C Library #
+#############
+BUILDDIR = build
+SRCDIR = tamp/_c_src
+CFLAGS = -O3 -Wall -I$(SRCDIR) -ffunction-sections -fdata-sections
+
+# Collect all .c and .h files
+SRCS = $(shell find $(SRCDIR) -name "*.c")
+HEADERS = $(shell find $(SRCDIR) -name "*.h")
+
+# Define the object files
+OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRCS))
+
+# Rule to create the target
+tamp.a: $(OBJS)
+	$(AR) rcs $@ $^
+
+# Rule to create object files
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILDDIR)/%.o: %.c $(HEADERS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
