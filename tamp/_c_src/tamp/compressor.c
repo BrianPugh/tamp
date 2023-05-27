@@ -65,6 +65,7 @@ static uint8_t single_search(
         uint16_t window_offset,
         uint8_t input_offset
         ){
+    window_offset = (window_offset + 1) << 2;
     for(;
         input_offset < compressor->input_size && window_offset < window_size && input_offset < MAX_PATTERN_SIZE;
         input_offset++, window_offset++
@@ -111,7 +112,7 @@ static void find_best_match(
         if((c32 & mask16) == first_second_c){
             if(((c32 >> 16) & mask8) == third_c && compressor->input_size >= 3){
                 if(((c32 >> 24) & mask8) == fourth_c && compressor->input_size >= 4)
-                    proposed_match_size = single_search(compressor, window_size, (i + 1) << 2, 4);
+                    proposed_match_size = single_search(compressor, window_size, i, 4);
                 else
                     proposed_match_size = 3;
             }
@@ -127,7 +128,7 @@ static void find_best_match(
         }
         if(((c32 >> 8) & mask16) == first_second_c){
             if(((c32 >> 24) & mask8) == third_c && compressor->input_size >= 3)
-                proposed_match_size = single_search(compressor, window_size, (i + 1) << 2, 3);
+                proposed_match_size = single_search(compressor, window_size, i, 3);
             else
                 proposed_match_size = 2;
             if(proposed_match_size > *match_size){
@@ -138,7 +139,7 @@ static void find_best_match(
             }
         }
         if(((c32 >> 16) & mask16) == first_second_c){
-            proposed_match_size = single_search(compressor, window_size, (i + 1) << 2, 2);
+            proposed_match_size = single_search(compressor, window_size, i, 2);
             if(proposed_match_size > *match_size){
                 *match_size = proposed_match_size;
                 *match_index = (i << 2) + 2;
@@ -147,7 +148,7 @@ static void find_best_match(
             }
         }
         if((c32 >> 24) == first_c){
-            proposed_match_size = single_search(compressor, window_size, (i + 1) << 2, 1);
+            proposed_match_size = single_search(compressor, window_size, i, 1);
             if(proposed_match_size > *match_size){
                 *match_size = proposed_match_size;
                 *match_index = (i << 2) + 3;
