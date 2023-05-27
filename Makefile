@@ -4,13 +4,15 @@
 venv:
 	@. .venv/bin/activate
 
-clean:
-	@rm -rf build
-	@rm -rf dist
+clean-cython:
 	@rm -rf tamp/*.so
 	@rm -rf tamp/_c_compressor.c
 	@rm -rf tamp/_c_decompressor.c
 	@rm -rf tamp/_c_common.c
+
+clean: clean-cython
+	@rm -rf build
+	@rm -rf dist
 
 build/enwik8:
 	if [ ! -f build/enwik8 ]; then \
@@ -76,9 +78,10 @@ on-device-decompression-benchmark: venv build/enwik8-100kb.tamp
 #############
 # C Library #
 #############
+# This section is primarily to build a library to check for implementation size.
 BUILDDIR = build
 SRCDIR = tamp/_c_src
-CFLAGS = -O3 -Wall -I$(SRCDIR) -ffunction-sections -fdata-sections
+CFLAGS = -Os -Wall -I$(SRCDIR) -ffunction-sections -fdata-sections -m32
 
 # Collect all .c and .h files
 SRCS = $(shell find $(SRCDIR) -name "*.c")
@@ -88,8 +91,11 @@ HEADERS = $(shell find $(SRCDIR) -name "*.h")
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRCS))
 
 # Rule to create the target
-tamp.a: $(OBJS)
+build/tamp.a: $(OBJS)
 	$(AR) rcs $@ $^
+
+tamp-c-library: build/tamp.a
+.PHONY: tamp-c-library
 
 # Rule to create object files
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HEADERS)

@@ -9,6 +9,10 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef TAMP_UNROLL
+#define TAMP_UNROLL 0
+#endif
+
 typedef enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,

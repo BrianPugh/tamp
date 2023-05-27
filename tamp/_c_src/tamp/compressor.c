@@ -65,41 +65,12 @@ static uint8_t single_search(
         uint16_t window_offset,
         uint8_t input_offset
         ){
-    if(window_offset + MAX_PATTERN_SIZE < window_size && compressor->input_size >= MAX_PATTERN_SIZE){
-        /* Common "Happy" case unrolled */
-        if(compressor->window[window_offset++] != read_input(input_offset))
-            return input_offset;
-        if(compressor->window[window_offset++] != read_input(++input_offset))
-            return input_offset;
-        if(compressor->window[window_offset++] != read_input(++input_offset))
-            return input_offset;
-        if(compressor->window[window_offset++] != read_input(++input_offset))
-            return input_offset;
-        if(compressor->window[window_offset++] != read_input(++input_offset))
-            return input_offset;
-        if(compressor->window[window_offset++] != read_input(++input_offset))
-            return input_offset;
-        if(compressor->window[window_offset++] != read_input(++input_offset))
-            return input_offset;
-        if(compressor->window[window_offset++] != read_input(++input_offset))
-            return input_offset;
-        input_offset++;
-        for(;
-            input_offset < MAX_PATTERN_SIZE;
-            input_offset++, window_offset++
-        ){
-            if(compressor->window[window_offset] != read_input(input_offset))
-                break;
-        }
-    }
-    else{
-        for(;
-            input_offset < compressor->input_size && window_offset < window_size && input_offset < MAX_PATTERN_SIZE;
-            input_offset++, window_offset++
-        ){
-            if(compressor->window[window_offset] != read_input(input_offset))
-                break;
-        }
+    for(;
+        input_offset < compressor->input_size && window_offset < window_size && input_offset < MAX_PATTERN_SIZE;
+        input_offset++, window_offset++
+    ){
+        if(compressor->window[window_offset] != read_input(input_offset))
+            break;
     }
     return input_offset;
 }

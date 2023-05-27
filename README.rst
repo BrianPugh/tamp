@@ -33,6 +33,8 @@ Features
 
 * Compact compression and decompression implementations.
 
+  * Compiled C library is <8KB (compressor + decompressor).
+
 * Mid-stream flushing.
 
   * Allows for submission of messages while continuing to compress subsequent data.
@@ -272,7 +274,7 @@ These tests were performed on an M1 Macbook Air.
 +---------------+-------------------------+----------+------+-------------------------+----------------------------+
 | Action        | tamp (Python Reference) | tamp (C) | zlib | heatshrink (with index) | heatshrink (without index) |
 +===============+=========================+==========+======+=========================+============================+
-| Compression   | 109.5                   | 17.75    | 4.84 | 6.22                    | 41.729                     |
+| Compression   | 109.5                   | 17.35    | 4.84 | 6.22                    | 41.729                     |
 +---------------+-------------------------+----------+------+-------------------------+----------------------------+
 | Decompression | 54.0                    | 0.12     | 0.08 | 0.82                    | 0.82                       |
 +---------------+-------------------------+----------+------+-------------------------+----------------------------+

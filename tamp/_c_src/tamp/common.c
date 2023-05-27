@@ -28,15 +28,13 @@ void tamp_initialize_dictionary_seed(unsigned char *buffer, size_t size, uint32_
         return;
     }
     for(size_t i=0; i < size; i+=8){
+        uint32_t randbuf;
         xorshift32(&seed);
-        buffer[i + 0] = common_characters[seed & 0x0F];
-        buffer[i + 1] = common_characters[seed >> 4 & 0x0F];
-        buffer[i + 2] = common_characters[seed >> 8 & 0x0F];
-        buffer[i + 3] = common_characters[seed >> 12 & 0x0F];
-        buffer[i + 4] = common_characters[seed >> 16 & 0x0F];
-        buffer[i + 5] = common_characters[seed >> 20 & 0x0F];
-        buffer[i + 6] = common_characters[seed >> 24 & 0x0F];
-        buffer[i + 7] = common_characters[seed >> 28 & 0x0F];
+        randbuf = seed;
+        for(uint8_t j=0; j < 8; j++){
+            buffer[i + j] = common_characters[randbuf & 0x0F];
+            randbuf >>= 4;
+        }
     }
 }
 
