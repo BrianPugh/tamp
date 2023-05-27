@@ -197,9 +197,11 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
     const uint16_t window_mask = (1 << compressor->conf.window) - 1;
+    size_t output_written_size_proxy;
 
-    if(output_written_size)
-        *output_written_size = 0;
+    if(!output_written_size)
+        output_written_size = &output_written_size_proxy;
+    *output_written_size = 0;
 
     if(compressor->input_size == 0)
         return TAMP_OK;
@@ -208,8 +210,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         // Make sure there's enough room in the bit buffer.
         size_t flush_bytes_written;
         res = partial_flush(compressor, output, output_size, &flush_bytes_written);
-        if(output_written_size)
-            (*output_written_size) += flush_bytes_written;
+        (*output_written_size) += flush_bytes_written;
         if(res != TAMP_OK)
             return res;
         output_size -= flush_bytes_written;
