@@ -55,6 +55,8 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
         (*input_consumed_size) = 0;
     if(input_size == 0)
         return TAMP_INPUT_EXHAUSTED;
+    if(input[0] & 0x2)
+        return TAMP_INVALID_CONF;  // Reserved
     if(input[0] & 0x1)
         return TAMP_INVALID_CONF;  // Currently only a single header byte is supported.
     if(input_consumed_size)
