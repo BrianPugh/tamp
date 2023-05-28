@@ -162,7 +162,7 @@ class Decompressor:
         else:
             out = bytearray()
 
-        while True:
+        while len(out) < size:
             try:
                 is_literal = self._bit_reader.read(1)
 
