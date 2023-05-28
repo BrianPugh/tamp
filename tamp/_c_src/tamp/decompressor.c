@@ -65,20 +65,15 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
 }
 
 tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window){
+    for(uint8_t i=0; i < sizeof(TampDecompressor); i++)  // Zero-out the struct
+        ((unsigned char *)decompressor)[i] = 0;
     decompressor->window = window;
-    decompressor->window_pos = 0;
-    decompressor->bit_buffer = 0;
-    decompressor->bit_buffer_pos = 0;
-    decompressor->skip_bytes = 0;
-
-    decompressor->configured = false;  // Defer configuration to tamp_decompressor_decompress
-                                       //
     if(conf){
         if(conf->window < 8 || conf->window > 15)
             return TAMP_INVALID_CONF;
         if(conf->literal < 5 || conf->literal > 8)
             return TAMP_INVALID_CONF;
-        if(!conf->use_custom_dictionary )
+        if(!conf->use_custom_dictionary)
             tamp_initialize_dictionary(window, (1 << conf->window));
 
         decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
