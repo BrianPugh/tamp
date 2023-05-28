@@ -102,6 +102,7 @@ tamp_res tamp_decompressor_decompress(
     const uint16_t window_mask = (1 << decompressor->conf.window) - 1;
     size_t input_consumed_size_proxy;
     size_t output_written_size_proxy;
+    const unsigned char *input_end = input + input_size;
 
     if(!output_written_size)
         output_written_size = &output_written_size_proxy;
@@ -114,20 +115,18 @@ tamp_res tamp_decompressor_decompress(
     if(!decompressor->configured){
         //Read in header
         size_t header_consumed_size;
-        res = tamp_decompressor_read_header(&decompressor->conf, input, input_size, &header_consumed_size);
+        res = tamp_decompressor_read_header(&decompressor->conf, input, input_end - input, &header_consumed_size);
         if(res != TAMP_OK)
             return res;
-        input_size -= header_consumed_size;
-        input++;
+        input += header_consumed_size;
         (*input_consumed_size) += header_consumed_size;
     }
-    while(input_size || decompressor->bit_buffer_pos){
+    while(input != input_end || decompressor->bit_buffer_pos){
         int8_t match_size = 1;
         // Populate the bit buffer
-        while(input_size && decompressor->bit_buffer_pos <= 24){
+        while(input != input_end && decompressor->bit_buffer_pos <= 24){
             decompressor->bit_buffer_pos += 8;
             decompressor->bit_buffer |=  *input << (32 - decompressor->bit_buffer_pos);
-            input_size--;
             input++;
             (*input_consumed_size)++;
         }
