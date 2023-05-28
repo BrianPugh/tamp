@@ -31,10 +31,10 @@ def common(
 
 
 def read(input_: Optional[Path]) -> bytes:
-    if input_ is None:
-        return sys.stdin.buffer.read()
-    else:
-        return input_.read_bytes()
+    data = sys.stdin.buffer.read() if input_ is None else input_.read_bytes()
+    if not data:
+        raise ValueError("No data provided.")
+    return data
 
 
 def write(output: Optional[Path], data: bytes):
