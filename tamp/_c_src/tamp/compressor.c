@@ -2,7 +2,6 @@
 #include "common.h"
 #include <stdlib.h>
 #include <stdbool.h>
-#include <string.h>
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -170,7 +169,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     if( conf->literal < 5 || conf->literal > 8)
         return TAMP_INVALID_CONF;
 
-    memcpy(&compressor->conf, conf, sizeof(TampConf));
+    compressor->conf = *conf;
 
     compressor->window = window;
     compressor->bit_buffer = 0;

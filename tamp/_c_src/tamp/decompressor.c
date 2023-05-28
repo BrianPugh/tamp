@@ -1,4 +1,3 @@
-#include <string.h>
 #include "decompressor.h"
 #include "common.h"
 #include "assert.h"
@@ -83,7 +82,7 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
             tamp_initialize_dictionary(window, (1 << conf->window));
 
         decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
-        memcpy(&decompressor->conf, conf, sizeof(TampConf));
+        decompressor->conf = *conf;
         decompressor->configured = true;
     }
 

@@ -9,7 +9,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef enum {
+enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,
     TAMP_OUTPUT_FULL = 1,  // Wasn't able to complete action due to full output buffer.
@@ -19,7 +19,8 @@ typedef enum {
     TAMP_ERROR = -1,  // Generic error
     TAMP_EXCESS_BITS = -2,  // Provided symbol has more bits than conf->literal
     TAMP_INVALID_CONF = -3,  // Invalid configuration parameters.
-} tamp_res;
+};
+typedef int8_t tamp_res;
 
 typedef struct TampConf {
     uint16_t window:4;   // number of window bits
