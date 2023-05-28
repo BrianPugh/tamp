@@ -114,6 +114,7 @@ tamp_res tamp_compressor_compress(
  *
  * While all buffers are flushed, no flush token is will be written to the output stream.
  * If the output buffer is full, flushing will not be performed and TAMP_OUTPUT_FULL will be returned.
+ * May be called again with an appropriately updated input-pointer and input_size.
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
