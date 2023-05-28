@@ -118,3 +118,43 @@ class TestDecompressor(unittest.TestCase):
                 bytes([0b000_10_1_0_0])
             ) as f:
                 Decompressor(f)
+
+    def test_decompressor_full_output_dst_immediately_after_src(self):
+        for Decompressor in Decompressors:
+            if Decompressor is None:
+                continue
+
+            # Decompressor's perspective of window
+            # compressed data: b"z"
+            #    * 0 write literal "a"   -> b"abcd"
+            #    * 1 write pattern "abc"
+            custom_dictionary = bytearray(1024)
+            custom_dictionary_init = b"abcd"
+            custom_dictionary[: len(custom_dictionary_init)] = custom_dictionary_init
+
+            data = bytes(
+                [
+                    # fmt: off
+
+                    # header (window_bits=10, literal_bits=8, custom)
+                    0b010_11_1_0_0,
+                    0b1_0110000,       # literal "a"
+                    0b1_0_11_0000,  # token "abc"
+                    0b000000_00,
+                    # 2-bit padding
+                    # fmt: on
+                ]
+            )
+
+            with self.subTest(Decompressor=Decompressor):
+                with BytesIO(data) as f:
+                    # Sanity check that without limiting output, it decompresses correctly.
+                    decompressor = Decompressor(f, dictionary=custom_dictionary)
+                    self.assertEqual(decompressor.read(), b"aabc")
+
+                with BytesIO(data) as f:
+                    decompressor = Decompressor(f, dictionary=custom_dictionary)
+                    self.assertEqual(decompressor.read(1), b"a")
+                    self.assertEqual(decompressor.read(1), b"a")
+                    self.assertEqual(decompressor.read(1), b"b")
+                    self.assertEqual(decompressor.read(1), b"c")
