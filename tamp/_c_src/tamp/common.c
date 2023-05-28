@@ -19,16 +19,14 @@ static inline uint32_t xorshift32(uint32_t *state) {
 }
 
 
-void tamp_initialize_dictionary_seed(unsigned char *buffer, size_t size){
+void tamp_initialize_dictionary(unsigned char *buffer, size_t size){
     uint32_t seed = 3758097560;
-    for(size_t i=0; i < size; i+=8){
-        uint32_t randbuf;
-        xorshift32(&seed);
-        randbuf = seed;
-        for(uint8_t j=0; j < 8; j++){
-            buffer[i + j] = common_characters[randbuf & 0x0F];
-            randbuf >>= 4;
-        }
+    uint32_t randbuf = 0;
+    for(size_t i=0; i < size; i++){
+        if( (i & 0x7) == 0)
+            randbuf = xorshift32(&seed);
+        buffer[i] = common_characters[randbuf & 0x0F];
+        randbuf >>= 4;
     }
 }
 
