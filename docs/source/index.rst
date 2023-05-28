@@ -9,3 +9,4 @@
    Installation
    specification
    api
+   c_library
