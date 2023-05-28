@@ -13,6 +13,7 @@ pico_sdk_init()
 project(tamp C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os -ggdb -ffunction-sections -fdata-sections")
 
 file(GLOB FILES ../../tamp/_c_src/tamp/*.c ../../tamp/_c_src/tamp/*.h)
 add_library(tamp ${FILES})
