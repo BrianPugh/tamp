@@ -70,42 +70,39 @@ cdef class Decompressor:
             size_t output_written_size
 
         if size < 0:
-            size = 0xFFFFFFFF
+            size = 0x7FFFFFFF
 
         output_list = []
 
         while size:
-            if not self.input_size:
-                self.input_size = self.f.readinto(self.input_buffer)
-                self.input_consumed = 0
-
             output_size = min(CHUNK_SIZE, size)
 
-            if not self.input_size:
-                break
+            res = ctamp.tamp_decompressor_decompress(
+                self._c_decompressor,
+                output_buffer_ptr,
+                output_size,
+                &output_written_size,
+                self.input_buffer_ptr + self.input_consumed,
+                self.input_size,
+                &input_chunk_consumed
+            )
+            self.input_size -= input_chunk_consumed
+            self.input_consumed += input_chunk_consumed
+            size -= output_written_size
 
-            while self.input_size and size:
-                res = ctamp.tamp_decompressor_decompress(
-                    self._c_decompressor,
-                    output_buffer_ptr,
-                    output_size,
-                    &output_written_size,
-                    self.input_buffer_ptr + self.input_consumed,
-                    self.input_size,
-                    &input_chunk_consumed
-                )
-                self.input_size -= input_chunk_consumed
-                self.input_consumed += input_chunk_consumed
-                size -= output_written_size
+            output_list.append(output_buffer[:output_written_size])
 
-                output_list.append(output_buffer[:output_written_size])
+            if res == ctamp.TAMP_INPUT_EXHAUSTED:
+                # Read in more data
+                self.input_size = self.f.readinto(self.input_buffer)
+                self.input_consumed = 0
+                if self.input_size == 0:
+                    break;
+            elif res < 0:
+                raise ERROR_LOOKUP.get(res, NotImplementedError)
 
-                if res < 0:
-                    raise ERROR_LOOKUP.get(res, NotImplementedError)
-
-                # Check signals for things like KeyboardInterrupt
-                PyErr_CheckSignals()
-
+            # Check signals for things like KeyboardInterrupt
+            PyErr_CheckSignals()
 
         return bytearray().join(output_list)
 

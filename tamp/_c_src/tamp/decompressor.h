@@ -52,7 +52,7 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
  * @param[in] input_size Number of bytes in input data.
  * @param[out] input_consumed_size Number of bytes of input data consumed. May be NULL.
  *
- * @return Tamp Status Code.
+ * @return Tamp Status Code. In cases of success, will return TAMP_INPUT_EXHAUSTED or TAMP_OUTPUT_FULL, in lieu of TAMP_OK.
 
  */
 tamp_res tamp_decompressor_decompress(
