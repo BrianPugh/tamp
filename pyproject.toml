@@ -131,7 +131,6 @@ select = [
     "Q",  # flake8-quotes
     "S",  # bandit
     "SIM",  # flake8-simplify
-    "TRY",  # tryceratops
     "UP",  # pyupgrade
     "W",  # Warning
     "YTT", # flake8-2020
@@ -164,7 +163,6 @@ ignore = [
     "E402",
     "E501",
     "F401",
-    "TRY003",  # Avoid specifying messages outside exception class; overly strict, especially for ValueError
     "SIM105",  # Use `contextlib.suppress(ImportError)` instead of try-except-pass
     "SIM115",  # Use context handler for opening files
     "B904",  # Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling

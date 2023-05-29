@@ -120,31 +120,31 @@ class TestDecompressor(unittest.TestCase):
                 Decompressor(f)
 
     def test_decompressor_full_output_dst_immediately_after_src(self):
+        # Decompressor's perspective of window
+        # compressed data: b"z"
+        #    * 0 write literal "a"   -> b"abcd"
+        #    * 1 write pattern "abc"
+        custom_dictionary = bytearray(1024)
+        custom_dictionary_init = b"abcd"
+        custom_dictionary[: len(custom_dictionary_init)] = custom_dictionary_init
+
+        data = bytes(
+            [
+                # fmt: off
+
+                # header (window_bits=10, literal_bits=8, custom)
+                0b010_11_1_0_0,
+                0b1_0110000,       # literal "a"
+                0b1_0_11_0000,  # token "abc"
+                0b000000_00,
+                # 2-bit padding
+                # fmt: on
+            ]
+        )
+
         for Decompressor in Decompressors:
             if Decompressor is None:
                 continue
-
-            # Decompressor's perspective of window
-            # compressed data: b"z"
-            #    * 0 write literal "a"   -> b"abcd"
-            #    * 1 write pattern "abc"
-            custom_dictionary = bytearray(1024)
-            custom_dictionary_init = b"abcd"
-            custom_dictionary[: len(custom_dictionary_init)] = custom_dictionary_init
-
-            data = bytes(
-                [
-                    # fmt: off
-
-                    # header (window_bits=10, literal_bits=8, custom)
-                    0b010_11_1_0_0,
-                    0b1_0110000,       # literal "a"
-                    0b1_0_11_0000,  # token "abc"
-                    0b000000_00,
-                    # 2-bit padding
-                    # fmt: on
-                ]
-            )
 
             with self.subTest(Decompressor=Decompressor):
                 with BytesIO(data) as f:
@@ -158,3 +158,39 @@ class TestDecompressor(unittest.TestCase):
                     self.assertEqual(decompressor.read(1), b"a")
                     self.assertEqual(decompressor.read(1), b"b")
                     self.assertEqual(decompressor.read(1), b"c")
+
+    def test_decompressor_partial_token(self):
+        compressed = bytes(
+            # fmt: off
+            [
+                0b010_11_00_0,  # header (window_bits=10, literal_bits=8)
+                0b1_0110011,    # literal "f"
+                0b0_0_0_00100,  # the pre-init buffer contains "oo" at index 131
+                                # size=2 -> 0b0
+                                # 131 -> 0b0010000011
+                0b00011_1_00,   # literal " "
+                0b100000_0_1,   # There is now "foo " at index 0
+                0b000_00000,    # size=4 -> 0b1000
+                ####################### - stream-break here
+                0b00000_0_11,   # Just "foo" at index 0; size=3 -> 0b11
+                0b00000000,     # index 0 -> 0b0000000000
+                0b00_000000,    # 6 bits of zero-padding
+            ]
+            # fmt: on
+        )
+
+        expected = b"foo foo foo"
+
+        for Decompressor in Decompressors:
+            if Decompressor is None:
+                continue
+
+            with self.subTest(Decompressor=Decompressor), BytesIO(compressed[:6]) as f:
+                decompressor = Decompressor(f)
+                read0 = decompressor.read()
+
+                f.write(compressed[6:])
+                f.seek(6)
+
+                read1 = decompressor.read()
+                self.assertEqual(read0 + read1, expected)

@@ -84,7 +84,7 @@ class Decompressor:
         try:
             while out_pos < out_capacity:
                 if f_pos == 0:
-                    f_buf = int(f.read(1)[0]) << 22
+                    f_buf = int(f.read(1)[0]) << 22  # Will raise IndexError if out of data.
                     f_pos = 8
 
                 # re-use is_literal flag as match_size so we don't need to explicitly set it
@@ -154,11 +154,12 @@ class Decompressor:
                                                 f_pos = f_buf = 0  # FLUSH
                                                 continue
                                             else:
-                                                break  # no valid code detected
+                                                raise RuntimeError("Invalid Huffman code")
                     else:  # 0b0
                         match_size = 0
                         delta = 1
 
+                    # TODO: first check if available input
                     f_buf = (f_buf << delta) & full_mask
                     f_pos -= delta
 

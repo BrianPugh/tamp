@@ -49,9 +49,13 @@ class BitReader:
             byte = self.f.read(1)
             if not byte:
                 raise EOFError
-            byte_value = int.from_bytes(byte, "big")
+            byte_value = int.from_bytes(byte, "little")
             self.buffer |= byte_value << (24 - self.bit_pos)
             self.bit_pos += 8
+
+            if self.backup_buffer is not None and self.backup_bit_pos is not None:
+                self.backup_buffer |= byte_value << (24 - self.backup_bit_pos)
+                self.backup_bit_pos += 8
 
         result = self.buffer >> (32 - num_bits)
         mask = (1 << (32 - num_bits)) - 1
@@ -64,8 +68,31 @@ class BitReader:
         self.buffer = 0
         self.bit_pos = 0
 
+        self.backup_buffer = None
+        self.backup_bit_pos = None
+
     def close(self):
         self.f.close()
+
+    def __len__(self):
+        return self.bit_pos
+
+    def __enter__(self):
+        # Context manager to restore all read bits in a session if any read fails.
+
+        # backup the buffer
+        self.backup_buffer = self.buffer
+        self.backup_bit_pos = self.bit_pos
+        return self
+
+    def __exit__(self, exception_type, exception_value, exception_traceback):
+        if exception_type is not None:
+            # restore buffers
+            self.buffer = self.backup_buffer
+            self.bit_pos = self.backup_bit_pos
+
+        self.backup_buffer = None
+        self.backup_bit_pos = None
 
 
 class RingBuffer:
@@ -164,28 +191,29 @@ class Decompressor:
 
         while len(out) < size:
             try:
-                is_literal = self._bit_reader.read(1)
+                with self._bit_reader:
+                    is_literal = self._bit_reader.read(1)
 
-                if is_literal:
-                    c = self._bit_reader.read(self.literal_bits)
-                    self._window_buffer.write_byte(c)
-                    out.append(c)
-                else:
-                    match_size = self._bit_reader.read_huffman()
-                    if match_size is _FLUSH:
-                        self._bit_reader.clear()
-                        continue
-                    match_size += self.min_pattern_size
-                    index = self._bit_reader.read(self.window_bits)
+                    if is_literal:
+                        c = self._bit_reader.read(self.literal_bits)
+                        self._window_buffer.write_byte(c)
+                        out.append(c)
+                    else:
+                        match_size = self._bit_reader.read_huffman()
+                        if match_size is _FLUSH:
+                            self._bit_reader.clear()
+                            continue
+                        match_size += self.min_pattern_size
+                        index = self._bit_reader.read(self.window_bits)
 
-                    string = self._window_buffer.buffer[index : index + match_size]
-                    self._window_buffer.write_bytes(string)
+                        string = self._window_buffer.buffer[index : index + match_size]
+                        self._window_buffer.write_bytes(string)
 
-                    out.extend(string)
-                    if len(out) > size:
-                        self.overflow[:] = out[size:]
-                        out = out[:size]
-                        break
+                        out.extend(string)
+                        if len(out) > size:
+                            self.overflow[:] = out[size:]
+                            out = out[:size]
+                            break
             except EOFError:
                 break
 
