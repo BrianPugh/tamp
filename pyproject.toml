@@ -29,29 +29,29 @@ tamp = "tamp.cli.main:run_app"
 [tool.poetry.dependencies]
 # Be as loose as possible if writing a library.
 python = "^3.8"
-typer = ">=0.6.0, <1.0.0"
+typer = ">=0.6.0"
 
 [tool.poetry.group.docs.dependencies]
-sphinx = "~4.5.0"
-sphinx_rtd_theme = "~1.0.0"
-gitpython = "^3.1.31"
-sphinx-copybutton = ">=0.5.2, <1.0.0"
+sphinx = ">=4.5.0"
+sphinx_rtd_theme = ">=1.0.0"
+gitpython = ">=3.1.31"
+sphinx-copybutton = ">=0.5.2"
 
 [tool.poetry.group.dev.dependencies]
-coverage = {extras = ["toml"], version = "^5.1"}
-poetry-dynamic-versioning = ">=0.16.0, <1.0.0"
-pre_commit = "^2.16.0"
-pytest = "^7.1.2"
-pytest-cov = "^3.0.0"
-pytest-mock = "^3.7.0"
-black = "^23.1.0"
-belay = ">=0.19.2, <1.0.0"
-tqdm = "^4.65.0"
-matplotlib = "^3.7.1"
-ipdb = ">=0.13.13, <1.0.0"
-mpremote = "^1.20.0"
-cython = "^0.29.34"
-pytest-subtests = "^0.10.0"
+coverage = {extras = ["toml"], version = ">=5.1"}
+poetry-dynamic-versioning = ">=0.16.0"
+pre_commit = ">=2.16.0"
+pytest = ">=7.1.2"
+pytest-cov = ">=3.0.0"
+pytest-mock = ">=3.7.0"
+black = ">=23.1.0"
+belay = ">=0.20.1"
+tqdm = ">=4.65.0"
+matplotlib = ">=3.7.1"
+ipdb = ">=0.13.13"
+mpremote = ">=1.20.0"
+cython = ">=0.29.34"
+pytest-subtests = ">=0.10.0"
 
 [tool.poetry.group.profile]
 optional = true

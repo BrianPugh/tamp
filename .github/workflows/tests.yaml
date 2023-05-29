@@ -88,6 +88,7 @@ jobs:
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
           python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
+          belay run micropython -m unittest tests/*.py
           coverage report
 
       - name: Upload coverage to Codecov
