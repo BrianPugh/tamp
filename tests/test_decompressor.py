@@ -149,11 +149,11 @@ class TestDecompressor(unittest.TestCase):
             with self.subTest(Decompressor=Decompressor):
                 with BytesIO(data) as f:
                     # Sanity check that without limiting output, it decompresses correctly.
-                    decompressor = Decompressor(f, dictionary=custom_dictionary.copy())
+                    decompressor = Decompressor(f, dictionary=bytearray(custom_dictionary))
                     self.assertEqual(decompressor.read(), b"aabc")
 
                 with BytesIO(data) as f:
-                    decompressor = Decompressor(f, dictionary=custom_dictionary.copy())
+                    decompressor = Decompressor(f, dictionary=bytearray(custom_dictionary))
                     self.assertEqual(decompressor.read(1), b"a")
                     self.assertEqual(decompressor.read(1), b"a")
                     self.assertEqual(decompressor.read(1), b"b")
