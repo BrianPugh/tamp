@@ -6,32 +6,36 @@ try:
 except ImportError:
     micropython = None
 
-from tamp.decompressor import Decompressor as PyDecompressor
-from tamp.decompressor import decompress as py_decompress
+Decompressors = []
+decompresses = []
 
 if micropython is None:
-    ViperDecompressor = None
-    viper_decompress = None
+    from tamp.decompressor import Decompressor as PyDecompressor
+    from tamp.decompressor import decompress as py_decompress
+
+    Decompressors.append(PyDecompressor)
+    decompresses.append(py_decompress)
+
+    try:
+        from tamp._c_decompressor import Decompressor as CDecompressor
+        from tamp._c_decompressor import decompress as c_decompress
+
+        Decompressors.append(CDecompressor)
+        decompresses.append(c_decompress)
+    except ImportError:
+        pass
+
 else:
     from tamp.decompressor_viper import Decompressor as ViperDecompressor
     from tamp.decompressor_viper import decompress as viper_decompress
 
-try:
-    from tamp._c_decompressor import Decompressor as CDecompressor
-    from tamp._c_decompressor import decompress as c_decompress
-except ImportError:
-    CDecompressor = None
-    c_decompress = None
-
-Decompressors = (PyDecompressor, CDecompressor, ViperDecompressor)
-decompresses = (py_decompress, c_decompress, viper_decompress)
+    Decompressors.append(ViperDecompressor)
+    decompresses.append(viper_decompress)
 
 
 class TestDecompressor(unittest.TestCase):
     def test_decompressor_basic(self):
         for Decompressor in Decompressors:
-            if Decompressor is None:
-                continue
             with self.subTest(Decompressor=Decompressor):
                 expected = b"foo foo foo"
 
@@ -61,8 +65,6 @@ class TestDecompressor(unittest.TestCase):
 
     def test_decompressor_restricted_read_size(self):
         for Decompressor in Decompressors:
-            if Decompressor is None:
-                continue
             with self.subTest(Decompressor=Decompressor):
                 compressed = bytes(
                     # fmt: off
@@ -90,8 +92,6 @@ class TestDecompressor(unittest.TestCase):
 
     def test_decompressor_flushing(self):
         for decompress in decompresses:
-            if decompress is None:
-                continue
             with self.subTest(decompress=decompress):
                 compressed = bytes(
                     # fmt: off
@@ -112,8 +112,6 @@ class TestDecompressor(unittest.TestCase):
 
     def test_decompressor_missing_dict(self):
         for Decompressor in Decompressors:
-            if Decompressor is None:
-                continue
             with self.subTest(Decompressor=Decompressor), self.assertRaises(ValueError), BytesIO(
                 bytes([0b000_10_1_0_0])
             ) as f:
@@ -143,9 +141,6 @@ class TestDecompressor(unittest.TestCase):
         )
 
         for Decompressor in Decompressors:
-            if Decompressor is None:
-                continue
-
             with self.subTest(Decompressor=Decompressor):
                 with BytesIO(data) as f:
                     # Sanity check that without limiting output, it decompresses correctly.
@@ -182,9 +177,6 @@ class TestDecompressor(unittest.TestCase):
         expected = b"foo foo foo"
 
         for Decompressor in Decompressors:
-            if Decompressor is None:
-                continue
-
             with self.subTest(Decompressor=Decompressor), BytesIO(compressed[:6]) as f:
                 decompressor = Decompressor(f)
                 read0 = decompressor.read()
