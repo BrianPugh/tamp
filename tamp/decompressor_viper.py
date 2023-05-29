@@ -89,16 +89,20 @@ class Decompressor:
 
                 # re-use is_literal flag as match_size so we don't need to explicitly set it
                 match_size = f_buf >> 29
-                f_buf = (f_buf << 1) & full_mask
-                f_pos -= 1
+                # Don't update f_buf & f_pos here, in case there's not enough data available.
 
                 if match_size:
-                    if f_pos < literal_bits:
+                    if f_pos < (literal_bits + 1):
                         f_buf |= int(f.read(1)[0]) << (22 - f_pos)
                         f_pos += 8
+
+                    # Now update buffers from is_literal
+                    f_buf = (f_buf << 1) & full_mask
+                    f_pos -= 1
+
                     c = f_buf >> (30 - literal_bits)
-                    f_pos -= literal_bits
                     f_buf = (f_buf << literal_bits) & full_mask
+                    f_pos -= literal_bits
 
                     out_buf[out_pos] = c
                     w_buf[w_pos] = c
@@ -108,23 +112,23 @@ class Decompressor:
                     f_buf |= int(f.read(1)[0]) << (22 - f_pos)
                     f_pos += 8
 
-                    if f_buf >> 29:
-                        if (f_buf >> 28) == 0b11:
+                    if f_buf >> 28:
+                        if (f_buf >> 27) == 0b11:
                             match_size = 1
                             delta = 2
                         else:
-                            proposed_code = f_buf >> 26
+                            proposed_code = f_buf >> 25
                             delta = 4
                             if proposed_code == 0b1000:
                                 match_size = 2
                             elif proposed_code == 0b1011:
                                 match_size = 3
                             else:
-                                if (f_buf >> 25) == 0b10100:
+                                if (f_buf >> 24) == 0b10100:
                                     match_size = 4
                                     delta = 5
                                 else:
-                                    proposed_code = f_buf >> 24
+                                    proposed_code = f_buf >> 23
                                     delta = 6
                                     if proposed_code == 0b100100:
                                         match_size = 5
@@ -135,14 +139,14 @@ class Decompressor:
                                     elif proposed_code == 0b100111:
                                         match_size = 13
                                     else:
-                                        proposed_code = f_buf >> 23
+                                        proposed_code = f_buf >> 22
                                         delta = 7
                                         if proposed_code == 0b1001011:
                                             match_size = 8
                                         elif proposed_code == 0b1010100:
                                             match_size = 9
                                         else:
-                                            proposed_code = f_buf >> 22
+                                            proposed_code = f_buf >> 21
                                             delta = 8
                                             if proposed_code == 0b10010100:
                                                 match_size = 10
@@ -159,18 +163,17 @@ class Decompressor:
                         match_size = 0
                         delta = 1
 
-                    # TODO: first check if available input
-                    f_buf = (f_buf << delta) & full_mask
-                    f_pos -= delta
-
-                    match_size += min_pattern_size
-                    while f_pos < w_bits:
+                    token_bits = 1 + delta + w_bits
+                    while f_pos < token_bits:
                         f_buf |= int(f.read(1)[0]) << (22 - f_pos)
                         f_pos += 8
 
-                    index = f_buf >> (30 - w_bits)
-                    f_buf = (f_buf << w_bits) & full_mask
-                    f_pos -= w_bits
+                    # We now absolutely have enough data to decode token.
+
+                    match_size += min_pattern_size
+                    index = (f_buf >> (30 - token_bits)) & w_mask
+                    f_buf = (f_buf << token_bits) & full_mask
+                    f_pos -= token_bits
 
                     # Copy bytes from window to output or overflow buffer.
                     is_overlap = (w_pos - index) & w_mask < match_size
