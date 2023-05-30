@@ -16,15 +16,15 @@
  * @return Tamp Status Code.
  *     TAMP_INVALID_SYMBOL if no valid symbol decoded. Buffer is NOT restored.
  */
-static int8_t huffman_decode(TampDecompressor *decompressor){
+static int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos){
     uint8_t code = 0;
 
     while(true){
-        if(decompressor->bit_buffer_pos == 0)
+        if(*bit_buffer_pos == 0)
             return -1;
-        code = (code << 1) | (decompressor->bit_buffer >> 31);
-        decompressor->bit_buffer <<= 1;
-        decompressor->bit_buffer_pos -= 1;
+        code = (code << 1) | (*bit_buffer >> 31);
+        *bit_buffer <<= 1;
+        *bit_buffer_pos -= 1;
         switch(code){
             case 0:   return 0;
             case 3:   return 1;
@@ -152,53 +152,49 @@ tamp_res tamp_decompressor_decompress(
         }
         else{
             // is token; attempt a decode
-            uint32_t bit_buffer_backup = decompressor->bit_buffer;
+            uint32_t bit_buffer = decompressor->bit_buffer;
             uint16_t window_offset;
             uint16_t window_offset_skip;
-            uint8_t bit_buffer_pos_backup = decompressor->bit_buffer_pos;
+            uint8_t bit_buffer_pos = decompressor->bit_buffer_pos;
             int8_t match_size;
             int8_t match_size_skip;
 
-            decompressor->bit_buffer <<= 1;  // shift out the is_literal flag
-            decompressor->bit_buffer_pos--;
+            // shift out the is_literal flag
+            bit_buffer <<= 1;
+            bit_buffer_pos--;
 
-            if((match_size = huffman_decode(decompressor)) < 0){
+            if((match_size = huffman_decode(&bit_buffer, &bit_buffer_pos)) < 0){
                 // Insufficient input
-                decompressor->bit_buffer = bit_buffer_backup;
-                decompressor->bit_buffer_pos = bit_buffer_pos_backup;
                 return TAMP_INPUT_EXHAUSTED;
             }
             if(match_size == FLUSH){
                 // flush bit_buffer to the nearest byte and skip the remainder of decoding
-                decompressor->bit_buffer <<= decompressor->bit_buffer_pos & 7;
-                decompressor->bit_buffer_pos &= ~7;  // Round bit_buffer_pos down to nearest multiple of 8.
+                decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);
+                decompressor->bit_buffer_pos = bit_buffer_pos & ~7;  // Round bit_buffer_pos down to nearest multiple of 8.
                 continue;
             }
-            if(decompressor->bit_buffer_pos < decompressor->conf.window){
+            if(bit_buffer_pos < decompressor->conf.window){
                 // There are not enough bits to decode window offset
-                decompressor->bit_buffer = bit_buffer_backup;
-                decompressor->bit_buffer_pos = bit_buffer_pos_backup;
                 return TAMP_INPUT_EXHAUSTED;
             }
             match_size += decompressor->min_pattern_size;
-            window_offset = decompressor->bit_buffer >> (32 - decompressor->conf.window);
-            decompressor->bit_buffer <<= decompressor->conf.window;
-            decompressor->bit_buffer_pos -= decompressor->conf.window;
+            window_offset = bit_buffer >> (32 - decompressor->conf.window);
 
             // Apply skip_bytes
             match_size_skip = match_size - decompressor->skip_bytes;
             window_offset_skip = window_offset + decompressor->skip_bytes;
 
-            // Check if we are output-buffer-limited, and if so to set skip_bytes and restore the bit_buffer
+            // Check if we are output-buffer-limited, and if so to set skip_bytes
+            // Otherwise, update the decompressor buffers
             size_t remaining = output_end - output;
             if((uint8_t)match_size_skip > remaining){
                 decompressor->skip_bytes += remaining;
                 match_size_skip = remaining;
-                decompressor->bit_buffer = bit_buffer_backup;
-                decompressor->bit_buffer_pos = bit_buffer_pos_backup;
             }
             else {
                 decompressor->skip_bytes = 0;
+                decompressor->bit_buffer = bit_buffer << decompressor->conf.window;
+                decompressor->bit_buffer_pos = bit_buffer_pos - decompressor->conf.window;
             }
 
             // Copy pattern to output
