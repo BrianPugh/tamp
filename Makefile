@@ -47,7 +47,7 @@ build/enwik8-100kb.tamp: build/enwik8-100kb
 
 test: venv
 	@poetry run python build.py build_ext --inplace && python -m pytest
-	@belay run micropython -m unittest tests/*.py
+	@poetry run belay run micropython -m unittest tests/*.py
 	@echo "All Tests Passed!"
 
 collect-data: venv download-enwik8

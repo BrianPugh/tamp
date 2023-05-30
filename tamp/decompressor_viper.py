@@ -49,17 +49,18 @@ class Decompressor:
     @micropython.viper
     def _decompress_into(self, out) -> int:
         """Attempt to fill out, will place into overflow."""
-        out_pos = 0
         out_capacity = int(len(out))  # const
         out_buf = ptr8(out)
 
         literal_bits = int(self.literal_bits)
 
-        overflow_buf = ptr8(self.overflow_buf)
+        overflow_buf = self.overflow_buf
+        overflow_buf_ptr = ptr8(overflow_buf)
         overflow_pos = int(self.overflow_pos)
         overflow_size = int(self.overflow_size)
 
-        w_buf = ptr8(self.w_buf)
+        w_buf = self.w_buf
+        w_buf_ptr = ptr8(w_buf)
         w_pos = int(self.w_pos)
         w_bits = int(self.w_bits)
         w_mask = (1 << w_bits) - 1
@@ -69,20 +70,23 @@ class Decompressor:
         f = self.f
 
         min_pattern_size = int(self.min_pattern_size)
-        max_pattern_size = int(len(self.overflow_buf))
+        int(len(overflow_buf))
 
-        # Copy overflow into out
-        while overflow_size and out_pos < out_capacity:
-            out_buf[out_pos] = overflow_buf[overflow_pos]
-            out_pos += 1
-            overflow_pos = (overflow_pos + 1) % max_pattern_size
-            overflow_size -= 1
+        # Copy overflow into out if available
+        overflow_copy = int(min(overflow_size, out_capacity))
+        for i in range(overflow_copy):
+            out[i] = overflow_buf_ptr[overflow_pos + i]
+        out_pos = overflow_copy
+        overflow_pos += overflow_copy
+        overflow_size -= overflow_copy
 
         full_mask = int(0x3FFFFFFF)
 
         # Decompress more
         try:
             while out_pos < out_capacity:
+                overflow_pos = 0  # overflow_size is also always zero here
+
                 if f_pos == 0:
                     f_buf = int(f.read(1)[0]) << 22  # Will raise IndexError if out of data.
                     f_pos = 8
@@ -105,7 +109,8 @@ class Decompressor:
                     f_pos -= literal_bits
 
                     out_buf[out_pos] = c
-                    w_buf[w_pos] = c
+                    w_buf_ptr[w_pos] = c
+                    out_pos += 1
                 else:
                     # Read and decode Huffman
                     # always read; we'll need the bits regardless
@@ -175,28 +180,24 @@ class Decompressor:
                     f_buf = (f_buf << token_bits) & full_mask
                     f_pos -= token_bits
 
-                    # Copy bytes from window to output or overflow buffer.
-                    is_overlap = (w_pos - index) & w_mask < match_size
-                    copy_right_to_left = is_overlap and w_pos > index
+                    # Copy entire match to overflow
                     for i in range(match_size):
-                        j = match_size - i - 1 if copy_right_to_left else i
-                        out_index = out_pos + j
-                        if out_index < out_capacity:
-                            out_buf[out_index] = w_buf[index + j]
-                        else:
-                            overflow_index = (overflow_pos + overflow_size) % max_pattern_size
-                            overflow_buf[overflow_index] = w_buf[index + j]
-                            overflow_size += 1
+                        overflow_buf_ptr[i] = w_buf_ptr[index + i]
+                    overflow_pos = 0
+                    overflow_size = match_size
 
-                        w_buf[(w_pos + j) & w_mask] = w_buf[index + j]
-
-                out_pos += match_size
+                    # Copy available amount to out_buf
+                    for i in range(match_size):
+                        if out_pos < out_capacity:
+                            out_buf[out_pos] = overflow_buf_ptr[overflow_pos]
+                            out_pos += 1
+                            overflow_pos += 1
+                            overflow_size -= 1
+                        # Copy overflow to window
+                        w_buf_ptr[(w_pos + i) & w_mask] = overflow_buf_ptr[i]
                 w_pos = (w_pos + match_size) & w_mask
         except IndexError:
             pass
-
-        if out_pos > out_capacity:
-            out_pos = out_capacity
 
         self.w_pos = w_pos
         self.overflow_pos = overflow_pos

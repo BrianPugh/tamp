@@ -286,7 +286,7 @@ Tamp could use a similar indexing to increase compression speed, but has chosen 
 
 When to use Tamp
 ================
-On a Pi Pico (rp2040), the viper implementation of Tamp can compress data at around 4,300 bytes/s when using a 10-bit window. The data can then be decompressed at around 42,700 bytes/s.
+On a Pi Pico (rp2040), the viper implementation of Tamp can compress data at around 4,300 bytes/s when using a 10-bit window. The data can then be decompressed at around 44,100 bytes/s.
 Tamp is good for compressing data on-device. If purely decompressing data on-device, it will nearly always be better to use the micropython-builtin ``zlib.decompress``, when available.
 
 .. |GHA tests| image:: https://github.com/BrianPugh/tamp/workflows/tests/badge.svg
