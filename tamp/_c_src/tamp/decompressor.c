@@ -98,6 +98,7 @@ tamp_res tamp_decompressor_decompress(
     const uint16_t window_mask = (1 << decompressor->conf.window) - 1;
     tamp_res res;
     const unsigned char *input_end = input + input_size;
+    const unsigned char *output_end = output + output_size;
 
     if(!output_written_size)
         output_written_size = &output_written_size_proxy;
@@ -128,7 +129,7 @@ tamp_res tamp_decompressor_decompress(
         if(decompressor->bit_buffer_pos == 0)
             return TAMP_INPUT_EXHAUSTED;
 
-        if(output_size == 0)
+        if(output == output_end)
             return TAMP_OUTPUT_FULL;
 
         if(decompressor->bit_buffer >> 31){
@@ -147,7 +148,6 @@ tamp_res tamp_decompressor_decompress(
             decompressor->window_pos = (decompressor->window_pos + 1) & window_mask;
 
             output++;
-            output_size--;
             (*output_written_size)++;
         }
         else{
@@ -190,9 +190,10 @@ tamp_res tamp_decompressor_decompress(
             window_offset_skip = window_offset + decompressor->skip_bytes;
 
             // Check if we are output-buffer-limited, and if so to set skip_bytes and restore the bit_buffer
-            if((uint8_t)match_size_skip > output_size){
-                decompressor->skip_bytes += output_size;
-                match_size_skip = output_size;
+            size_t remaining = output_end - output;
+            if((uint8_t)match_size_skip > remaining){
+                decompressor->skip_bytes += remaining;
+                match_size_skip = remaining;
                 decompressor->bit_buffer = bit_buffer_backup;
                 decompressor->bit_buffer_pos = bit_buffer_pos_backup;
             }
@@ -205,7 +206,6 @@ tamp_res tamp_decompressor_decompress(
                 output[i] = decompressor->window[window_offset_skip + i];
             }
             output += match_size_skip;
-            output_size -= match_size_skip;
             (*output_written_size) += match_size_skip;
 
             if(decompressor->skip_bytes == 0){
