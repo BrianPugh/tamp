@@ -45,7 +45,7 @@ pytest = ">=7.1.2"
 pytest-cov = ">=3.0.0"
 pytest-mock = ">=3.7.0"
 black = ">=23.1.0"
-belay = ">=0.20.1"
+belay = ">=0.21.0"
 tqdm = ">=4.65.0"
 matplotlib = ">=3.7.1"
 ipdb = ">=0.13.13"
@@ -61,6 +61,17 @@ line-profiler = "<4.0.0"
 
 [tool.belay]
 name = "tamp"
+ignore = [
+    "__pycache__",
+    "*.pyi",
+    "*.pyx",
+    "*.pxd",
+    "*.pyc",
+    "_c_src/",
+    "cli/",
+    "*.c",
+    "*.h",
+]
 
 [tool.belay.group.dev]
 optional = true
