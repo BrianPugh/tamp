@@ -78,7 +78,7 @@ static inline void find_best_match(
     const unsigned char second = read_input(1);
     const uint16_t window_size = WINDOW_SIZE - 1;
 
-    if(compressor->input_size < 2)
+    if(compressor->input_size < compressor->min_pattern_size)
         return;
 
     for(uint16_t window_index=0; window_index < window_size; window_index++){
