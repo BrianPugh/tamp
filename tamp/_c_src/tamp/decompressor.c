@@ -199,9 +199,8 @@ tamp_res tamp_decompressor_decompress(
 
             // Copy pattern to output
             for(uint8_t i=0; i < match_size_skip; i++){
-                output[i] = decompressor->window[window_offset_skip + i];
+                *output++ = decompressor->window[window_offset_skip + i];
             }
-            output += match_size_skip;
             (*output_written_size) += match_size_skip;
 
             if(decompressor->skip_bytes == 0){
