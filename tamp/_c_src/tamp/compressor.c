@@ -169,15 +169,12 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     if( conf->literal < 5 || conf->literal > 8)
         return TAMP_INVALID_CONF;
 
-    compressor->conf = *conf;
+    for(uint8_t i=0; i < sizeof(TampCompressor); i++)  // Zero-out the struct
+        ((unsigned char *)compressor)[i] = 0;
 
+    compressor->conf = *conf;
     compressor->window = window;
-    compressor->bit_buffer = 0;
-    compressor->bit_buffer_pos = 0;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
-    compressor->input_size = 0;
-    compressor->input_pos = 0;
-    compressor->window_pos = 0;
 
     if(!compressor->conf.use_custom_dictionary)
         tamp_initialize_dictionary(window, (1 << conf->window));
