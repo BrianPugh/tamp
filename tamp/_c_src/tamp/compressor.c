@@ -88,11 +88,6 @@ static inline void find_best_match(
         if(compressor->window[window_index + 1] != second)
             continue;
 
-        if(2 > *match_size){
-            *match_size = 2;
-            *match_index = window_index;
-        }
-
         for(uint8_t input_offset=2; ; input_offset++){
             if(input_offset > *match_size){
                 *match_size = input_offset;
