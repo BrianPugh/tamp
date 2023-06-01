@@ -289,12 +289,20 @@ tamp_res tamp_compressor_flush(
     if(res != TAMP_OK)
         return res;
 
-    // Maybe write the FLUSH token
-    if(compressor->bit_buffer_pos && write_token)
-        write_to_bit_buffer(compressor, FLUSH_CODE, 9);
+    // Check if there's enough output buffer space
+    if (compressor->bit_buffer_pos){
+        if (output_size == 0){
+            return TAMP_OUTPUT_FULL;
+        }
+        if(write_token){
+            if(output_size < 2)
+                return TAMP_OUTPUT_FULL;
+            write_to_bit_buffer(compressor, FLUSH_CODE, 9);
+        }
+    }
 
     // Flush the remainder of the output bit-buffer
-    while(compressor->bit_buffer_pos && output_size){
+    while(compressor->bit_buffer_pos){
         *output = compressor->bit_buffer >> 24;
         output++;
         compressor->bit_buffer <<= 8;
@@ -302,9 +310,6 @@ tamp_res tamp_compressor_flush(
         output_size--;
         (*output_written_size)++;
     }
-
-    if(compressor->bit_buffer_pos)  // There was not enough room in the output buffer to fully flush.
-        return TAMP_OUTPUT_FULL;
 
     return TAMP_OK;
 }
