@@ -79,12 +79,12 @@ static inline void find_best_match(
         return;
 
     const uint16_t first_second = (read_input(0) << 8) | read_input(1);
+    const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
-    const uint16_t window_size = WINDOW_SIZE;
     uint16_t meow = compressor->window[0];
     unsigned char c;
 
-    for(uint16_t window_index=0; window_index < window_size; window_index++){
+    for(uint16_t window_index=0; window_index < window_size_minus_1; window_index++){
         meow <<= 8;
         meow |= compressor->window[window_index + 1];
         if(meow != first_second)
@@ -98,8 +98,8 @@ static inline void find_best_match(
                     return;
             }
 
-            if(window_index + input_offset >= window_size)
-                break;  // A return would be more proper; but results in larger code. Negligible performance impact.
+            if(window_index + input_offset > window_size_minus_1)
+                return;
 
             c = read_input(input_offset);
             if(compressor->window[window_index + input_offset] != c)
