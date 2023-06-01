@@ -42,7 +42,7 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
 tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window);
 
 /**
- * @brief
+ * @brief Decompress an input stream of data.
  *
  * @param[in,out] TampDecompressor object to perform decompression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output decompressed data.
@@ -53,7 +53,6 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
  * @param[out] input_consumed_size Number of bytes of input data consumed. May be NULL.
  *
  * @return Tamp Status Code. In cases of success, will return TAMP_INPUT_EXHAUSTED or TAMP_OUTPUT_FULL, in lieu of TAMP_OK.
-
  */
 tamp_res tamp_decompressor_decompress(
         TampDecompressor *decompressor,

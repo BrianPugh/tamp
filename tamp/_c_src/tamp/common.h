@@ -32,18 +32,17 @@ typedef struct TampConf {
  * @brief Pre-populate a window buffer with common characters.
  *
  * @param[out] buffer Populated output buffer.
- * @param[in] size Size of output buffer.
- * @param[in] seed Pseudorandom generator initial seed.
+ * @param[in] size Size of output buffer in bytes.
  */
 void tamp_initialize_dictionary(unsigned char *buffer, size_t size);
 
 /**
  * @brief Compute the minimum viable pattern size given window and literal config parameters.
  *
- * @param[in] window Number of window bits.
- * @param[in] literal Number of literal bits.
+ * @param[in] window Number of window bits. Valid values are [8, 15].
+ * @param[in] literal Number of literal bits. Valid values are [5, 8].
  *
- * @return The minimum pattern size in bytes.
+ * @return The minimum pattern size in bytes. Either 2 or 3.
  */
 int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal);
 

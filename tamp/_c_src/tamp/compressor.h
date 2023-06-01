@@ -24,12 +24,12 @@ typedef struct TampCompressor{
  * @brief Initialize Tamp Compressor object.
  *
  * @param[out] compressor Object to initialize.
- * @param[in] conf Compressor configuration. Set to NULL for default.
+ * @param[in] conf Compressor configuration. Set to NULL for default (window=10, literal=8).
  * @param[in] window Pre-allocated window buffer. Size must agree with conf->window.
  *                   If conf.use_custom_dictionary is true, then the window must be
  *                   externally initialized.
  *
- * @return Tamp Status Code.
+ * @return Tamp Status Code. Returns TAMP_INVALID_CONF if an invalid conf state is provided.
  */
 tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window);
 
@@ -40,8 +40,6 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  * @param[in] input Pointer to the input data to be sinked into compressor.
  * @param[in] input_size Size of input.
  * @param[out] consumed_size Number of bytes of input consumed. May be NULL.
- *
- * @return Tamp Status Code.
  */
 void tamp_compressor_sink(
         TampCompressor *compressor,
@@ -58,7 +56,7 @@ void tamp_compressor_sink(
  * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  *
- * @return Tamp Status Code.
+ * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
 tamp_res tamp_compressor_compress_poll(
         TampCompressor *compressor,
@@ -76,7 +74,7 @@ tamp_res tamp_compressor_compress_poll(
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  * @param[in] write_token Write the FLUSH token, if appropriate. Set to true if you want to continue using the compressor. Set to false if you are done with the compressor, usually at the end of a stream.
  *
- * @return Tamp Status Code.
+ * @return Tamp Status Code. Can return TAMP_OK, or TAMP_OUTPUT_FULL.
  */
 tamp_res tamp_compressor_flush(
                 TampCompressor *compressor,
@@ -97,7 +95,7 @@ tamp_res tamp_compressor_flush(
  * @param[in] input_size Number of bytes in input data.
  * @param[out] input_consumed_size Number of bytes of input data consumed. May be NULL.
  *
- * @return Tamp Status Code.
+ * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
 tamp_res tamp_compressor_compress(
         TampCompressor *compressor,
@@ -112,9 +110,9 @@ tamp_res tamp_compressor_compress(
 /**
  * @brief Compress a chunk of data until input or output buffer is exhausted.
  *
- * While all buffers are flushed, no flush token is will be written to the output stream.
- * If the output buffer is full, flushing will not be performed and TAMP_OUTPUT_FULL will be returned.
- * May be called again with an appropriately updated input-pointer and input_size.
+ * While all buffers are flushed, **no** FLUSH token will be written to the output stream.
+ * If the output buffer is full, buffer flushing will not be performed and TAMP_OUTPUT_FULL will be returned.
+ * May be called again with an appropriately updated pointers and sizes.
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
@@ -124,7 +122,7 @@ tamp_res tamp_compressor_compress(
  * @param[in] input_size Number of bytes in input data.
  * @param[out] input_consumed_size Number of bytes of input data consumed. May be NULL.
  *
- * @return Tamp Status Code.
+ * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
 tamp_res tamp_compressor_compress_and_flush(
         TampCompressor *compressor,
