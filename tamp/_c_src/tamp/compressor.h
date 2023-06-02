@@ -110,7 +110,6 @@ tamp_res tamp_compressor_compress(
 /**
  * @brief Compress a chunk of data until input or output buffer is exhausted.
  *
- * While all buffers are flushed, **no** FLUSH token will be written to the output stream.
  * If the output buffer is full, buffer flushing will not be performed and TAMP_OUTPUT_FULL will be returned.
  * May be called again with an appropriately updated pointers and sizes.
  *
@@ -131,7 +130,8 @@ tamp_res tamp_compressor_compress_and_flush(
         size_t *output_written_size,
         const unsigned char *input,
         size_t input_size,
-        size_t *input_consumed_size
+        size_t *input_consumed_size,
+        bool write_token
         );
 
 

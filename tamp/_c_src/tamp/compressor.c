@@ -318,7 +318,8 @@ tamp_res tamp_compressor_compress_and_flush(
         size_t *output_written_size,
         const unsigned char *input,
         size_t input_size,
-        size_t *input_consumed_size
+        size_t *input_consumed_size,
+        bool write_token
         ){
     tamp_res res;
     size_t flush_size;
@@ -344,7 +345,7 @@ tamp_res tamp_compressor_compress_and_flush(
             output + *output_written_size,
             output_size - *output_written_size,
             &flush_size,
-            false
+            write_token
             );
 
     (*output_written_size) += flush_size;
