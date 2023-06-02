@@ -25,37 +25,42 @@ import io
 import unittest
 
 from tamp import ExcessBitsError
-from tamp.compressor import Compressor as PyCompressor
-from tamp.compressor import compress as py_compress
 
 try:
     import micropython
 except ImportError:
     micropython = None
 
-if micropython is None:
-    ViperCompressor = None
-    viper_compress = None
-else:
+
+Compressors = []
+compresses = []
+
+if micropython:
     from tamp.compressor_viper import Compressor as ViperCompressor
     from tamp.compressor_viper import compress as viper_compress
 
-try:
-    from tamp._c_compressor import Compressor as CCompressor
-    from tamp._c_compressor import compress as c_compress
-except ImportError:
-    CCompressor = None
-    c_compress = None
+    Compressors.append(ViperCompressor)
+    compresses.append(viper_compress)
+else:
+    from tamp.compressor import Compressor as PyCompressor
+    from tamp.compressor import compress as py_compress
 
-Compressors = (PyCompressor, CCompressor, ViperCompressor)
-compresses = (py_compress, c_compress, viper_compress)
+    Compressors.append(PyCompressor)
+    compresses.append(py_compress)
+
+    try:
+        from tamp._c_compressor import Compressor as CCompressor
+        from tamp._c_compressor import compress as c_compress
+
+        Compressors.append(CCompressor)
+        compresses.append(c_compress)
+    except ImportError:
+        pass
 
 
 class TestCompressor(unittest.TestCase):
     def test_compressor_default(self):
         for Compressor in Compressors:
-            if Compressor is None:
-                continue
             with self.subTest(Compressor=Compressor):
                 test_string = b"foo foo foo"
 
@@ -90,9 +95,6 @@ class TestCompressor(unittest.TestCase):
 
     def test_compressor_input_buffer(self):
         for Compressor in Compressors:
-            if Compressor is None:
-                continue
-
             with self.subTest(Compressor=Compressor):
                 expected = bytes(
                     # fmt: off
@@ -126,9 +128,6 @@ class TestCompressor(unittest.TestCase):
 
     def test_compressor_7bit(self):
         for Compressor in Compressors:
-            if Compressor is None:
-                continue
-
             with self.subTest(Compressor=Compressor):
                 test_string = b"foo foo foo"
 
@@ -160,9 +159,6 @@ class TestCompressor(unittest.TestCase):
 
     def test_compressor_predefined_dictionary(self):
         for Compressor in Compressors:
-            if Compressor is None:
-                continue
-
             with self.subTest(Compressor=Compressor):
                 test_string = b"foo foo foo"
 
@@ -192,9 +188,6 @@ class TestCompressor(unittest.TestCase):
 
     def test_compressor_predefined_dictionary_incorrect_size(self):
         for Compressor in Compressors:
-            if Compressor is None:
-                continue
-
             with self.subTest(Compressor=Compressor):
                 dictionary = bytearray(1 << 8)
                 with io.BytesIO() as f, self.assertRaises(ValueError):
@@ -203,9 +196,6 @@ class TestCompressor(unittest.TestCase):
     def test_oob_2_byte_pattern(self):
         """Viper implementation had a bug where a pattern of length 2 could be detected at the end of a string (going out of bounds by 1 byte)."""
         for Compressor in Compressors:
-            if Compressor is None:
-                continue
-
             with self.subTest(Compressor=Compressor):
                 test_string_extended = bytearray(b"Q\x00Q\x00")
                 test_string = memoryview(test_string_extended)[:3]  # b"Q\x00Q"
@@ -232,9 +222,6 @@ class TestCompressor(unittest.TestCase):
 
     def test_excess_bits(self):
         for Compressor in Compressors:
-            if Compressor is None:
-                continue
-
             with self.subTest(Compressor=Compressor), io.BytesIO() as f:
                 compressor = Compressor(f, literal=7)
 
@@ -244,9 +231,6 @@ class TestCompressor(unittest.TestCase):
 
     def test_single_shot_compress_text(self):
         for compress in compresses:
-            if compress is None:
-                continue
-
             with self.subTest(compress=compress):
                 expected = bytes(
                     # fmt: off
@@ -267,11 +251,30 @@ class TestCompressor(unittest.TestCase):
                 )
                 self.assertEqual(compress("foo foo foo"), expected)
 
+    def test_single_shot_compress_binary(self):
+        for compress in compresses:
+            with self.subTest(compress=compress):
+                expected = bytes(
+                    # fmt: off
+                    [
+                        0b010_11_0_0_0,  # header (window_bits=10, literal_bits=8)
+                        0b1_0110011,    # literal "f"
+                        0b0_0_0_00100,  # the pre-init buffer contains "oo" at index 131
+                                        # size=2 -> 0b0
+                                        # 131 -> 0b0010000011
+                        0b00011_1_00,   # literal " "
+                        0b100000_0_1,   # There is now "foo " at index 0
+                        0b000_00000,    # size=4 -> 0b1000
+                        0b00000_0_11,   # Just "foo" at index 0; size=3 -> 0b11
+                        0b00000000,     # index 0 -> 0b0000000000
+                        0b00_000000,    # 6 bits of zero-padding
+                    ]
+                    # fmt: on
+                )
+                self.assertEqual(compress(b"foo foo foo"), expected)
+
     def test_invalid_conf(self):
         for Compressor in Compressors:
-            if Compressor is None:
-                continue
-
             with self.subTest(Compressor=Compressor), io.BytesIO() as f:
                 with self.assertRaises(ValueError):
                     Compressor(f, literal=4)
