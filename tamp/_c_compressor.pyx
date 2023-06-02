@@ -115,7 +115,6 @@ cdef class Compressor:
 
     def close(self) -> int:
         bytes_written = self.flush(write_token=False)
-        self.f.close()
         return bytes_written
 
     def __enter__(self):

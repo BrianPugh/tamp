@@ -90,6 +90,18 @@ class TestCompressor(unittest.TestCase):
 
                     f.seek(0)
                     actual = f.read()
+                    compressor.close()
+                self.assertEqual(actual, expected)
+                self.assertEqual(bytes_written, len(expected))
+
+                # Test Context Manager
+                bytes_written = 0
+                with io.BytesIO() as f, Compressor(f) as compressor:
+                    bytes_written += compressor.write(test_string)
+                    bytes_written += compressor.flush(write_token=False)
+
+                    f.seek(0)
+                    actual = f.read()
                 self.assertEqual(actual, expected)
                 self.assertEqual(bytes_written, len(expected))
 

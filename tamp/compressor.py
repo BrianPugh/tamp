@@ -67,7 +67,6 @@ class BitWriter:
 
     def close(self):
         self.flush(write_token=False)
-        self.f.close()
 
 
 class RingBuffer:
