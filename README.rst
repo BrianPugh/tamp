@@ -12,7 +12,7 @@
 Tamp
 ====
 
-Tamp is a low-memory, micropython-optimized, DEFLATE-inspired lossless compression library.
+Tamp is a low-memory, DEFLATE-inspired lossless compression library.
 
 Features
 ========
@@ -45,7 +45,13 @@ Features
 
 Installation
 ============
-Tamp contains 2 implementations: a desktop cpython implementation that is optimized for readability, and a micropython implementation that is optimized for runtime performance.
+Tamp contains 3 implementationss:
+
+1. A desktop Cpython implementation that is optimized for readability
+
+2. A micropython viper implementation that is optimized for runtime performance.
+
+3. A C implementation (with python bindings) for accelerated desktop use and to be used in C projects.
 
 Desktop Python
 ^^^^^^^^^^^^^^
@@ -86,6 +92,12 @@ If using `Belay`_, tamp can be installed by adding the following to ``pyproject.
       "https://github.com/BrianPugh/tamp/blob/main/tamp/compressor_viper.py",
       "https://github.com/BrianPugh/tamp/blob/main/tamp/decompressor_viper.py",
    ]
+
+C
+^
+
+Copy the ``tamp/_c_src/tamp`` folder into your project.
+For more information, see `the documentation`_.
 
 Usage
 =====
@@ -301,6 +313,7 @@ Numbers reported in bytes.
 | uzlib              | 2355       | 3963         | 6318                      |
 +--------------------+------------+--------------+---------------------------+
 
+Heatshrink doesn't include a high level API; in an apples-to-apples comparison the Tamp library would be even smaller.
 
 When to use Tamp
 ================
@@ -325,3 +338,4 @@ Tamp is good for compressing data on-device. If purely decompressing data on-dev
 .. _Silesia Corpus: https://sun.aei.polsl.pl//~sdeor/index.php?page=silesia
 .. _Enwik8: https://mattmahoney.net/dc/textdata.html
 .. _mip: https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip
+.. _the documentation: https://tamp.readthedocs.io/en/latest/c_library.html
