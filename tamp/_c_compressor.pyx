@@ -15,6 +15,7 @@ cdef class Compressor:
     cdef bytearray _window_buffer
     cdef unsigned char *_window_buffer_ptr
     cdef object f
+    cdef bint _close_f_on_close
 
     def __cinit__(self):
         self._c_compressor = <ctamp.TampCompressor*>PyMem_Malloc(sizeof(ctamp.TampCompressor))
@@ -39,6 +40,9 @@ cdef class Compressor:
 
         if not hasattr(f, "write"):  # It's probably a path-like object.
             f = open(str(f), "wb")
+            self._close_f_on_close = True
+        else:
+            self._close_f_on_close = False
 
         self.f = f
 
@@ -115,6 +119,8 @@ cdef class Compressor:
 
     def close(self) -> int:
         bytes_written = self.flush(write_token=False)
+        if self._close_f_on_close:
+            self.f.close()
         return bytes_written
 
     def __enter__(self):

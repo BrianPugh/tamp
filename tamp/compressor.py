@@ -26,7 +26,8 @@ FLUSH_CODE = const(0xAB)  # 8 bits
 class BitWriter:
     """Writes bits to a stream."""
 
-    def __init__(self, f):
+    def __init__(self, f, close_f_on_close=False):
+        self.close_f_on_close = close_f_on_close
         self.f = f
         self.buffer = 0  # Basically a uint24
         self.bit_pos = 0
@@ -67,6 +68,8 @@ class BitWriter:
 
     def close(self):
         self.flush(write_token=False)
+        if self.close_f_on_close:
+            self.f.close()
 
 
 class RingBuffer:
@@ -113,9 +116,13 @@ class Compressor:
             ``window`` must agree with the dictionary size.
         """
         if not hasattr(f, "write"):  # It's probably a path-like object.
+            # TODO: then close it on close
             f = open(str(f), "wb")
+            close_f_on_close = True
+        else:
+            close_f_on_close = False
 
-        self._bit_writer = BitWriter(f)
+        self._bit_writer = BitWriter(f, close_f_on_close=close_f_on_close)
         if dictionary and bit_size(len(dictionary) - 1) != window:
             raise ValueError("Dictionary-window size mismatch.")
 
