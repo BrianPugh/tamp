@@ -28,7 +28,8 @@ huffman_lookup = {
 class BitReader:
     """Reads bits from a stream."""
 
-    def __init__(self, f):
+    def __init__(self, f, close_f_on_close=False):
+        self.close_f_on_close = close_f_on_close
         self.f = f
         self.clear()
 
@@ -73,6 +74,8 @@ class BitReader:
 
     def close(self):
         self.f.close()
+        if self.close_f_on_close:
+            self.f.close()
 
     def __len__(self):
         return self.bit_pos
@@ -134,8 +137,11 @@ class Decompressor:
         """
         if not hasattr(f, "read"):  # It's probably a path-like object.
             f = open(str(f), "rb")
+            close_f_on_close = True
+        else:
+            close_f_on_close = False
 
-        self._bit_reader = BitReader(f)
+        self._bit_reader = BitReader(f, close_f_on_close=close_f_on_close)
 
         # Read Header
         self.window_bits = self._bit_reader.read(3) + 8
