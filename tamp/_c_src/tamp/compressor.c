@@ -72,7 +72,7 @@ static inline void find_best_match(
         ){
     *match_size = 0;
 
-    if(compressor->input_size < compressor->min_pattern_size)
+    if(TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size))
         return;
 
     const uint16_t first_second = (read_input(0) << 8) | read_input(1);
@@ -84,22 +84,22 @@ static inline void find_best_match(
     for(uint16_t window_index=0; window_index < window_size_minus_1; window_index++){
         meow <<= 8;
         meow |= compressor->window[window_index + 1];
-        if(meow != first_second)
+        if(TAMP_LIKELY(meow != first_second))
             continue;
 
         for(uint8_t input_offset=2; ; input_offset++){
-            if(input_offset > *match_size){
+            if(TAMP_UNLIKELY(input_offset > *match_size)){
                 *match_size = input_offset;
                 *match_index = window_index;
-                if(*match_size == max_pattern_size)
+                if(TAMP_UNLIKELY(*match_size == max_pattern_size))
                     return;
             }
 
-            if(window_index + input_offset > window_size_minus_1)
+            if(TAMP_UNLIKELY(window_index + input_offset > window_size_minus_1))
                 return;
 
             c = read_input(input_offset);
-            if(compressor->window[window_index + input_offset] != c)
+            if(TAMP_LIKELY(compressor->window[window_index + input_offset] != c))
                 break;
         }
     }
@@ -202,7 +202,7 @@ void tamp_compressor_sink(
         *consumed_size = 0;
 
     for(size_t i=0; i < input_size; i++){
-        if(compressor->input_size == sizeof(compressor->input))
+        if(TAMP_UNLIKELY(compressor->input_size == sizeof(compressor->input)))
             break;
         compressor->input[input_add(compressor->input_size)] = input[i];
         compressor->input_size += 1;

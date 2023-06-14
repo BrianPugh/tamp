@@ -9,6 +9,15 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Compiler branch optimizations */
+#if defined(__clang__) || (defined(__GNUC__) && (__GNUC__ > 2))
+#define TAMP_LIKELY(c) (__builtin_expect(!!(c), 1))
+#define TAMP_UNLIKELY(c) (__builtin_expect(!!(c), 0))
+#else
+#define TAMP_LIKELY(c) (c)
+#define TAMP_UNLIKELY(c) (c)
+#endif
+
 enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,
