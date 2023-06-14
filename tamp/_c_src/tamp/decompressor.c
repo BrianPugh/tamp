@@ -19,9 +19,7 @@
 static int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos){
     uint8_t code = 0;
 
-    while(true){
-        if(*bit_buffer_pos == 0)
-            return -1;
+    while(TAMP_LIKELY(*bit_buffer_pos != 0)){
         code = (code << 1) | (*bit_buffer >> 31);
         *bit_buffer <<= 1;
         *bit_buffer_pos -= 1;
@@ -43,6 +41,7 @@ static int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos){
             case 171: return FLUSH;
         }
     }
+    return -1;
 }
 
 tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *input, size_t input_size, size_t *input_consumed_size) {
@@ -126,15 +125,16 @@ tamp_res tamp_decompressor_decompress(
             (*input_consumed_size)++;
         }
 
-        if(decompressor->bit_buffer_pos == 0)
+        if(TAMP_UNLIKELY(decompressor->bit_buffer_pos == 0))
             return TAMP_INPUT_EXHAUSTED;
 
-        if(output == output_end)
+        if(TAMP_UNLIKELY(output == output_end))
             return TAMP_OUTPUT_FULL;
 
-        if(decompressor->bit_buffer >> 31){
+        // Hint that patterns are more likely than literals
+        if(TAMP_UNLIKELY(decompressor->bit_buffer >> 31)){
             // is literal
-            if(decompressor->bit_buffer_pos < (1 + decompressor->conf.literal))
+            if(TAMP_UNLIKELY(decompressor->bit_buffer_pos < (1 + decompressor->conf.literal)))
                 return TAMP_INPUT_EXHAUSTED;
             decompressor->bit_buffer <<= 1;  // shift out the is_literal flag
 
@@ -163,17 +163,17 @@ tamp_res tamp_decompressor_decompress(
             bit_buffer <<= 1;
             bit_buffer_pos--;
 
-            if((match_size = huffman_decode(&bit_buffer, &bit_buffer_pos)) < 0){
+            if((TAMP_UNLIKELY(match_size = huffman_decode(&bit_buffer, &bit_buffer_pos)) < 0)){
                 // Insufficient input
                 return TAMP_INPUT_EXHAUSTED;
             }
-            if(match_size == FLUSH){
+            if(TAMP_UNLIKELY(match_size == FLUSH)){
                 // flush bit_buffer to the nearest byte and skip the remainder of decoding
                 decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);
                 decompressor->bit_buffer_pos = bit_buffer_pos & ~7;  // Round bit_buffer_pos down to nearest multiple of 8.
                 continue;
             }
-            if(bit_buffer_pos < decompressor->conf.window){
+            if(TAMP_UNLIKELY(bit_buffer_pos < decompressor->conf.window)){
                 // There are not enough bits to decode window offset
                 return TAMP_INPUT_EXHAUSTED;
             }
@@ -187,7 +187,7 @@ tamp_res tamp_decompressor_decompress(
             // Check if we are output-buffer-limited, and if so to set skip_bytes
             // Otherwise, update the decompressor buffers
             size_t remaining = output_end - output;
-            if((uint8_t)match_size_skip > remaining){
+            if(TAMP_UNLIKELY((uint8_t)match_size_skip > remaining)){
                 decompressor->skip_bytes += remaining;
                 match_size_skip = remaining;
             }
@@ -203,7 +203,7 @@ tamp_res tamp_decompressor_decompress(
             }
             (*output_written_size) += match_size_skip;
 
-            if(decompressor->skip_bytes == 0){
+            if(TAMP_LIKELY(decompressor->skip_bytes == 0)){
                 // Perform window update;
                 // copy to a temporary buffer in case src precedes dst, and is overlapping.
                 uint8_t tmp_buf[16];
