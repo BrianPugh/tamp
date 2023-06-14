@@ -21,6 +21,7 @@ cdef class Decompressor:
         size_t input_size
         size_t input_consumed
         object f
+        cdef bint _close_f_on_close
 
     def __cinit__(self):
         self._c_decompressor = <ctamp.TampDecompressor*>PyMem_Malloc(sizeof(ctamp.TampDecompressor))
@@ -37,6 +38,9 @@ cdef class Decompressor:
 
         if not hasattr(f, "read"):  # It's probably a path-like object.
             f = open(str(f), "rb")
+            self._close_f_on_close = True
+        else:
+            self._close_f_on_close = False
 
         self.f = f
 
@@ -107,7 +111,8 @@ cdef class Decompressor:
         return bytearray().join(output_list)
 
     def close(self):
-        self.f.close()
+        if self._close_f_on_close:
+            self.f.close()
 
     def __enter__(self):
         return self
