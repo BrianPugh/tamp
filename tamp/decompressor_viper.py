@@ -9,6 +9,9 @@ class Decompressor:
     def __init__(self, f, *, dictionary=None):
         if not hasattr(f, "read"):  # It's probably a path-like object.
             f = open(str(f), "rb")
+            self._close_f_on_close = True
+        else:
+            self._close_f_on_close = False
 
         self.f = f
         self.f_buf = 0
@@ -236,7 +239,8 @@ class Decompressor:
         return out
 
     def close(self):
-        self.f.close()
+        if self._close_f_on_close:
+            self.f.close()
 
     def __enter__(self):
         return self
