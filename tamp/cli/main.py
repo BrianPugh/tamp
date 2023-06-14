@@ -1,3 +1,5 @@
+import concurrent.futures
+import contextlib
 import sys
 from pathlib import Path
 from typing import Callable, Optional
@@ -8,6 +10,7 @@ from typer import Argument, Option
 import tamp
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False, add_completion=False)
+CHUNK_SIZE = 1 << 20
 
 
 def version_callback(value: bool):
@@ -113,9 +116,13 @@ def decompress(
     ),
 ):
     """Decompress an input file or stream."""
-    input_bytes = read(input_path)
-    output_bytes = tamp.decompress(input_bytes)
-    write(output_path, output_bytes)
+    output_cm = output_path.open("wb") if output_path else contextlib.nullcontext(sys.stdout.buffer)
+    input_cm = input_path.open("rb") if input_path else contextlib.nullcontext(sys.stdin.buffer)
+
+    with input_cm as input_f, concurrent.futures.ThreadPoolExecutor() as executor, output_cm as output_f:
+        decompressor = tamp.Decompressor(input_f)
+        decompressed = decompressor.read(CHUNK_SIZE)
+        executor.submit(output_f.write, decompressed)
 
 
 def run_app(*args, **kwargs):
