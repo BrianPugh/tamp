@@ -1,12 +1,15 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
+#include "tamp/decompressor.h"
 #include "tamp/compressor.h"
 
-#define EXIT(x, fmt, ...) { ret_code=x; fprintf(stderr, fmt, ##__VA_ARGS__); goto exit; }
+#define EXIT(x, fmt, ...) { res=x; fprintf(stderr, fmt, ##__VA_ARGS__); goto exit; }
 
-int main(int argc, char *argv[]) {
-    int ret_code = 0;
+int benchmark_compressor(){
+    int res = 0;
     FILE *uncompressed_file = NULL;
     unsigned char *uncompressed_data = NULL;
     FILE *compressed_file = NULL;
@@ -51,7 +54,8 @@ int main(int argc, char *argv[]) {
                 &compressed_len,
                 uncompressed_data,
                 uncompressed_file_len,
-                &consumed
+                &consumed,
+                false
                 ))
         EXIT(1, "Failed to compress data");
 
@@ -72,5 +76,79 @@ exit:
     if(compressed_file)
         fclose(compressed_file);
 
-    return ret_code;
+    return res;
+}
+
+int benchmark_decompressor(){
+    int res = 0;
+
+    unsigned char *input = NULL, *output = NULL, *window_buffer = NULL;
+    size_t input_size = 100 << 20;
+    size_t output_size = 100 << 20;
+    size_t input_consumed_size, output_written_size;
+    FILE *input_file = NULL, *output_file = NULL;
+
+    TampDecompressor decompressor;
+
+    if (!(window_buffer = malloc(32 << 10)))
+        EXIT(1, "OOM");
+
+    if (!(input = malloc(input_size)))
+        EXIT(1, "OOM");
+
+    if (!(output = malloc(output_size)))
+        EXIT(1, "OOM");
+
+    if (!(input_file = fopen("../../build/enwik8.tamp", "rb")))
+        EXIT(1, "Unable to open input file %s", "../../build/enwik8.tamp");
+
+    if (!(output_file = fopen("build/enwik8_reconstructed", "wb")))
+        EXIT(1, "Unable to open output file");
+
+    // Read in data
+    fseek(input_file, 0, SEEK_END);
+    input_size = ftell(input_file);
+    printf("Input file size: %zu\n", input_size);
+    rewind(input_file);
+    assert(input_size == fread(input, 1, input_size, input_file));
+
+    if(TAMP_OK != tamp_decompressor_init(&decompressor, NULL, window_buffer))
+        EXIT(1, "Failed to initialize compressor");
+
+    if(0 > tamp_decompressor_decompress(
+        &decompressor,
+        output,
+        output_size,
+        &output_written_size,
+        input,
+        input_size,
+        &input_consumed_size
+        ))
+        EXIT(res, "Failed to decompress data");
+
+    printf("output_written_size: %zu\n", output_written_size);
+    fwrite(output, 1, output_written_size, output_file);
+
+exit:
+    if(input)
+        free(input);
+    if(output)
+        free(output);
+    if(window_buffer)
+        free(window_buffer);
+    if(input_file)
+        fclose(input_file);
+    if(output_file)
+        fclose(output_file);
+
+    return res;
+}
+
+int main(int argc, char *argv[]) {
+    if(strcmp(argv[1], "compressor") == 0)
+        return benchmark_compressor();
+    else if(strcmp(argv[1], "decompressor") == 0)
+        return benchmark_decompressor();
+    else
+        printf("invalid cli argument\n");
 }

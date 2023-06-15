@@ -42,8 +42,14 @@ directories:
 clean:
 	@rm -rf $(BUILDDIR) $(TARGET)
 
-profile: all
-	xctrace record --template 'Time Profiler' --launch ./build/executable
+profile-compressor: all
+	xctrace record --template 'Time Profiler' --launch ./build/executable compressor
 
-profile-simple: all
-	time ./build/executable
+profile-simple-compressor: all
+	time ./build/executable compressor
+
+profile-decompressor: all
+	xctrace record --template 'Time Profiler' --launch ./build/executable decompressor
+
+profile-simple-decompressor: all
+	time ./build/executable decompressor
