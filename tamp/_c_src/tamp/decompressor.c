@@ -63,24 +63,39 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
     return TAMP_OK;
 }
 
+/**
+ * Populate the rest of the decompressor structure after the following fields have been populated:
+ *   * conf
+ *   * window
+ */
+static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor *decompressor){
+    const TampConf *conf = &(decompressor->conf);
+    if(conf->window < 8 || conf->window > 15)
+        return TAMP_INVALID_CONF;
+    if(conf->literal < 5 || conf->literal > 8)
+        return TAMP_INVALID_CONF;
+    if(!conf->use_custom_dictionary)
+        tamp_initialize_dictionary(decompressor->window, (1 << conf->window));
+
+    decompressor->min_pattern_size = tamp_compute_min_pattern_size(
+            conf->window, conf->literal
+    );
+    decompressor->configured = true;
+
+    return TAMP_OK;
+}
+
 tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window){
+    tamp_res res = TAMP_OK;
     for(uint8_t i=0; i < sizeof(TampDecompressor); i++)  // Zero-out the struct
         ((unsigned char *)decompressor)[i] = 0;
     decompressor->window = window;
     if(conf){
-        if(conf->window < 8 || conf->window > 15)
-            return TAMP_INVALID_CONF;
-        if(conf->literal < 5 || conf->literal > 8)
-            return TAMP_INVALID_CONF;
-        if(!conf->use_custom_dictionary)
-            tamp_initialize_dictionary(window, (1 << conf->window));
-
-        decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
         decompressor->conf = *conf;
-        decompressor->configured = true;
+        res = tamp_decompressor_populate_from_conf(decompressor);
     }
 
-    return TAMP_OK;
+    return res;
 }
 
 tamp_res tamp_decompressor_decompress(
@@ -115,6 +130,10 @@ tamp_res tamp_decompressor_decompress(
             return res;
         input += header_consumed_size;
         (*input_consumed_size) += header_consumed_size;
+
+        res = tamp_decompressor_populate_from_conf(decompressor);
+        if(res != TAMP_OK)
+            return res;
     }
     while(input != input_end || decompressor->bit_buffer_pos){
         // Populate the bit buffer

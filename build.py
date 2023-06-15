@@ -4,14 +4,27 @@ from pathlib import Path
 
 allowed_to_fail = os.environ.get("CIBUILDWHEEL", "0") != "1"
 
+profile = os.environ.get("TAMP_PROFILE", "0") == "1"
+
 
 def build_cython_extensions():
     import Cython.Compiler.Options
     from Cython.Build import build_ext, cythonize
+    from Cython.Compiler.Options import get_directive_defaults
     from setuptools import Extension
     from setuptools.dist import Distribution
 
     Cython.Compiler.Options.annotate = True
+
+    define_macros = []
+
+    if profile:
+        print("Setting profiling configuration.")
+        directive_defaults = get_directive_defaults()
+        directive_defaults["linetrace"] = True
+        directive_defaults["binding"] = True
+
+        define_macros.append(("CYTHON_TRACE", "1"))
 
     if os.name == "nt":  # Windows
         extra_compile_args = [
@@ -37,6 +50,7 @@ def build_cython_extensions():
             include_dirs=include_dirs,
             extra_compile_args=extra_compile_args,
             language="c",
+            define_macros=define_macros,
         ),
         Extension(
             "tamp._c_decompressor",
@@ -48,6 +62,7 @@ def build_cython_extensions():
             include_dirs=include_dirs,
             extra_compile_args=extra_compile_args,
             language="c",
+            define_macros=define_macros,
         ),
         Extension(
             "tamp._c_common",
@@ -57,6 +72,7 @@ def build_cython_extensions():
             include_dirs=include_dirs,
             extra_compile_args=extra_compile_args,
             language="c",
+            define_macros=define_macros,
         ),
     ]
 
