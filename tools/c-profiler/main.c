@@ -148,7 +148,8 @@ int main(int argc, char *argv[]) {
     if(strcmp(argv[1], "compressor") == 0)
         return benchmark_compressor();
     else if(strcmp(argv[1], "decompressor") == 0)
-        return benchmark_decompressor();
+        for(uint8_t i = 0; i < 16; i++)
+            benchmark_decompressor();
     else
         printf("invalid cli argument\n");
 }
