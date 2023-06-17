@@ -33,7 +33,7 @@ Features
 
 * Compact compression and decompression implementations.
 
-  * Compiled C library is <7.5KB (compressor + decompressor).
+  * Compiled C library is <5KB (compressor + decompressor).
 
 * Mid-stream flushing.
 
