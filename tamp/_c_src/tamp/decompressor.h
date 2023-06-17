@@ -11,10 +11,17 @@ extern "C" {
 typedef struct {
     unsigned char *window;
     uint32_t bit_buffer;
+
+    /* Conf attributes */
+    uint32_t conf_window:4;   // number of window bits
+    uint32_t conf_literal:4;  // number of literal bits
+    //uint32_t conf_use_custom_dictionary:1;  // Not used past initialization.
+
     uint32_t bit_buffer_pos:6;
     uint32_t min_pattern_size:2;
     uint32_t window_pos:15;
     uint32_t configured:1;  // Whether or not conf has been properly set
+
     uint32_t skip_bytes:4;  // Skip this many decompressed bytes (from previous output-buffer-limited decompression).
 } TampDecompressor;
 
