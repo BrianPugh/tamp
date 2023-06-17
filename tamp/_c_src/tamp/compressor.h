@@ -7,6 +7,7 @@ extern "C" {
 
 #include "common.h"
 
+/* Externally, do not directly edit ANY of these attributes */
 typedef struct TampCompressor{
     /* nicely aligned attributes */
     unsigned char *window;

@@ -7,9 +7,9 @@ extern "C" {
 
 #include "common.h"
 
+/* Externally, do not directly edit ANY of these attributes */
 typedef struct {
     unsigned char *window;
-    TampConf conf;
     uint32_t bit_buffer;
     uint32_t bit_buffer_pos:6;
     uint32_t min_pattern_size:2;
