@@ -8,7 +8,7 @@
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 
 #define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
-#define WINDOW_SIZE (1 << compressor->conf.window)
+#define WINDOW_SIZE (1 << compressor->conf_window)
 // 0xF because sizeof(TampCompressor.input) == 16;
 #define input_add(offset) (\
             (compressor->input_pos + offset) & 0xF \
@@ -16,7 +16,7 @@
 #define read_input(offset) ( \
         compressor->input[input_add(offset)] \
         )
-#define IS_LITERAL_FLAG (1 << compressor->conf.literal)
+#define IS_LITERAL_FLAG (1 << compressor->conf_literal)
 
 #define FLUSH_CODE (0xAB)
 
@@ -117,11 +117,14 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     for(uint8_t i=0; i < sizeof(TampCompressor); i++)  // Zero-out the struct
         ((unsigned char *)compressor)[i] = 0;
 
-    compressor->conf = *conf;
+    compressor->conf_literal = conf->literal;
+    compressor->conf_window = conf->window;
+    compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
+
     compressor->window = window;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
 
-    if(!compressor->conf.use_custom_dictionary)
+    if(!compressor->conf_use_custom_dictionary)
         tamp_initialize_dictionary(window, (1 << conf->window));
 
     // Write header to bit buffer
@@ -137,7 +140,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 
 tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
-    const uint16_t window_mask = (1 << compressor->conf.window) - 1;
+    const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     size_t output_written_size_proxy;
 
     if(!output_written_size)
@@ -169,16 +172,16 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         // Write LITERAL
         match_size = 1;
         unsigned char c = read_input(0);
-        if(c >> compressor->conf.literal){
+        if(c >> compressor->conf_literal){
             return TAMP_EXCESS_BITS;
         }
-        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf.literal + 1);
+        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
     }
     else{
         // Write TOKEN
         uint8_t huffman_index = match_size - compressor->min_pattern_size;
         write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-        write_to_bit_buffer(compressor, match_index, compressor->conf.window);
+        write_to_bit_buffer(compressor, match_index, compressor->conf_window);
     }
     // Populate Window
     for(uint8_t i=0; i < match_size; i++){
