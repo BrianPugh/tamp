@@ -5,43 +5,38 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-#define FLUSH 127
+#define FLUSH 15
+
+const uint8_t HUFFMAN_TABLE[128] = {50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 85, 85, 85, 85, 122, 123, 104, 104, 86, 86, 86, 86, 93, 93, 93, 93, 68, 68, 68, 68, 68, 68, 68, 68, 105, 105, 124, 127, 87, 87, 87, 87, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17};
+
 
 /**
  * @brief Decode a huffman match-size symbol from the decompressor's bit_buffer.
  *
  * Internally updates bit_buffer and bit_buffer_pos.
- * Returns -1 if input has been exhausted; buffer will NOT be restored.
+ *
+ * bit_buffer is GUARANTEED to have enough bits to decode something.
  *
  * @return Tamp Status Code.
  *     TAMP_INVALID_SYMBOL if no valid symbol decoded. Buffer is NOT restored.
  */
 static int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos){
-    uint8_t code = 0;
+    uint8_t code;
+    uint8_t bit_len;
 
-    while(TAMP_LIKELY(*bit_buffer_pos != 0)){
-        code = (code << 1) | (*bit_buffer >> 31);
-        *bit_buffer <<= 1;
-        *bit_buffer_pos -= 1;
-        switch(code){
-            case 0:   return 0;
-            case 3:   return 1;
-            case 8:   return 2;
-            case 11:  return 3;
-            case 20:  return 4;
-            case 36:  return 5;
-            case 38:  return 6;
-            case 43:  return 7;
-            case 75:  return 8;
-            case 84:  return 9;
-            case 148: return 10;
-            case 149: return 11;
-            case 170: return 12;
-            case 39:  return 13;
-            case 171: return FLUSH;
-        }
-    }
-    return -1;
+    (*bit_buffer_pos)--;
+    code = *bit_buffer >> 31;
+    *bit_buffer <<= 1;
+    if(TAMP_LIKELY(code == 0))
+        return 0;
+
+    code = *bit_buffer >> (32 - 7);
+    code = HUFFMAN_TABLE[code];
+    bit_len = code >> 4;
+    *bit_buffer <<= bit_len;
+    (*bit_buffer_pos) -= bit_len;
+
+    return code & 0xF;
 }
 
 tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *input, size_t input_size, size_t *input_consumed_size) {
@@ -171,6 +166,7 @@ tamp_res tamp_decompressor_decompress(
         }
         else{
             // is token; attempt a decode
+            /* copy the bit buffers so that we can abort at any time */
             uint32_t bit_buffer = decompressor->bit_buffer;
             uint16_t window_offset;
             uint16_t window_offset_skip;
@@ -182,7 +178,11 @@ tamp_res tamp_decompressor_decompress(
             bit_buffer <<= 1;
             bit_buffer_pos--;
 
-            if((TAMP_UNLIKELY(match_size = huffman_decode(&bit_buffer, &bit_buffer_pos)) < 0)){
+            // There must be at least 8 bits, otherwise no possible decoding.
+            if(TAMP_UNLIKELY(bit_buffer_pos < 8))
+                return TAMP_INPUT_EXHAUSTED;
+
+            if(TAMP_UNLIKELY(match_size = huffman_decode(&bit_buffer, &bit_buffer_pos)) < 0){
                 // Insufficient input
                 return TAMP_INPUT_EXHAUSTED;
             }
