@@ -189,8 +189,8 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         compressor->window[compressor->window_pos] = read_input(0);
         compressor->window_pos = (compressor->window_pos + 1) & window_mask;
         compressor->input_pos = input_add(1);
-        compressor->input_size--;
     }
+    compressor->input_size -= match_size;
 
     return TAMP_OK;
 }
