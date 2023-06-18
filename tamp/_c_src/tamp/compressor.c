@@ -8,7 +8,7 @@
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 
 #define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
-#define WINDOW_SIZE (1 << compressor->conf.window)
+#define WINDOW_SIZE (1 << compressor->conf_window)
 // 0xF because sizeof(TampCompressor.input) == 16;
 #define input_add(offset) (\
             (compressor->input_pos + offset) & 0xF \
@@ -16,7 +16,7 @@
 #define read_input(offset) ( \
         compressor->input[input_add(offset)] \
         )
-#define IS_LITERAL_FLAG (1 << compressor->conf.literal)
+#define IS_LITERAL_FLAG (1 << compressor->conf_literal)
 
 #define FLUSH_CODE (0xAB)
 
@@ -39,22 +39,16 @@ static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits
  *
  * Up to 7 bits may remain in the internal bit buffer.
  */
-static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
-    *output_written_size = output_size;
-
-    while(compressor->bit_buffer_pos >= 8 && output_size){
-        *output = compressor->bit_buffer >> 24;
-        output++;
-        output_size--;
-        compressor->bit_buffer <<= 8;
-        compressor->bit_buffer_pos -= 8;
-    }
-    (*output_written_size) -= output_size;
-    if(compressor->bit_buffer_pos >= 8)
-        return TAMP_OUTPUT_FULL;
-    return TAMP_OK;
+static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size) {
+    for (
+        *output_written_size = output_size;
+        compressor->bit_buffer_pos >= 8 && output_size;
+        output_size--, compressor->bit_buffer_pos -= 8, compressor->bit_buffer <<= 8
+        )
+        *output++ = compressor->bit_buffer >> 24;
+    *output_written_size -= output_size;
+    return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
-
 
 /**
  * @brief Find the best match for the current input buffer.
@@ -78,14 +72,15 @@ static inline void find_best_match(
     const uint16_t first_second = (read_input(0) << 8) | read_input(1);
     const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
-    uint16_t meow = compressor->window[0];
+    uint16_t window_rolling_2_byte = compressor->window[0];
     unsigned char c;
 
     for(uint16_t window_index=0; window_index < window_size_minus_1; window_index++){
-        meow <<= 8;
-        meow |= compressor->window[window_index + 1];
-        if(TAMP_LIKELY(meow != first_second))
+        window_rolling_2_byte <<= 8;
+        window_rolling_2_byte |= compressor->window[window_index + 1];
+        if(TAMP_LIKELY(window_rolling_2_byte != first_second)){
             continue;
+        }
 
         for(uint8_t input_offset=2; ; input_offset++){
             if(TAMP_UNLIKELY(input_offset > *match_size)){
@@ -117,11 +112,14 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     for(uint8_t i=0; i < sizeof(TampCompressor); i++)  // Zero-out the struct
         ((unsigned char *)compressor)[i] = 0;
 
-    compressor->conf = *conf;
+    compressor->conf_literal = conf->literal;
+    compressor->conf_window = conf->window;
+    compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
+
     compressor->window = window;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
 
-    if(!compressor->conf.use_custom_dictionary)
+    if(!compressor->conf_use_custom_dictionary)
         tamp_initialize_dictionary(window, (1 << conf->window));
 
     // Write header to bit buffer
@@ -137,14 +135,14 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 
 tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
-    const uint16_t window_mask = (1 << compressor->conf.window) - 1;
+    const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     size_t output_written_size_proxy;
 
     if(!output_written_size)
         output_written_size = &output_written_size_proxy;
     *output_written_size = 0;
 
-    if(compressor->input_size == 0)
+    if(TAMP_UNLIKELY(compressor->input_size == 0))
         return TAMP_OK;
 
     {
@@ -152,41 +150,41 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         size_t flush_bytes_written;
         res = partial_flush(compressor, output, output_size, &flush_bytes_written);
         (*output_written_size) += flush_bytes_written;
-        if(res != TAMP_OK)
+        if(TAMP_UNLIKELY(res != TAMP_OK))
             return res;
         output_size -= flush_bytes_written;
         output += flush_bytes_written;
     }
 
-    if(output_size == 0)
+    if(TAMP_UNLIKELY(output_size == 0))
         return TAMP_OUTPUT_FULL;
 
     uint8_t match_size = 0;
     uint16_t match_index = 0;
     find_best_match(compressor, &match_index, &match_size);
 
-    if(match_size < compressor->min_pattern_size){
+    if(TAMP_UNLIKELY(match_size < compressor->min_pattern_size)){
         // Write LITERAL
         match_size = 1;
         unsigned char c = read_input(0);
-        if(c >> compressor->conf.literal){
+        if(TAMP_UNLIKELY(c >> compressor->conf_literal)){
             return TAMP_EXCESS_BITS;
         }
-        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf.literal + 1);
+        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
     }
     else{
         // Write TOKEN
         uint8_t huffman_index = match_size - compressor->min_pattern_size;
         write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-        write_to_bit_buffer(compressor, match_index, compressor->conf.window);
+        write_to_bit_buffer(compressor, match_index, compressor->conf_window);
     }
     // Populate Window
     for(uint8_t i=0; i < match_size; i++){
         compressor->window[compressor->window_pos] = read_input(0);
         compressor->window_pos = (compressor->window_pos + 1) & window_mask;
         compressor->input_pos = input_add(1);
-        compressor->input_size--;
     }
+    compressor->input_size -= match_size;
 
     return TAMP_OK;
 }
@@ -198,16 +196,18 @@ void tamp_compressor_sink(
         size_t input_size,
         size_t *consumed_size
         ){
-    if(consumed_size)
+    size_t consumed_size_proxy;
+    if(TAMP_LIKELY(consumed_size))
         *consumed_size = 0;
+    else
+        consumed_size = &consumed_size_proxy;
 
     for(size_t i=0; i < input_size; i++){
         if(TAMP_UNLIKELY(compressor->input_size == sizeof(compressor->input)))
             break;
         compressor->input[input_add(compressor->input_size)] = input[i];
         compressor->input_size += 1;
-        if(consumed_size)
-            (*consumed_size)++;
+        (*consumed_size)++;
     }
 }
 
@@ -221,11 +221,17 @@ tamp_res tamp_compressor_compress(
         size_t *input_consumed_size
         ){
     tamp_res res;
+    size_t input_consumed_size_proxy, output_written_size_proxy;
 
-    if(output_written_size)
+    if(TAMP_LIKELY(output_written_size))
         *output_written_size = 0;
-    if(input_consumed_size)
+    else
+        output_written_size = &output_written_size_proxy;
+
+    if(TAMP_LIKELY(input_consumed_size))
         *input_consumed_size = 0;
+    else
+        input_consumed_size = &input_consumed_size_proxy;
 
     while(input_size > 0 && output_size > 0){
         {
@@ -234,18 +240,16 @@ tamp_res tamp_compressor_compress(
             tamp_compressor_sink(compressor, input, input_size, &consumed);
             input += consumed;
             input_size -= consumed;
-            if(input_consumed_size)
-                (*input_consumed_size) += consumed;
+            (*input_consumed_size) += consumed;
         }
-        if(compressor->input_size == sizeof(compressor->input)){
+        if(TAMP_LIKELY(compressor->input_size == sizeof(compressor->input))){
             // Input buffer is full and ready to start compressing.
             size_t chunk_output_written_size;
             res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
             output += chunk_output_written_size;
             output_size -= chunk_output_written_size;
-            if(output_written_size)
-                (*output_written_size) += chunk_output_written_size;
-            if(res != TAMP_OK)
+            (*output_written_size) += chunk_output_written_size;
+            if(TAMP_UNLIKELY(res != TAMP_OK))
                 return res;
         }
     }
@@ -271,7 +275,7 @@ tamp_res tamp_compressor_flush(
         // Compress the remainder of the input buffer.
         res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
         (*output_written_size) += chunk_output_written_size;
-        if(res != TAMP_OK)
+        if(TAMP_UNLIKELY(res != TAMP_OK))
             return res;
         output_size -= chunk_output_written_size;
         output += chunk_output_written_size;
@@ -283,7 +287,7 @@ tamp_res tamp_compressor_flush(
     output_size -= chunk_output_written_size;
     (*output_written_size) += chunk_output_written_size;
     output += chunk_output_written_size;
-    if(res != TAMP_OK)
+    if(TAMP_UNLIKELY(res != TAMP_OK))
         return res;
 
     // Check if there's enough output buffer space
@@ -337,7 +341,7 @@ tamp_res tamp_compressor_compress_and_flush(
             input_size,
             input_consumed_size
             );
-    if(res != TAMP_OK)
+    if(TAMP_UNLIKELY(res != TAMP_OK))
         return res;
 
     res = tamp_compressor_flush(
@@ -350,7 +354,7 @@ tamp_res tamp_compressor_compress_and_flush(
 
     (*output_written_size) += flush_size;
 
-    if(res != TAMP_OK)
+    if(TAMP_UNLIKELY(res != TAMP_OK))
         return res;
 
     return TAMP_OK;

@@ -23,7 +23,7 @@ void tamp_initialize_dictionary(unsigned char *buffer, size_t size){
     uint32_t seed = 3758097560;
     uint32_t randbuf = 0;
     for(size_t i=0; i < size; i++){
-        if( (i & 0x7) == 0)
+        if( TAMP_UNLIKELY((i & 0x7) == 0) )
             randbuf = xorshift32(&seed);
         buffer[i] = common_characters[randbuf & 0x0F];
         randbuf >>= 4;
