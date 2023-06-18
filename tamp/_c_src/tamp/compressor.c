@@ -196,16 +196,18 @@ void tamp_compressor_sink(
         size_t input_size,
         size_t *consumed_size
         ){
+    size_t consumed_size_proxy;
     if(TAMP_LIKELY(consumed_size))
         *consumed_size = 0;
+    else
+        consumed_size = &consumed_size_proxy;
 
     for(size_t i=0; i < input_size; i++){
         if(TAMP_UNLIKELY(compressor->input_size == sizeof(compressor->input)))
             break;
         compressor->input[input_add(compressor->input_size)] = input[i];
         compressor->input_size += 1;
-        if(consumed_size)
-            (*consumed_size)++;
+        (*consumed_size)++;
     }
 }
 
