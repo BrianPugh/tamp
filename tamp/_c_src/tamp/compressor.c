@@ -167,7 +167,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         // Write LITERAL
         match_size = 1;
         unsigned char c = read_input(0);
-        if(c >> compressor->conf_literal){
+        if(TAMP_UNLIKELY(c >> compressor->conf_literal)){
             return TAMP_EXCESS_BITS;
         }
         write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
@@ -221,11 +221,17 @@ tamp_res tamp_compressor_compress(
         size_t *input_consumed_size
         ){
     tamp_res res;
+    size_t input_consumed_size_proxy, output_written_size_proxy;
 
-    if(output_written_size)
+    if(TAMP_LIKELY(output_written_size))
         *output_written_size = 0;
-    if(input_consumed_size)
+    else
+        output_written_size = &output_written_size_proxy;
+
+    if(TAMP_LIKELY(input_consumed_size))
         *input_consumed_size = 0;
+    else
+        input_consumed_size = &input_consumed_size_proxy;
 
     while(input_size > 0 && output_size > 0){
         {
@@ -234,8 +240,7 @@ tamp_res tamp_compressor_compress(
             tamp_compressor_sink(compressor, input, input_size, &consumed);
             input += consumed;
             input_size -= consumed;
-            if(input_consumed_size)
-                (*input_consumed_size) += consumed;
+            (*input_consumed_size) += consumed;
         }
         if(TAMP_LIKELY(compressor->input_size == sizeof(compressor->input))){
             // Input buffer is full and ready to start compressing.
@@ -243,8 +248,7 @@ tamp_res tamp_compressor_compress(
             res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
             output += chunk_output_written_size;
             output_size -= chunk_output_written_size;
-            if(output_written_size)
-                (*output_written_size) += chunk_output_written_size;
+            (*output_written_size) += chunk_output_written_size;
             if(res != TAMP_OK)
                 return res;
         }
