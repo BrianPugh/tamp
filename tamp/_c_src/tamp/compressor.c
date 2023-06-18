@@ -202,6 +202,8 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         if(TAMP_UNLIKELY(match_index == window_mask)){
             // RLE
             next_char = compressor->prev_char;
+            if(TAMP_UNLIKELY(compressor->prev_rle))
+                break;  // Don't bother filling the buffer with a bunch of same-char.
         }
         else{
             // Literal or Pattern
