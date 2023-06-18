@@ -65,6 +65,11 @@ static inline void find_best_match(
         uint8_t *match_size
         ){
     *match_size = 0;
+    //TODO handle run_length; at this point we know the RLE decision is final.
+    //The returned solution may still have data remaining in the run_length.
+    if(TAMP_UNLIKELY(compressor->run_length > (compressor->min_pattern_size + 13))){
+        // TODO: no need to search for a pattern.
+    }
 
     if(TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size))
         return;
@@ -159,6 +164,19 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
     if(TAMP_UNLIKELY(output_size == 0))
         return TAMP_OUTPUT_FULL;
 
+    // Compute the RLE
+    #if 0
+    for(;compressor->input_size && compressor->prev_char == read_input(0) && compressor->run_length < 256;){
+        compressor->input_pos = input_add(1);
+        compressor->input_size--;
+        compressor->run_length++;  // TODO: bounds check
+    }
+    if(TAMP_UNLIKELY(compressor->run_length && compressor->input_size == 0)){
+        // Future input buffers may have more same-chars to extend the RLE.
+        return TAMP_OK;
+    }
+    #endif
+
     uint8_t match_size = 0;
     uint16_t match_index = 0;
     find_best_match(compressor, &match_index, &match_size);
@@ -179,12 +197,23 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         write_to_bit_buffer(compressor, match_index, compressor->conf_window);
     }
     // Populate Window
+    unsigned char next_char;
     for(uint8_t i=0; i < match_size; i++){
-        compressor->window[compressor->window_pos] = read_input(0);
+        if(TAMP_UNLIKELY(match_index == window_mask)){
+            // RLE
+            next_char = compressor->prev_char;
+        }
+        else{
+            // Literal or Pattern
+            next_char = read_input(0);
+            compressor->input_pos = input_add(1);
+            compressor->input_size--;
+        }
+        // Pattern
+        compressor->window[compressor->window_pos] = next_char;
         compressor->window_pos = (compressor->window_pos + 1) & window_mask;
-        compressor->input_pos = input_add(1);
     }
-    compressor->input_size -= match_size;
+    compressor->prev_char = next_char;
 
     return TAMP_OK;
 }
@@ -270,6 +299,8 @@ tamp_res tamp_compressor_flush(
     if(!output_written_size)
         output_written_size = &output_written_size_proxy;
     *output_written_size = 0;
+
+    //TODO: handle RLE
 
     while(compressor->input_size){
         // Compress the remainder of the input buffer.
