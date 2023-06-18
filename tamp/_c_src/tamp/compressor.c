@@ -84,8 +84,9 @@ static inline void find_best_match(
     for(uint16_t window_index=0; window_index < window_size_minus_1; window_index++){
         window_rolling_2_byte <<= 8;
         window_rolling_2_byte |= compressor->window[window_index + 1];
-        if(TAMP_LIKELY(window_rolling_2_byte != first_second))
+        if(TAMP_LIKELY(window_rolling_2_byte != first_second)){
             continue;
+        }
 
         for(uint8_t input_offset=2; ; input_offset++){
             if(TAMP_UNLIKELY(input_offset > *match_size)){
@@ -147,7 +148,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         output_written_size = &output_written_size_proxy;
     *output_written_size = 0;
 
-    if(compressor->input_size == 0)
+    if(TAMP_UNLIKELY(compressor->input_size == 0))
         return TAMP_OK;
 
     {
@@ -161,14 +162,14 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         output += flush_bytes_written;
     }
 
-    if(output_size == 0)
+    if(TAMP_UNLIKELY(output_size == 0))
         return TAMP_OUTPUT_FULL;
 
     uint8_t match_size = 0;
     uint16_t match_index = 0;
     find_best_match(compressor, &match_index, &match_size);
 
-    if(match_size < compressor->min_pattern_size){
+    if(TAMP_UNLIKELY(match_size < compressor->min_pattern_size)){
         // Write LITERAL
         match_size = 1;
         unsigned char c = read_input(0);
@@ -201,7 +202,7 @@ void tamp_compressor_sink(
         size_t input_size,
         size_t *consumed_size
         ){
-    if(consumed_size)
+    if(TAMP_LIKELY(consumed_size))
         *consumed_size = 0;
 
     for(size_t i=0; i < input_size; i++){
@@ -240,7 +241,7 @@ tamp_res tamp_compressor_compress(
             if(input_consumed_size)
                 (*input_consumed_size) += consumed;
         }
-        if(compressor->input_size == sizeof(compressor->input)){
+        if(TAMP_LIKELY(compressor->input_size == sizeof(compressor->input))){
             // Input buffer is full and ready to start compressing.
             size_t chunk_output_written_size;
             res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
