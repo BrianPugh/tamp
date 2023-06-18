@@ -150,7 +150,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
         size_t flush_bytes_written;
         res = partial_flush(compressor, output, output_size, &flush_bytes_written);
         (*output_written_size) += flush_bytes_written;
-        if(res != TAMP_OK)
+        if(TAMP_UNLIKELY(res != TAMP_OK))
             return res;
         output_size -= flush_bytes_written;
         output += flush_bytes_written;
@@ -249,7 +249,7 @@ tamp_res tamp_compressor_compress(
             output += chunk_output_written_size;
             output_size -= chunk_output_written_size;
             (*output_written_size) += chunk_output_written_size;
-            if(res != TAMP_OK)
+            if(TAMP_UNLIKELY(res != TAMP_OK))
                 return res;
         }
     }
@@ -275,7 +275,7 @@ tamp_res tamp_compressor_flush(
         // Compress the remainder of the input buffer.
         res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
         (*output_written_size) += chunk_output_written_size;
-        if(res != TAMP_OK)
+        if(TAMP_UNLIKELY(res != TAMP_OK))
             return res;
         output_size -= chunk_output_written_size;
         output += chunk_output_written_size;
@@ -287,7 +287,7 @@ tamp_res tamp_compressor_flush(
     output_size -= chunk_output_written_size;
     (*output_written_size) += chunk_output_written_size;
     output += chunk_output_written_size;
-    if(res != TAMP_OK)
+    if(TAMP_UNLIKELY(res != TAMP_OK))
         return res;
 
     // Check if there's enough output buffer space
@@ -341,7 +341,7 @@ tamp_res tamp_compressor_compress_and_flush(
             input_size,
             input_consumed_size
             );
-    if(res != TAMP_OK)
+    if(TAMP_UNLIKELY(res != TAMP_OK))
         return res;
 
     res = tamp_compressor_flush(
@@ -354,7 +354,7 @@ tamp_res tamp_compressor_compress_and_flush(
 
     (*output_written_size) += flush_size;
 
-    if(res != TAMP_OK)
+    if(TAMP_UNLIKELY(res != TAMP_OK))
         return res;
 
     return TAMP_OK;

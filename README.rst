@@ -33,7 +33,7 @@ Features
 
 * Compact compression and decompression implementations.
 
-  * Compiled C library is <5KB (compressor + decompressor).
+  * Compiled C library is <4KB (compressor + decompressor).
 
 * Mid-stream flushing.
 
@@ -307,7 +307,7 @@ Numbers reported in bytes.
 +====================+============+==============+===========================+
 | Tamp (micropython) | 4779       | 4717         | 8262                      |
 +--------------------+------------+--------------+---------------------------+
-| Tamp (C)           | 2724       | 1976         | 4564                      |
+| Tamp (C)           | 2008       | 1976         | 3848                      |
 +--------------------+------------+--------------+---------------------------+
 | Heatshrink         | 2956       | 3876         | 6832                      |
 +--------------------+------------+--------------+---------------------------+
