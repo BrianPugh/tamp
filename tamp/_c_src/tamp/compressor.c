@@ -39,22 +39,16 @@ static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits
  *
  * Up to 7 bits may remain in the internal bit buffer.
  */
-static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
-    *output_written_size = output_size;
-
-    while(compressor->bit_buffer_pos >= 8 && output_size){
-        *output = compressor->bit_buffer >> 24;
-        output++;
-        output_size--;
-        compressor->bit_buffer <<= 8;
-        compressor->bit_buffer_pos -= 8;
-    }
-    (*output_written_size) -= output_size;
-    if(compressor->bit_buffer_pos >= 8)
-        return TAMP_OUTPUT_FULL;
-    return TAMP_OK;
+static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size) {
+    for (
+        *output_written_size = output_size;
+        compressor->bit_buffer_pos >= 8 && output_size;
+        output_size--, compressor->bit_buffer_pos -= 8, compressor->bit_buffer <<= 8
+        )
+        *output++ = compressor->bit_buffer >> 24;
+    *output_written_size -= output_size;
+    return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
-
 
 /**
  * @brief Find the best match for the current input buffer.
