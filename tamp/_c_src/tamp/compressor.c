@@ -53,8 +53,6 @@ static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *
 /**
  * @brief Find the best match for the current input buffer.
  *
- * WARNING: this optimized implementation expects a little endian system.
- *
  * @param[in,out] compressor TampCompressor object to perform search on.
  * @param[out] match_index  If match_size is 0, this value is undefined.
  * @param[out] match_size Size of best found match.
