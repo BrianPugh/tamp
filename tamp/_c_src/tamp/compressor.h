@@ -19,16 +19,14 @@ typedef struct TampCompressor{
 
     /* Other small attributes */
     uint32_t prev_char:8;
-    uint32_t run_length:8;
-
-    uint32_t window_pos:15;
-    uint32_t prev_rle:1;
-
-    uint32_t input_size:5;
+    uint32_t run_length:7;
     uint32_t conf_use_custom_dictionary:1;  // Use a custom initialized dictionary.
-    uint32_t min_pattern_size:2;
 
     uint32_t bit_buffer_pos:6;
+    uint32_t min_pattern_size:2;
+
+    uint32_t window_pos:15;
+    uint32_t input_size:5;
     uint32_t input_pos:4;
 } TampCompressor;
 

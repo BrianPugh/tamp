@@ -2,6 +2,7 @@
 #include "common.h"
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -53,8 +54,6 @@ static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *
 /**
  * @brief Find the best match for the current input buffer.
  *
- * WARNING: this optimized implementation expects a little endian system.
- *
  * @param[in,out] compressor TampCompressor object to perform search on.
  * @param[out] match_index  If match_size is 0, this value is undefined.
  * @param[out] match_size Size of best found match.
@@ -64,30 +63,26 @@ static inline void find_best_match(
         uint16_t *match_index,
         uint8_t *match_size
         ){
-    *match_size = 0;
-    //TODO handle run_length; at this point we know the RLE decision is final.
-    //The returned solution may still have data remaining in the run_length.
-    if(TAMP_UNLIKELY(compressor->run_length > (compressor->min_pattern_size + 13))){
-        // TODO: no need to search for a pattern.
-    }
+    uint16_t first_second;
 
-    if(TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size))
+    if(TAMP_UNLIKELY(compressor->input_size + compressor->run_length < compressor->min_pattern_size))
         return;
 
-    const uint16_t first_second = (read_input(0) << 8) | read_input(1);
+    first_second = (TAMP_UNLIKELY(compressor->run_length) ? compressor->prev_char : read_input(0)) << 8;
+    first_second |= TAMP_UNLIKELY(compressor->run_length > 1) ? compressor->prev_char : read_input(1);
+
     const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
-    const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
+    const uint8_t max_pattern_size = MIN(compressor->input_size + compressor->run_length, MAX_PATTERN_SIZE);
     uint16_t window_rolling_2_byte = compressor->window[0];
     unsigned char c;
 
     for(uint16_t window_index=0; window_index < window_size_minus_1; window_index++){
         window_rolling_2_byte <<= 8;
         window_rolling_2_byte |= compressor->window[window_index + 1];
-        if(TAMP_LIKELY(window_rolling_2_byte != first_second)){
+        if(TAMP_LIKELY(window_rolling_2_byte != first_second))
             continue;
-        }
 
-        for(uint8_t input_offset=2; ; input_offset++){
+        for(int8_t input_offset=2; ; input_offset++){
             if(TAMP_UNLIKELY(input_offset > *match_size)){
                 *match_size = input_offset;
                 *match_index = window_index;
@@ -98,7 +93,11 @@ static inline void find_best_match(
             if(TAMP_UNLIKELY(window_index + input_offset > window_size_minus_1))
                 return;
 
-            c = read_input(input_offset);
+            if(TAMP_UNLIKELY((int8_t)compressor->run_length - input_offset > 0))
+                c = compressor->prev_char;
+            else
+                c = read_input(input_offset - compressor->run_length);
+
             if(TAMP_LIKELY(compressor->window[window_index + input_offset] != c))
                 break;
         }
@@ -140,14 +139,14 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 
 tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
-    const uint16_t window_mask = (1 << compressor->conf_window) - 1;
+    const uint16_t window_mask = WINDOW_SIZE - 1;
     size_t output_written_size_proxy;
 
     if(!output_written_size)
         output_written_size = &output_written_size_proxy;
     *output_written_size = 0;
 
-    if(TAMP_UNLIKELY(compressor->input_size == 0))
+    if(TAMP_UNLIKELY(compressor->input_size == 0 && compressor->run_length == 0))
         return TAMP_OK;
 
     {
@@ -164,27 +163,41 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
     if(TAMP_UNLIKELY(output_size == 0))
         return TAMP_OUTPUT_FULL;
 
-    // Compute the RLE
-    #if 0
-    for(;compressor->input_size && compressor->prev_char == read_input(0) && compressor->run_length < 256;){
-        compressor->input_pos = input_add(1);
-        compressor->input_size--;
-        compressor->run_length++;  // TODO: bounds check
-    }
-    if(TAMP_UNLIKELY(compressor->run_length && compressor->input_size == 0)){
-        // Future input buffers may have more same-chars to extend the RLE.
-        return TAMP_OK;
+    // At this point, there is at least a single available byte in the input buffer,
+    // and at least 24 bits free in the bit buffer.
+
+    // Sink input into the RLE counter
+    #if 1
+    if(TAMP_LIKELY(compressor->input_size)){
+        for(;
+            compressor->input_size && compressor->prev_char == read_input(0) && compressor->run_length < 127;
+            compressor->run_length++
+            ){
+            compressor->input_pos = input_add(1);
+            compressor->input_size--;
+
+        }
+        if(TAMP_UNLIKELY(compressor->run_length < 127 && compressor->input_size == 0)){
+            // Future input buffers may have more same-chars to extend the RLE.
+            return TAMP_OK;
+        }
     }
     #endif
 
-    uint8_t match_size = 0;
-    uint16_t match_index = 0;
-    find_best_match(compressor, &match_index, &match_size);
+    uint8_t match_size;
+    uint16_t match_index = window_mask;
+    if(compressor->run_length >= MAX_PATTERN_SIZE){
+        match_size = MAX_PATTERN_SIZE;
+    }
+    else{
+        match_size = compressor->run_length;
+        find_best_match(compressor, &match_index, &match_size);
+    }
 
     if(TAMP_UNLIKELY(match_size < compressor->min_pattern_size)){
         // Write LITERAL
         match_size = 1;
-        unsigned char c = read_input(0);
+        unsigned char c = compressor->run_length ? compressor->prev_char : read_input(0);
         if(TAMP_UNLIKELY(c >> compressor->conf_literal)){
             return TAMP_EXCESS_BITS;
         }
@@ -199,13 +212,11 @@ tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char
     // Populate Window
     unsigned char next_char;
     for(uint8_t i=0; i < match_size; i++){
-        if(TAMP_UNLIKELY(match_index == window_mask)){
-            // RLE
+        if(TAMP_UNLIKELY(compressor->run_length)){
             next_char = compressor->prev_char;
-            if(TAMP_UNLIKELY(compressor->prev_rle))
-                break;  // Don't bother filling the buffer with a bunch of same-char.
+            compressor->run_length--;
         }
-        else{
+        else {
             // Literal or Pattern
             next_char = read_input(0);
             compressor->input_pos = input_add(1);
@@ -302,10 +313,8 @@ tamp_res tamp_compressor_flush(
         output_written_size = &output_written_size_proxy;
     *output_written_size = 0;
 
-    //TODO: handle RLE
-
-    while(compressor->input_size){
-        // Compress the remainder of the input buffer.
+    while(compressor->input_size || compressor->run_length){
+        // Compress the remainder of the input buffer and run_length.
         res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
         (*output_written_size) += chunk_output_written_size;
         if(TAMP_UNLIKELY(res != TAMP_OK))
