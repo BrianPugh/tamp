@@ -1,6 +1,5 @@
 #include "decompressor.h"
 #include "common.h"
-#include "assert.h"
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
