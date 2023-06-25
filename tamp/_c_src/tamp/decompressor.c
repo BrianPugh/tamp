@@ -15,12 +15,11 @@ static const uint8_t HUFFMAN_TABLE[128] = {50, 50, 50, 50, 50, 50, 50, 50, 50, 5
  *
  * Internally updates bit_buffer and bit_buffer_pos.
  *
- * bit_buffer is GUARANTEED to have enough bits to decode something.
+ * bit_buffer MUST have at least 8 bits prior to calling.
  *
- * @return Tamp Status Code.
- *     TAMP_INVALID_SYMBOL if no valid symbol decoded. Buffer is NOT restored.
+ * @returns Decoded match_size
  */
-static int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos){
+static inline int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos){
     uint8_t code;
     uint8_t bit_len;
 
@@ -182,10 +181,7 @@ tamp_res tamp_decompressor_decompress(
             if(TAMP_UNLIKELY(bit_buffer_pos < 8))
                 return TAMP_INPUT_EXHAUSTED;
 
-            if(TAMP_UNLIKELY(match_size = huffman_decode(&bit_buffer, &bit_buffer_pos)) < 0){
-                // Insufficient input
-                return TAMP_INPUT_EXHAUSTED;
-            }
+            match_size = huffman_decode(&bit_buffer, &bit_buffer_pos);
             if(TAMP_UNLIKELY(match_size == FLUSH)){
                 // flush bit_buffer to the nearest byte and skip the remainder of decoding
                 decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);
