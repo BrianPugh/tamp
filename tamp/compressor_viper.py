@@ -198,8 +198,7 @@ class Compressor:
         return bytes_written
 
     def close(self):
-        bytes_written = 0
-        bytes_written += self.flush(write_token=False)
+        bytes_written = self.flush(write_token=False)
         if self._close_f_on_close:
             self.f.close()
         return bytes_written
