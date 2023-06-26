@@ -39,7 +39,6 @@ class Compressor:
 
         self.f = f
         self.f_buf = 0
-        self.f_pos = 0
 
         # Window Buffer
         if dictionary:
