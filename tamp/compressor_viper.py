@@ -53,7 +53,7 @@ class Compressor:
         self.window_pos = 0
 
         # Input Buffer
-        self.input_buf = bytearray(self.max_pattern_size)
+        self.input_buf = bytearray(16)
         self.input_size = 0
         self.input_pos = 0
 
@@ -83,7 +83,6 @@ class Compressor:
         window_pos = int(self.window_pos)
 
         min_pattern_size = int(self.min_pattern_size)
-        max_pattern_size = int(self.max_pattern_size)
 
         f = self.f
 
@@ -96,16 +95,14 @@ class Compressor:
                 if input_buf[input_pos] != window_buf[window_index]:
                     continue  # Significant speed short-cut
 
-                input_index = (input_pos + 1) % max_pattern_size
+                input_index = (input_pos + 1) & 0xF
                 if input_buf[input_index] != window_buf[window_index + 1]:
                     continue  # Small Speed short-cut
 
                 current_match_size = int(2)
                 for k in range(current_match_size, input_size):
-                    input_index = (input_pos + k) % max_pattern_size
-                    if input_buf[input_index] != window_buf[window_index + k]:
-                        break
-                    if window_index + k >= window_size:
+                    input_index = (input_pos + k) & 0xF
+                    if input_buf[input_index] != window_buf[window_index + k] or window_index + k >= window_size:
                         break
                     current_match_size = k + 1
                 if current_match_size > match_size:
@@ -148,7 +145,7 @@ class Compressor:
 
         for _ in range(match_size):  # Copy pattern into buffer
             window_buf[window_pos] = input_buf[input_pos]
-            input_pos = (input_pos + 1) % max_pattern_size
+            input_pos = (input_pos + 1) & 0xF
             window_pos = (window_pos + 1) % window_size
 
         input_size -= match_size
@@ -177,7 +174,7 @@ class Compressor:
             input_size = int(self.input_size)
             input_pos = int(self.input_pos)
 
-            pos = (input_pos + input_size) % max_pattern_size
+            pos = (input_pos + input_size) & 0xF
             input_buf[pos] = data_p[i]
             input_size += 1
             self.input_size = input_size
