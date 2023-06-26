@@ -37,9 +37,6 @@ class Compressor:
 
         self.min_pattern_size = compute_min_pattern_size(window, literal)
 
-        self.f = f
-        self.f_buf = 0
-
         # Window Buffer
         if dictionary:
             if bit_size(len(dictionary) - 1) != window:
@@ -55,6 +52,7 @@ class Compressor:
         self.input_pos = 0
 
         # Write header
+        self.f = f
         self.f_buf = ((window - 8) << 5 | (literal - 5) << 3 | int(bool(dictionary)) << 2) << (22)
         self.f_pos = 8
 
