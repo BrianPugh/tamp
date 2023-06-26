@@ -5,7 +5,7 @@ from micropython import const
 
 from . import compute_min_pattern_size, initialize_dictionary
 
-_HUFFMAN_TABLE = b"BBBBBBBBBBBBBBBBeeee\x8a\x8bxxffffmmmmTTTTTTTTyy\x8c\x8fggggCCCCCCCCCCCCCCCC!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+_HUFFMAN_TABLE = b"BBBBBBBBBBBBBBBBeeee\x8a\x8bxxffffmmmmTTTTTTTTyy\x8c\x8fggggCCCCCCCCCCCCCCCC"
 
 _FLUSH = const(15)
 
@@ -128,7 +128,7 @@ class Decompressor:
 
                     if f_buf >> 28:
                         code = (f_buf >> 21) & 0x7F
-                        code = huffman_table[code]
+                        code = 33 if code >= 64 else huffman_table[code]
                         match_size = code & 0xF
                         if match_size == _FLUSH:
                             f_buf = f_pos = 0
