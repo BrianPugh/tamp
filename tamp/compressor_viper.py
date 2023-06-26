@@ -27,11 +27,10 @@ class Compressor:
         literal=8,
         dictionary=None,
     ):
+        self._close_f_on_close = False
         if not hasattr(f, "write"):  # It's probably a path-like object.
             f = open(str(f), "wb")
             self._close_f_on_close = True
-        else:
-            self._close_f_on_close = False
 
         self.window_bits = window
         self.literal_bits = literal

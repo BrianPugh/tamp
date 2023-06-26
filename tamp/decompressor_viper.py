@@ -111,11 +111,10 @@ class Decompressor:
 
                     # Now update buffers from is_literal
                     f_buf = (f_buf << 1) & full_mask
-                    f_pos -= 1
 
                     c = f_buf >> (30 - literal_bits)
                     f_buf = (f_buf << literal_bits) & full_mask
-                    f_pos -= literal_bits
+                    f_pos -= literal_bits + 1
 
                     out_buf[out_pos] = c
                     w_buf_ptr[w_pos] = c
@@ -139,6 +138,7 @@ class Decompressor:
                         delta = 1
 
                     token_bits = 1 + delta + w_bits
+
                     while f_pos < token_bits:
                         f_buf |= int(f.read(1)[0]) << (22 - f_pos)
                         f_pos += 8
