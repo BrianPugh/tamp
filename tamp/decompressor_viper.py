@@ -12,11 +12,10 @@ _FLUSH = const(15)
 
 class Decompressor:
     def __init__(self, f, *, dictionary=None):
+        self._close_f_on_close = False
         if not hasattr(f, "read"):  # It's probably a path-like object.
             f = open(str(f), "rb")
             self._close_f_on_close = True
-        else:
-            self._close_f_on_close = False
 
         self.f = f
         self.f_buf = 0
