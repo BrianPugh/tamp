@@ -8,10 +8,10 @@ from micropython import const
 from . import ExcessBitsError, bit_size, compute_min_pattern_size, initialize_dictionary
 
 # encodes [2, 15] pattern lengths
-huffman_codes = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
+_HUFFMAN_CODES = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
 # These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
-huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07"
-FLUSH_CODE = const(0xAB)  # 8 bits
+_HUFFMAN_BITS = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07"
+_FLUSH_CODE = const(0xAB)  # 8 bits
 
 
 def _f_write(f, number, size):
@@ -71,8 +71,8 @@ class Compressor:
 
         f_buf = int(self.f_buf)
         f_pos = int(self.f_pos)
-        huffman_bits_ptr8 = ptr8(huffman_bits)
-        huffman_codes_ptr8 = ptr8(huffman_codes)
+        huffman_bits_ptr8 = ptr8(_HUFFMAN_BITS)
+        huffman_codes_ptr8 = ptr8(_HUFFMAN_CODES)
 
         window_bits = int(self.window_bits)
         window_buf = ptr8(self.window_buf)
@@ -187,11 +187,11 @@ class Compressor:
 
         if self.f_pos > 0 and write_token:
             self.f_pos += 9
-            self.f_buf |= FLUSH_CODE << (30 - self.f_pos)
+            self.f_buf |= _FLUSH_CODE << (30 - self.f_pos)
 
         while self.f_pos > 0:
             _f_write(self.f, self.f_buf >> 22, 1)
-            self.f_buf = (self.f_buf & 0x03FFFFF) << 8
+            self.f_buf = (self.f_buf & 0x3FFFFF) << 8
             self.f_pos -= 8
             bytes_written += 1
 
