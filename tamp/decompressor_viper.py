@@ -29,10 +29,7 @@ class Decompressor:
         reserved = header & 0b10
         more_header_bytes = header & 0b1
 
-        if reserved:
-            raise NotImplementedError
-
-        if more_header_bytes:
+        if reserved or more_header_bytes:
             raise NotImplementedError
 
         if uses_custom_dictionary:
