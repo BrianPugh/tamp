@@ -44,7 +44,6 @@ class Decompressor:
         self.w_pos = 0
 
         self.min_pattern_size = compute_min_pattern_size(self.w_bits, self.literal_bits)
-        self.max_pattern_size = self.min_pattern_size + 13
 
         self.overflow_buf = bytearray(self.min_pattern_size + 13)
         self.overflow_pos = 0

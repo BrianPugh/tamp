@@ -36,8 +36,6 @@ class Compressor:
         self.literal_bits = literal
 
         self.min_pattern_size = compute_min_pattern_size(window, literal)
-        self.max_pattern_size = self.min_pattern_size + 13
-        self.max_pattern_bytes_exclusive = self.max_pattern_size + 1
 
         self.f = f
         self.f_buf = 0
@@ -168,7 +166,7 @@ class Compressor:
 
         input_buf = ptr8(self.input_buf)
 
-        max_pattern_size = int(self.max_pattern_size)
+        max_pattern_size = int(self.min_pattern_size) + 13
 
         for i in range(data_l):
             input_size = int(self.input_size)
