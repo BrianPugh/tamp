@@ -75,6 +75,12 @@ on-device-decompression-benchmark: venv build/enwik8-100kb.tamp
 	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed; \
 	echo "Success!"
 
+mpy-size-decompressor:
+	@echo "__init__.py"
+	@mpy-cross -O3 -march=armv6m tamp/__init__.py && cat tamp/__init__.mpy | wc -c
+	@echo "decompressor_viper.py"
+	@mpy-cross -O3 -march=armv6m tamp/decompressor_viper.py && cat tamp/decompressor_viper.mpy | wc -c
+
 
 #############
 # C Library #

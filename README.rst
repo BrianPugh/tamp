@@ -298,14 +298,14 @@ Tamp could use a similar indexing to increase compression speed, but has chosen 
 
 Binary Size
 ^^^^^^^^^^^
-To give an idea on the resulting binary sizes, Tamp and other libraries were compiled for the Pi Pico.
+To give an idea on the resulting binary sizes, Tamp and other libraries were compiled for the Pi Pico (``armv6m``).
 All libraries were compiled with ``-O3``.
 Numbers reported in bytes.
 
 +--------------------+------------+--------------+---------------------------+
 | Library            | Compressor | Decompressor | Compressor + Decompressor |
 +====================+============+==============+===========================+
-| Tamp (micropython) | 4779       | 4717         | 8262                      |
+| Tamp (micropython) | 4779       | 4342         | 8262                      |
 +--------------------+------------+--------------+---------------------------+
 | Tamp (C)           | 2008       | 1972         | 3864                      |
 +--------------------+------------+--------------+---------------------------+

@@ -29,7 +29,8 @@ huffman_lookup = {
 table_size = 1 << table_bits
 
 UNPOPULATED = object()
-table = [UNPOPULATED] * table_size
+c_table = [UNPOPULATED] * table_size
+py_table = [UNPOPULATED] * table_size
 
 for k, v in huffman_lookup.items():
     n_bits = len(k)
@@ -39,6 +40,8 @@ for k, v in huffman_lookup.items():
         if n_pad:
             index_bin_str += format(j, f"0{n_pad}b")
         index = int(index_bin_str, 2)
-        table[index] = v | (n_bits << 4)
+        c_table[index] = v | (n_bits << 4)
+        py_table[index] = v | ((n_bits + 1) << 4)
 
-print(f"const uint8_t HUFFMAN_TABLE[{table_size}] = {{{str(table)[1:-1]}}};")
+print(f"const uint8_t HUFFMAN_TABLE[{table_size}] = {{{str(c_table)[1:-1]}}};")
+print(f"_HUFFMAN_TABLE = {bytes(py_table)}")
