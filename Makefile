@@ -92,6 +92,9 @@ mpy-size:
 		printf '__init__ + decompressor_viper\t\t\t\t%s\n' $$total_de_viper; \
 		printf '__init__ + compressor_viper + decompressor_viper\t%s\n' $$total_all
 
+mpy-compression-benchmark:
+	@time belay run micropython -X heapsize=300M tools/micropython-compression-benchmark.py
+
 
 #############
 # C Library #
