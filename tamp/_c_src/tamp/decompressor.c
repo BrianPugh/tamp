@@ -1,6 +1,5 @@
 #include "decompressor.h"
 #include "common.h"
-#include "assert.h"
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -103,7 +102,6 @@ tamp_res tamp_decompressor_decompress(
         ){
     size_t input_consumed_size_proxy;
     size_t output_written_size_proxy;
-    const uint16_t window_mask = (1 << decompressor->conf_window) - 1;
     tamp_res res;
     const unsigned char *input_end = input + input_size;
     const unsigned char *output_end = output + output_size;
@@ -123,13 +121,15 @@ tamp_res tamp_decompressor_decompress(
         res = tamp_decompressor_read_header(&conf, input, input_end - input, &header_consumed_size);
         if(res != TAMP_OK)
             return res;
-        input += header_consumed_size;
-        (*input_consumed_size) += header_consumed_size;
 
         res = tamp_decompressor_populate_from_conf(decompressor, conf.window, conf.literal, conf.use_custom_dictionary);
         if(res != TAMP_OK)
             return res;
+
+        input += header_consumed_size;
+        (*input_consumed_size) += header_consumed_size;
     }
+    const uint16_t window_mask = (1 << decompressor->conf_window) - 1;
     while(input != input_end || decompressor->bit_buffer_pos){
         // Populate the bit buffer
         while(input != input_end && decompressor->bit_buffer_pos <= 24){
