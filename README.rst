@@ -318,7 +318,7 @@ Heatshrink doesn't include a high level API; in an apples-to-apples comparison t
 
 When to use Tamp
 ================
-On a Pi Pico (rp2040), the viper implementation of Tamp can compress data at around 4,300 bytes/s when using a 10-bit window. The data can then be decompressed at around 44,100 bytes/s.
+On a Pi Pico (rp2040), the viper micropython implementation of Tamp can compress data at around 4,300 bytes/s when using a 10-bit window. The data can then be decompressed at around 42,000 bytes/s.
 Tamp is good for compressing data on-device. If purely decompressing data on-device, it will nearly always be better to use the micropython-builtin ``zlib.decompress``, when available.
 
 .. |GHA tests| image:: https://github.com/BrianPugh/tamp/workflows/tests/badge.svg
