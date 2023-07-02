@@ -296,8 +296,8 @@ Heatshrink v0.4.1 was used in these benchmarks.
 When heathshrink uses an index, an additional ``(1 << (windowBits + 1))`` bytes of memory are used, tripling the memory requirement.
 Tamp could use a similar indexing to increase compression speed, but has chosen not to to focus on the primary goal of a low-memory compressor.
 
-To give an idea of Tamp's speed on an embedded device, the following table shows compression/decompression in bytes/second of the first 100KB of enwik8 on a pi pico (rp2040) at the default 125MHz clock rate.
-This isn't exactly an apples-to-apples comparison because the C benchmark didn't use a filesystem (and thusly, reduced overhead), but is good enough to get the idea across.
+To give an idea of Tamp's speed on an embedded device, the following table shows compression/decompression in **bytes/second of the first 100KB of enwik8 on a pi pico (rp2040)** at the default 125MHz clock rate.
+This isn't exactly an apples-to-apples comparison because the C benchmark does not use a filesystem (and thusly, reduced overhead) nor dynamic memory allocation, but is good enough to get the idea across.
 
 +---------------+---------------------+------------+
 | Action        | tamp                | tamp       |
