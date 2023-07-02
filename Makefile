@@ -1,6 +1,16 @@
 .PHONY: clean test collect-data venv
 
 
+ifdef MPY_DIR
+# Native machine code in .mpy files
+# User can define architecture in call like "make ARCH=armv6m"
+ARCH ?= x64
+MOD = tamp
+SRC = tamp/_c_src/mpy_bindings.c tamp/_c_src/mpy_bindings.py tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c tamp/_c_src/tamp/common.c
+CFLAGS += -Itamp/_c_src
+include $(MPY_DIR)/py/dynruntime.mk
+endif
+
 venv:
 	@. .venv/bin/activate
 
@@ -135,11 +145,10 @@ c-test: build/test_runner
 # This section is primarily to build a library to check for implementation size.
 BUILDDIR = build
 SRCDIR = tamp/_c_src
-CFLAGS = -Os -Wall -I$(SRCDIR) -ffunction-sections -fdata-sections -m32
+LIB_CFLAGS = -Os -Wall -I$(SRCDIR) -ffunction-sections -fdata-sections -m32
 
-# Collect all .c and .h files
-SRCS = $(shell find $(SRCDIR) -name "*.c")
-HEADERS = $(shell find $(SRCDIR) -name "*.h")
+SRCS = tamp/_c_src/tamp/common.c tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c
+HEADERS = tamp/_c_src/tamp/decompressor.h tamp/_c_src/tamp/compressor.h tamp/_c_src/tamp/common.h
 
 # Define the object files
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRCS))
@@ -154,8 +163,4 @@ tamp-c-library: build/tamp.a
 # Rule to create object files
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILDDIR)/%.o: %.c $(HEADERS)
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(LIB_CFLAGS) -c $< -o $@
