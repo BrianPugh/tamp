@@ -296,18 +296,30 @@ Heatshrink v0.4.1 was used in these benchmarks.
 When heathshrink uses an index, an additional ``(1 << (windowBits + 1))`` bytes of memory are used, tripling the memory requirement.
 Tamp could use a similar indexing to increase compression speed, but has chosen not to to focus on the primary goal of a low-memory compressor.
 
+To give an idea of Tamp's speed on an embedded device, the following table shows compression/decompression in **bytes/second of the first 100KB of enwik8 on a pi pico (rp2040)** at the default 125MHz clock rate.
+This isn't exactly an apples-to-apples comparison because the C benchmark does not use a filesystem (and thusly, reduced overhead) nor dynamic memory allocation, but is good enough to get the idea across.
+
++---------------+---------------------+------------+
+| Action        | tamp                | tamp       |
+|               | (Micropython Viper) | (C)        |
++===============+=====================+============+
+| Compression   | ~4,300              | ~28,500    |
++---------------+---------------------+------------+
+| Decompression | ~42,000             | ~1,042,524 |
++---------------+---------------------+------------+
+
 Binary Size
 ^^^^^^^^^^^
-To give an idea on the resulting binary sizes, Tamp and other libraries were compiled for the Pi Pico.
+To give an idea on the resulting binary sizes, Tamp and other libraries were compiled for the Pi Pico (``armv6m``).
 All libraries were compiled with ``-O3``.
 Numbers reported in bytes.
 
 +--------------------+------------+--------------+---------------------------+
 | Library            | Compressor | Decompressor | Compressor + Decompressor |
 +====================+============+==============+===========================+
-| Tamp (micropython) | 4779       | 4717         | 8262                      |
+| Tamp (micropython) | 4429       | 4205         | 7554                      |
 +--------------------+------------+--------------+---------------------------+
-| Tamp (C)           | 2008       | 1976         | 3848                      |
+| Tamp (C)           | 2008       | 1972         | 3864                      |
 +--------------------+------------+--------------+---------------------------+
 | Heatshrink         | 2956       | 3876         | 6832                      |
 +--------------------+------------+--------------+---------------------------+
@@ -316,10 +328,6 @@ Numbers reported in bytes.
 
 Heatshrink doesn't include a high level API; in an apples-to-apples comparison the Tamp library would be even smaller.
 
-When to use Tamp
-================
-On a Pi Pico (rp2040), the viper implementation of Tamp can compress data at around 4,300 bytes/s when using a 10-bit window. The data can then be decompressed at around 44,100 bytes/s.
-Tamp is good for compressing data on-device. If purely decompressing data on-device, it will nearly always be better to use the micropython-builtin ``zlib.decompress``, when available.
 
 .. |GHA tests| image:: https://github.com/BrianPugh/tamp/workflows/tests/badge.svg
    :target: https://github.com/BrianPugh/tamp/actions?query=workflow%3Atests

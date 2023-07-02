@@ -33,20 +33,17 @@ def initialize_dictionary(size, seed=None):
     def _gen_stream(xorshift32):
         for _ in range(size >> 3):
             value = next(xorshift32)
-            yield chars[value & 0x0F]
-            yield chars[value >> 4 & 0x0F]
-            yield chars[value >> 8 & 0x0F]
-            yield chars[value >> 12 & 0x0F]
-            yield chars[value >> 16 & 0x0F]
-            yield chars[value >> 20 & 0x0F]
-            yield chars[value >> 24 & 0x0F]
-            yield chars[value >> 28 & 0x0F]
+            for _ in range(8):
+                yield chars[value & 0x0F]
+                value >>= 4
 
     return bytearray(_gen_stream(_xorshift32(seed)))
 
 
 def compute_min_pattern_size(window, literal):
     """Compute whether the minimum pattern length should be 2 or 3."""
+    """
+    # Easy to understand version; commented out for smaller optimized version;
     if window > 15 or window < 8:
         raise ValueError
     if literal == 5:
@@ -59,6 +56,11 @@ def compute_min_pattern_size(window, literal):
         return 2
     else:
         raise ValueError
+    """
+    if not (7 < window < 16 and 4 < literal < 9):
+        raise ValueError
+
+    return 2 + (window > (10 + ((literal - 5) << 1)))
 
 
 try:

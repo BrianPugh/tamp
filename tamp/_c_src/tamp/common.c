@@ -1,6 +1,4 @@
 #include <stdlib.h>
-#include <string.h>
-
 #include "common.h"
 
 static const unsigned char common_characters[] = {

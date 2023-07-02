@@ -75,6 +75,26 @@ on-device-decompression-benchmark: venv build/enwik8-100kb.tamp
 	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed; \
 	echo "Success!"
 
+mpy-size:
+	@mpy-cross -O3 -march=armv6m tamp/__init__.py; \
+		size_init=$$(cat tamp/__init__.mpy | wc -c); \
+	    mpy-cross -O3 -march=armv6m tamp/compressor_viper.py; \
+		size_co_viper=$$(cat tamp/compressor_viper.mpy | wc -c); \
+	    mpy-cross -O3 -march=armv6m tamp/decompressor_viper.py; \
+		size_de_viper=$$(cat tamp/decompressor_viper.mpy | wc -c); \
+	    total_viper=$$((size_init + size_co_viper)); \
+	    total_de_viper=$$((size_init + size_de_viper)); \
+	    total_all=$$((size_init + size_co_viper + size_de_viper)); \
+		printf '__init__.py\t\t\t\t\t\t%s\n' $$size_init; \
+		printf 'compressor_viper.py\t\t\t\t\t%s\n' $$size_co_viper; \
+		printf 'decompressor_viper.py\t\t\t\t\t%s\n' $$size_de_viper; \
+		printf '__init__ + compressor_viper\t\t\t\t%s\n' $$total_viper; \
+		printf '__init__ + decompressor_viper\t\t\t\t%s\n' $$total_de_viper; \
+		printf '__init__ + compressor_viper + decompressor_viper\t%s\n' $$total_all
+
+mpy-compression-benchmark:
+	@time belay run micropython -X heapsize=300M tools/micropython-compression-benchmark.py
+
 
 #############
 # C Library #

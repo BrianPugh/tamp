@@ -67,6 +67,8 @@ ignore = [
     "*.pyx",
     "*.pxd",
     "*.pyc",
+    "*.so",
+    "*.html",
     "_c_src/",
     "cli/",
     "*.c",

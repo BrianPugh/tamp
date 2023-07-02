@@ -1,17 +1,21 @@
 from io import BytesIO
 
 import micropython
+from micropython import const
 
 from . import compute_min_pattern_size, initialize_dictionary
+
+_HUFFMAN_TABLE = b"BBBBBBBBBBBBBBBBeeee\x8a\x8bxxffffmmmmTTTTTTTTyy\x8c\x8fggggCCCCCCCCCCCCCCCC"
+
+_FLUSH = const(15)
 
 
 class Decompressor:
     def __init__(self, f, *, dictionary=None):
+        self._close_f_on_close = False
         if not hasattr(f, "read"):  # It's probably a path-like object.
             f = open(str(f), "rb")
             self._close_f_on_close = True
-        else:
-            self._close_f_on_close = False
 
         self.f = f
         self.f_buf = 0
@@ -25,10 +29,7 @@ class Decompressor:
         reserved = header & 0b10
         more_header_bytes = header & 0b1
 
-        if reserved:
-            raise NotImplementedError
-
-        if more_header_bytes:
+        if reserved or more_header_bytes:
             raise NotImplementedError
 
         if uses_custom_dictionary:
@@ -40,7 +41,6 @@ class Decompressor:
         self.w_pos = 0
 
         self.min_pattern_size = compute_min_pattern_size(self.w_bits, self.literal_bits)
-        self.max_pattern_size = self.min_pattern_size + 13
 
         self.overflow_buf = bytearray(self.min_pattern_size + 13)
         self.overflow_pos = 0
@@ -54,6 +54,8 @@ class Decompressor:
         """Attempt to fill out, will place into overflow."""
         out_capacity = int(len(out))  # const
         out_buf = ptr8(out)
+
+        huffman_table = ptr8(_HUFFMAN_TABLE)
 
         literal_bits = int(self.literal_bits)
 
@@ -105,73 +107,34 @@ class Decompressor:
 
                     # Now update buffers from is_literal
                     f_buf = (f_buf << 1) & full_mask
-                    f_pos -= 1
 
                     c = f_buf >> (30 - literal_bits)
                     f_buf = (f_buf << literal_bits) & full_mask
-                    f_pos -= literal_bits
+                    f_pos -= literal_bits + 1
 
                     out_buf[out_pos] = c
                     w_buf_ptr[w_pos] = c
                     out_pos += 1
                 else:
-                    # Read and decode Huffman
-                    # always read; we'll need the bits regardless
-                    f_buf |= int(f.read(1)[0]) << (22 - f_pos)
-                    f_pos += 8
+                    # Read and decode Huffman; we'll need the bits regardless
+                    if f_pos < 9:
+                        f_buf |= int(f.read(1)[0]) << (22 - f_pos)
+                        f_pos += 8
 
                     if f_buf >> 28:
-                        if (f_buf >> 27) == 0b11:
-                            match_size = 1
-                            delta = 2
-                        else:
-                            proposed_code = f_buf >> 25
-                            delta = 4
-                            if proposed_code == 0b1000:
-                                match_size = 2
-                            elif proposed_code == 0b1011:
-                                match_size = 3
-                            else:
-                                if (f_buf >> 24) == 0b10100:
-                                    match_size = 4
-                                    delta = 5
-                                else:
-                                    proposed_code = f_buf >> 23
-                                    delta = 6
-                                    if proposed_code == 0b100100:
-                                        match_size = 5
-                                    elif proposed_code == 0b100110:
-                                        match_size = 6
-                                    elif proposed_code == 0b101011:
-                                        match_size = 7
-                                    elif proposed_code == 0b100111:
-                                        match_size = 13
-                                    else:
-                                        proposed_code = f_buf >> 22
-                                        delta = 7
-                                        if proposed_code == 0b1001011:
-                                            match_size = 8
-                                        elif proposed_code == 0b1010100:
-                                            match_size = 9
-                                        else:
-                                            proposed_code = f_buf >> 21
-                                            delta = 8
-                                            if proposed_code == 0b10010100:
-                                                match_size = 10
-                                            elif proposed_code == 0b10010101:
-                                                match_size = 11
-                                            elif proposed_code == 0b10101010:
-                                                match_size = 12
-                                            elif proposed_code == 0b10101011:
-                                                f_pos = f_buf = 0  # FLUSH
-                                                continue
-                                            else:
-                                                raise RuntimeError("Invalid Huffman code")
-                    else:  # 0b0
+                        code = (f_buf >> 21) & 0x7F
+                        code = 33 if code >= 64 else huffman_table[code]
+                        match_size = code & 0xF
+                        if match_size == _FLUSH:
+                            f_buf = f_pos = 0
+                            continue
+                        delta = code >> 4
+                    else:
                         match_size = 0
                         delta = 1
 
                     token_bits = 1 + delta + w_bits
+
                     while f_pos < token_bits:
                         f_buf |= int(f.read(1)[0]) << (22 - f_pos)
                         f_pos += 8

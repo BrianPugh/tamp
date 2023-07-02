@@ -8,10 +8,10 @@ from micropython import const
 from . import ExcessBitsError, bit_size, compute_min_pattern_size, initialize_dictionary
 
 # encodes [2, 15] pattern lengths
-huffman_codes = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
+_HUFFMAN_CODES = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
 # These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
-huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07"
-FLUSH_CODE = const(0xAB)  # 8 bits
+_HUFFMAN_BITS = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07"
+_FLUSH_CODE = const(0xAB)  # 8 bits
 
 
 def _f_write(f, number, size):
@@ -27,22 +27,15 @@ class Compressor:
         literal=8,
         dictionary=None,
     ):
+        self._close_f_on_close = False
         if not hasattr(f, "write"):  # It's probably a path-like object.
             f = open(str(f), "wb")
             self._close_f_on_close = True
-        else:
-            self._close_f_on_close = False
 
         self.window_bits = window
         self.literal_bits = literal
 
         self.min_pattern_size = compute_min_pattern_size(window, literal)
-        self.max_pattern_size = self.min_pattern_size + 13
-        self.max_pattern_bytes_exclusive = self.max_pattern_size + 1
-
-        self.f = f
-        self.f_buf = 0
-        self.f_pos = 0
 
         # Window Buffer
         if dictionary:
@@ -54,11 +47,12 @@ class Compressor:
         self.window_pos = 0
 
         # Input Buffer
-        self.input_buf = bytearray(self.max_pattern_size)
+        self.input_buf = bytearray(16)
         self.input_size = 0
         self.input_pos = 0
 
         # Write header
+        self.f = f
         self.f_buf = ((window - 8) << 5 | (literal - 5) << 3 | int(bool(dictionary)) << 2) << (22)
         self.f_pos = 8
 
@@ -75,8 +69,8 @@ class Compressor:
 
         f_buf = int(self.f_buf)
         f_pos = int(self.f_pos)
-        huffman_bits_ptr8 = ptr8(huffman_bits)
-        huffman_codes_ptr8 = ptr8(huffman_codes)
+        huffman_bits_ptr8 = ptr8(_HUFFMAN_BITS)
+        huffman_codes_ptr8 = ptr8(_HUFFMAN_CODES)
 
         window_bits = int(self.window_bits)
         window_buf = ptr8(self.window_buf)
@@ -84,7 +78,6 @@ class Compressor:
         window_pos = int(self.window_pos)
 
         min_pattern_size = int(self.min_pattern_size)
-        max_pattern_size = int(self.max_pattern_size)
 
         f = self.f
 
@@ -97,16 +90,14 @@ class Compressor:
                 if input_buf[input_pos] != window_buf[window_index]:
                     continue  # Significant speed short-cut
 
-                input_index = (input_pos + 1) % max_pattern_size
+                input_index = (input_pos + 1) & 0xF
                 if input_buf[input_index] != window_buf[window_index + 1]:
                     continue  # Small Speed short-cut
 
                 current_match_size = int(2)
                 for k in range(current_match_size, input_size):
-                    input_index = (input_pos + k) % max_pattern_size
-                    if input_buf[input_index] != window_buf[window_index + k]:
-                        break
-                    if window_index + k >= window_size:
+                    input_index = (input_pos + k) & 0xF
+                    if input_buf[input_index] != window_buf[window_index + k] or window_index + k >= window_size:
                         break
                     current_match_size = k + 1
                 if current_match_size > match_size:
@@ -149,7 +140,7 @@ class Compressor:
 
         for _ in range(match_size):  # Copy pattern into buffer
             window_buf[window_pos] = input_buf[input_pos]
-            input_pos = (input_pos + 1) % max_pattern_size
+            input_pos = (input_pos + 1) & 0xF
             window_pos = (window_pos + 1) % window_size
 
         input_size -= match_size
@@ -172,13 +163,13 @@ class Compressor:
 
         input_buf = ptr8(self.input_buf)
 
-        max_pattern_size = int(self.max_pattern_size)
+        max_pattern_size = int(self.min_pattern_size) + 13
 
         for i in range(data_l):
             input_size = int(self.input_size)
             input_pos = int(self.input_pos)
 
-            pos = (input_pos + input_size) % max_pattern_size
+            pos = (input_pos + input_size) & 0xF
             input_buf[pos] = data_p[i]
             input_size += 1
             self.input_size = input_size
@@ -194,11 +185,11 @@ class Compressor:
 
         if self.f_pos > 0 and write_token:
             self.f_pos += 9
-            self.f_buf |= FLUSH_CODE << (30 - self.f_pos)
+            self.f_buf |= _FLUSH_CODE << (30 - self.f_pos)
 
         while self.f_pos > 0:
             _f_write(self.f, self.f_buf >> 22, 1)
-            self.f_buf = (self.f_buf & 0x03FFFFF) << 8
+            self.f_buf = (self.f_buf & 0x3FFFFF) << 8
             self.f_pos -= 8
             bytes_written += 1
 
@@ -207,8 +198,7 @@ class Compressor:
         return bytes_written
 
     def close(self):
-        bytes_written = 0
-        bytes_written += self.flush(write_token=False)
+        bytes_written = self.flush(write_token=False)
         if self._close_f_on_close:
             self.f.close()
         return bytes_written
