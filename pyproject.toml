@@ -52,6 +52,7 @@ ipdb = ">=0.13.13"
 mpremote = ">=1.20.0"
 cython = ">=0.29.34"
 pytest-subtests = ">=0.10.0"
+pyelftools = "^0.29"
 
 [tool.poetry.group.profile]
 optional = true

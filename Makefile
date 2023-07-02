@@ -1,6 +1,17 @@
 .PHONY: clean test collect-data venv
 
 
+ifdef MPY_DIR
+
+# Native machine code in .mpy files
+# User can define architecture in call like "make ARCH=armv6m"
+MOD = tamp
+SRC = tamp/_c_src/mpy_bindings/bindings.c tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c tamp/_c_src/tamp/common.c
+CFLAGS += -Itamp/_c_src
+include $(MPY_DIR)/py/dynruntime.mk
+
+else
+
 venv:
 	@. .venv/bin/activate
 
@@ -126,3 +137,5 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HEADERS)
 $(BUILDDIR)/%.o: %.c $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+endif
