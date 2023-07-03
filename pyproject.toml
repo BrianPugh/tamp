@@ -57,7 +57,7 @@ pytest-subtests = ">=0.10.0"
 optional = true
 
 [tool.poetry.group.profile.dependencies]
-line-profiler = "<4.0.0"
+line-profiler = "<5.0.0"
 
 [tool.belay]
 name = "tamp"
