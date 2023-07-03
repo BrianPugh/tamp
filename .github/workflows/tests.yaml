@@ -65,7 +65,7 @@ jobs:
           installer-parallel: false # Currently there seems to be some race-condition in windows
 
       - name: Install MicroPython
-        uses: BrianPugh/install-micropython@44df76d5e89b9a1ac8128af1c8aefdc953162dea
+        uses: BrianPugh/install-micropython@v1
 
       - name: Install library
         run: poetry install --no-interaction
