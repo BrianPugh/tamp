@@ -676,13 +676,13 @@ files = [
 
 [[package]]
 name = "dunamai"
-version = "1.17.0"
+version = "1.18.0"
 description = "Dynamic version generation"
 optional = false
 python-versions = ">=3.5,<4.0"
 files = [
-    {file = "dunamai-1.17.0-py3-none-any.whl", hash = "sha256:5aa4ac1085de10691269af021b10497261a5dd644f277e2a21822212604d877b"},
-    {file = "dunamai-1.17.0.tar.gz", hash = "sha256:459381b585a1e78e4070f0d38a6afb4d67de2ee95064bf6b0438ec620dde0820"},
+    {file = "dunamai-1.18.0-py3-none-any.whl", hash = "sha256:f9284a9f4048f0b809d11539896e78bde94c05b091b966a04a44ab4c48df03ce"},
+    {file = "dunamai-1.18.0.tar.gz", hash = "sha256:5200598561ea5ba956a6174c36e402e92206c6a6aa4a93a6c5cb8003ee1e0997"},
 ]
 
 [package.dependencies]
@@ -1722,17 +1722,17 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "poetry-dynamic-versioning"
-version = "0.22.0"
+version = "0.25.0"
 description = "Plugin for Poetry to enable dynamic versioning based on VCS tags"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "poetry_dynamic_versioning-0.22.0-py3-none-any.whl", hash = "sha256:4864371c930e5d9a8144a9457c5a49c32cc44efd2370242721cb0240e8a9bf0e"},
-    {file = "poetry_dynamic_versioning-0.22.0.tar.gz", hash = "sha256:f148b77337821a8e1c24a78ad98326d2189da0b84b76572b8d011fc4218e9ac1"},
+    {file = "poetry_dynamic_versioning-0.25.0-py3-none-any.whl", hash = "sha256:8dd146f2c5a12ae43145e82bed3386048880ebd52e1c52ae5517c62cb25206d3"},
+    {file = "poetry_dynamic_versioning-0.25.0.tar.gz", hash = "sha256:f751f345405f968e49423df147160b5c936960aabbee00fa4b74d3a4964789b1"},
 ]
 
 [package.dependencies]
-dunamai = ">=1.17.0,<2.0.0"
+dunamai = ">=1.18.0,<2.0.0"
 jinja2 = ">=2.11.1,<4"
 tomlkit = ">=0.4"
 
