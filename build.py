@@ -36,6 +36,7 @@ def build_cython_extensions():
             "-Werror",
             "-Wno-unreachable-code-fallthrough",
             "-Wno-deprecated-declarations",
+            "-Wno-parentheses-equality",
         ]
     include_dirs = ["tamp/_c_src/", "tamp/"]
 
