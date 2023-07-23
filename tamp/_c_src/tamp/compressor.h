@@ -60,6 +60,23 @@ void tamp_compressor_sink(
 /**
  * @brief Run a single compression iteration on the internal input buffer.
  *
+ * The most that will ever be written to output in a single invocation is:
+ *
+ *     (1 + 8 + WINDOW_BITS + 7) // 8
+ *
+ * or more simply:
+ *
+ *     (16 + WINDOW_BITS) // 8
+ *
+ * where // represents floor-division.  Explanation:
+ *      * 1 - is_literal bit
+ *      * 8 - maximum huffman code length
+ *      * WINDOW_BITS - The number of bits to represent the match index. By default, 10.
+ *      * 7 - The internal bit buffer may have up to 7 bits from a previous invocation.
+ *      * // 8 - Floor divide by 8 to get bytes; the upto remaining 7 bits remain in the internal output bit buffer.
+ *
+ * A reasonable 4-byte output buffer should be able to handle any compressor configuration.
+ *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
  * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
