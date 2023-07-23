@@ -45,7 +45,7 @@ Features
 
 Installation
 ============
-Tamp contains 3 implementationss:
+Tamp contains 3 implementations:
 
 1. A desktop Cpython implementation that is optimized for readability
 

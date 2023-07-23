@@ -51,6 +51,23 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
 /**
  * @brief Decompress an input stream of data.
  *
+ * Input data is **not** guaranteed to be consumed.  Imagine if a 6-byte sequence has been encoded, and
+ * tamp_decompressor_decompress is called multiple times with a 2-byte output buffer:
+ *
+ *     1.  On the 1st call, a few input bytes may be consumed, filling the internal input buffer.
+ *         The first 2 bytes of the 6-byte output sequence are returned.
+ *         The internal input buffer remains full.
+ *     2.  On the 2nd call, no input bytes are consumed since the internal input buffer is still full.
+ *         The {3, 4} bytes of the 6-byte output sequence are returned.
+ *         The internal input buffer remains full.
+ *     3.  On the 3rd call, no input bytes are consumed since the internal input buffer is still full.
+ *         The {5, 6} bytes of the 6-byte output sequence are returned.
+ *         The input buffer is no longer full since this sequence has now been fully decoded.
+ *     4.  On the 4th call, more input bytes are consumed, potentially filling the internal input buffer.
+ *         It is not strictly necessary for the internal input buffer to be full to further decode the output.
+ *         There simply has to be enough to decode a token/literal.
+ *         If there is not enough bits in the internal input buffer, then TAMP_INPUT_EXHAUSTED will be returned.
+ *
  * @param[in,out] TampDecompressor object to perform decompression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output decompressed data.
  * @param[in] output_size Size of the pre-allocated buffer. Will decompress up-to this many bytes.
