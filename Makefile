@@ -95,6 +95,39 @@ mpy-size:
 mpy-compression-benchmark:
 	@time belay run micropython -X heapsize=300M tools/micropython-compression-benchmark.py
 
+CTEST_CC = gcc
+CTEST_CFLAGS = -Ictests/Unity/src -Itamp/_c_src
+CTEST_LDFLAGS = -Lctests/unity
+CTEST_LIBS = -lunity
+
+mkdir-build:
+	mkdir -p build
+	mkdir -p build/ctests
+	mkdir -p build/unity
+
+TAMP_OBJS = \
+	build/common.o \
+	build/compressor.o \
+	build/decompressor.o
+
+CTEST_OBJS = \
+	build/unity/unity.o \
+	build/ctests/test_decompressor.o
+
+build/%.o: tamp/_c_src/tamp/%.c mkdir-build
+	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
+
+build/unity/%.o:: ctests/Unity/src/%.c ctests/Unity/src/%.h
+	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
+
+build/ctests/%.o: ctests/%.c
+	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
+
+build/test_runner: $(TAMP_OBJS) $(CTEST_OBJS)
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_LDFLAGS) -o $@ $^ $(LIBS)
+
+c-test: build/test_runner
+	./build/test_runner
 
 #############
 # C Library #
