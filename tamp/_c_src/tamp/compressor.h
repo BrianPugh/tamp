@@ -94,6 +94,12 @@ tamp_res tamp_compressor_compress_poll(
 /**
  * @brief Completely flush the internal bit buffer. Makes output "complete".
  *
+ * At a maximum, the compressor will have 16 bytes in it's input buffer.
+ * The worst-case compression scenario would use `literal + 1` bits per input byte.
+ * This means that for the typical `literal=8` scenario, the output buffer size
+ * should be 18 bytes long. If `write_token=true`, then the output buffer size should
+ * be 20 bytes long to absolutely guarantee a complete flush.
+ *
  * @param[in,out] compressor TampCompressor object to flush.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
  * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
