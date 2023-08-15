@@ -31,17 +31,11 @@ tamp = "tamp.cli.main:run_app"
 python = ">=3.8"
 typer = ">=0.6.0"
 
-[tool.poetry.group.docs]
-optional = true
-
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=4.5.0"
 sphinx_rtd_theme = ">=1.0.0"
 gitpython = ">=3.1.31"
 sphinx-copybutton = ">=0.5.2"
-
-[tool.poetry.group.dev]
-optional = true
 
 [tool.poetry.group.dev.dependencies]
 coverage = {extras = ["toml"], version = ">=5.1"}
