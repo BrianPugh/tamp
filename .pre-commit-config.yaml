@@ -1,13 +1,13 @@
 exclude: ^(poetry.lock|.idea/|.belay/)
 repos:
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.0.265"
+    rev: "v0.0.284"
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
 
   - repo: https://github.com/psf/black
-    rev: 23.3.0
+    rev: 23.7.0
     hooks:
       - id: black
         args:
@@ -19,7 +19,7 @@ repos:
         types: [python]
 
   - repo: https://github.com/adamchainz/blacken-docs
-    rev: 1.13.0
+    rev: 1.15.0
     hooks:
       - id: blacken-docs
 
@@ -49,7 +49,7 @@ repos:
         exclude: \.(html|svg)$
 
   - repo: https://github.com/fredrikaverpil/creosote.git
-    rev: v2.6.1
+    rev: v2.6.3
     hooks:
       - id: creosote
         args:
@@ -59,7 +59,7 @@ repos:
           - "--sections=tool.poetry.dependencies"
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.2.4
+    rev: v2.2.5
     hooks:
       - id: codespell
         additional_dependencies:

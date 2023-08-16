@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Literal, Optional, Union, overload
 
@@ -10,18 +12,18 @@ from .decompressor import decompress as decompress
 
 __version__: str
 
-PathLike = Union[Path, str]
+PathLike = Path | str
 
 OpenTextModeWriting = Literal["w", "wt", "tw"]
 OpenTextModeReading = Literal["r", "rt", "tr"]
-OpenTextMode = Union[OpenTextModeWriting, OpenTextModeReading]
+OpenTextMode = OpenTextModeWriting | OpenTextModeReading
 
 OpenBinaryModeWriting = Literal["wb", "bw"]
 OpenBinaryModeReading = Literal["rb", "br"]
-OpenBinaryMode = Union[OpenBinaryModeReading, OpenBinaryModeWriting]
+OpenBinaryMode = OpenBinaryModeReading | OpenBinaryModeWriting
 
-OpenModeWriting = Union[OpenTextModeWriting, OpenBinaryModeWriting]
-OpenModeReading = Union[OpenTextModeReading, OpenBinaryModeReading]
+OpenModeWriting = OpenTextModeWriting | OpenBinaryModeWriting
+OpenModeReading = OpenTextModeReading | OpenBinaryModeReading
 
 @overload
 def open(
