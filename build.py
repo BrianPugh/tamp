@@ -37,6 +37,7 @@ def build_cython_extensions():
             "-Wno-unreachable-code-fallthrough",
             "-Wno-deprecated-declarations",
             "-Wno-parentheses-equality",
+            "-Wno-unreachable-code",  # TODO: This should no longer be necessary with Cython>=3.0.3
         ]
     include_dirs = ["tamp/_c_src/", "tamp/"]
 
