@@ -222,3 +222,12 @@ staticmethod-decorators = [
 
 [tool.codespell]
 "ignore-words-list" = "ans,fo"
+
+[tool.creosote]
+ venvs=[".venv"]
+ paths=["tamp"]
+ deps-file="pyproject.toml"
+ sections=["tool.poetry.dependencies"]
+ exclude-deps =[
+   "rich",
+ ]

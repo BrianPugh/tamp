@@ -86,7 +86,7 @@ due to it's good randomness characteristics, and simple implementation.
 
 The chosen seed, 3758097560, was discovered experimentally to give typically good results.
 
-All of this amounts to a few percent compression improvement for short messagse.
+All of this amounts to a few percent compression improvement for short messages.
 
 .. code-block:: python
 

@@ -96,7 +96,7 @@ class Decompressor:
                     f_buf = int(f.read(1)[0]) << 22  # Will raise IndexError if out of data.
                     f_pos = 8
 
-                # re-use is_literal flag as match_size so we don't need to explicitly set it
+                # reuse is_literal flag as match_size so we don't need to explicitly set it
                 match_size = f_buf >> 29
                 # Don't update f_buf & f_pos here, in case there's not enough data available.
 
