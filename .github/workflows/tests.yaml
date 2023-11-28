@@ -9,6 +9,7 @@
 name: tests
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -27,7 +28,7 @@ jobs:
         # Disabling macOS and Windows; no os-dependent stuff in Tamp
         # Reduces Github Action billing.
         os: [ubuntu-latest] # , macos-latest, windows-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     env:
       OS: ${{ matrix.os }}
       PYTHON: ${{ matrix.python-version }}
