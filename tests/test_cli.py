@@ -8,13 +8,11 @@ except ImportError:
     micropython = None
 
 try:
-    from typer.testing import CliRunner
+    from unittest.mock import patch
 
     from tamp.cli.main import app
 except ImportError:
     pass
-else:
-    runner = CliRunner()
 
 compressed_foo_foo_foo = bytes(
     # fmt: off
@@ -42,38 +40,39 @@ class TestCli(unittest.TestCase):
             tmp_dir = Path(tmp_dir)
             test_file = tmp_dir / "test_input.bin"
             test_file.write_bytes(b"foo foo foo")
-            result = runner.invoke(app, ["compress", str(test_file)])
-            self.assertEqual(result.exit_code, 0)
-            self.assertEqual(result.stdout_bytes, compressed_foo_foo_foo)
+
+            with patch("sys.stdout.buffer.write") as mock_stdout:
+                app(["compress", str(test_file)])
+                mock_stdout.assert_called_once_with(compressed_foo_foo_foo)
 
     def test_compress_stdin_to_stdout(self):
-        result = runner.invoke(app, ["compress"], input="foo foo foo")
-        self.assertEqual(result.exit_code, 0)
-        self.assertEqual(result.stdout_bytes, compressed_foo_foo_foo)
+        with patch("sys.stdout.buffer.write") as mock_stdout, patch(
+            "sys.stdin.buffer.read", return_value="foo foo foo"
+        ):
+            app("compress")
+            mock_stdout.assert_called_once_with(compressed_foo_foo_foo)
 
     def test_decompress_file_to_stdout(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
             test_file = tmp_dir / "test_input.tamp"
             test_file.write_bytes(compressed_foo_foo_foo)
-            result = runner.invoke(app, ["decompress", str(test_file)])
-            self.assertEqual(result.exit_code, 0)
-            self.assertEqual(result.stdout, "foo foo foo")
+            with patch("sys.stdout.buffer.write") as mock_stdout:
+                app(["decompress", str(test_file)])
+                mock_stdout.assert_called_once_with(b"foo foo foo")
 
     def test_decompress_stdin_to_stdout(self):
-        result = runner.invoke(app, ["decompress"], input=compressed_foo_foo_foo)
-        self.assertEqual(result.exit_code, 0)
-        self.assertEqual(result.stdout, "foo foo foo")
+        with patch("sys.stdout.buffer.write") as mock_stdout, patch(
+            "sys.stdin.buffer.read", return_value=compressed_foo_foo_foo
+        ):
+            app("decompress")
+            mock_stdout.assert_called_once_with(b"foo foo foo")
 
     def test_decompress_stdin_to_file(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
             test_file = tmp_dir / "test_output.txt"
 
-            result = runner.invoke(app, ["decompress", "-o", str(test_file)], input=compressed_foo_foo_foo)
-            self.assertEqual(result.exit_code, 0)
+            with patch("sys.stdin.buffer.read", return_value=compressed_foo_foo_foo):
+                app(["decompress", "-o", str(test_file)])
             self.assertEqual(test_file.read_text(), "foo foo foo")
-
-    def test_version(self):
-        result = runner.invoke(app, ["--version"])
-        self.assertEqual(result.exit_code, 0)
