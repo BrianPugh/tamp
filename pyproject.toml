@@ -29,7 +29,7 @@ tamp = "tamp.cli.main:run_app"
 [tool.poetry.dependencies]
 # Be as loose as possible if writing a library.
 python = "^3.8"
-cyclopts = "^0.2.0"
+cyclopts = ">=1.0.0"
 typing-extensions = ">=4.8.0"
 
 [tool.poetry.group.docs.dependencies]
