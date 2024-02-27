@@ -25,9 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Disabling macOS and Windows; no os-dependent stuff in Tamp
-        # Reduces Github Action billing.
-        os: [ubuntu-latest] # , macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     env:
       OS: ${{ matrix.os }}
@@ -45,7 +43,7 @@ jobs:
           echo 'ACTIVATE_PYTHON_VENV=.venv/bin/activate' >> $GITHUB_ENV
 
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Cache $HOME/.local # Significantly speeds up Poetry Install
         uses: actions/cache@v3
@@ -54,7 +52,7 @@ jobs:
           key: dotlocal-${{ runner.os }}-${{ hashFiles('.github/workflows/tests.yml') }}
 
       - name: Set up python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
