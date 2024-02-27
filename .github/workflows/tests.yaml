@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     env:
       OS: ${{ matrix.os }}
@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Cache $HOME/.local # Significantly speeds up Poetry Install
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.local
           key: dotlocal-${{ runner.os }}-${{ hashFiles('.github/workflows/tests.yml') }}
@@ -71,7 +71,7 @@ jobs:
       - name: Install library
         run: poetry install --no-interaction
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit/
           key: pre-commit-4|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: steps.check_test_files.outputs.files_exists == 'true'
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: unittests

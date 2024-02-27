@@ -207,6 +207,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Sanitize matrix.cibw_build
+        id: sanitize_build
+        run: echo "CIBW_BUILD_SANITIZED=$(echo '${{ matrix.cibw_build }}' | sed 's/\*/_/g')" >> $GITHUB_ENV
+        shell: bash
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -244,7 +249,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ matrix.cibw_build }}-${{ matrix.cibw_archs }}
+          name: wheels-${{ matrix.os }}-${{ env.CIBW_BUILD_SANITIZED }}-${{ matrix.cibw_archs }}
           path: ./wheelhouse/*.whl
 
   upload_to_pypi:
