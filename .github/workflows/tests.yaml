@@ -65,6 +65,8 @@ jobs:
 
       - name: Install MicroPython
         uses: BrianPugh/install-micropython@v1
+        with:
+          reference: v1.20.0
 
       - name: Install library
         run: poetry install --no-interaction
