@@ -18,7 +18,7 @@ static inline uint32_t xorshift32(uint32_t *state) {
 
 
 void tamp_initialize_dictionary(unsigned char *buffer, size_t size){
-    uint32_t seed = 3758097560;
+    uint32_t seed = 3758097560;  // This was experimentally discovered with tools/find_seed.py
     uint32_t randbuf = 0;
     for(size_t i=0; i < size; i++){
         if( TAMP_UNLIKELY((i & 0x7) == 0) )
