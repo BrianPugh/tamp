@@ -6,6 +6,15 @@
 
 #define FLUSH 15
 
+/**
+ * This array was generated with tools/huffman_jump_table.py
+ *
+ * The idea is that the resulting code is smaller/faster as a lookup table than a bunch of if/else statements.
+ *
+ * Of each element:
+ *  * The upper 4 bits express the number of bits to decode.
+ *  * The lower 4 bits express the decoded value, with FLUSH being represented as 0b1111
+ */
 static const uint8_t HUFFMAN_TABLE[128] = {50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 85, 85, 85, 85, 122, 123, 104, 104, 86, 86, 86, 86, 93, 93, 93, 93, 68, 68, 68, 68, 68, 68, 68, 68, 105, 105, 124, 127, 87, 87, 87, 87, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17};
 
 
