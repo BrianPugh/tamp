@@ -48,6 +48,7 @@ def build_cython_extensions():
             [
                 "tamp/_c_src/tamp/common.c",
                 "tamp/_c_src/tamp/compressor.c",
+                "tamp/_c_src/tamp/compressor_32bit.cpp",
                 "tamp/_c_compressor.pyx",
             ],
             include_dirs=include_dirs,

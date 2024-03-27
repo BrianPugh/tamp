@@ -1,5 +1,9 @@
-#include "compressor.h"
 #include "common.h"
+
+
+#if !TAMP_32BIT
+
+#include "compressor.h"
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -357,3 +361,5 @@ tamp_res tamp_compressor_compress_and_flush(
 
     return TAMP_OK;
 }
+
+#endif // !TAMP_32BIT

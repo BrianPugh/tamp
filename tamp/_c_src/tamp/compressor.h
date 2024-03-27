@@ -11,9 +11,22 @@ extern "C" {
 typedef struct TampCompressor{
     /* nicely aligned attributes */
     unsigned char *window;
-    unsigned char input[16];
+    unsigned char input[16] /* __attribute__ ((aligned (16)))*/;
     uint32_t bit_buffer;
 
+#if TAMP_32BIT // Avoid bitfields for speed.
+    uint32_t window_pos;
+    uint32_t bit_buffer_pos;
+
+    uint32_t input_size;
+    uint32_t input_pos;    
+
+    /* Conf attributes */
+    uint8_t conf_window;   // number of window bits
+    uint8_t conf_literal;  // number of literal bits
+    uint8_t conf_use_custom_dictionary;  // Use a custom initialized dictionary.
+    uint8_t min_pattern_size;
+#else
     /* Conf attributes */
     uint32_t conf_window:4;   // number of window bits
     uint32_t conf_literal:4;  // number of literal bits
@@ -26,6 +39,7 @@ typedef struct TampCompressor{
 
     uint32_t input_size:5;
     uint32_t input_pos:4;
+#endif
 } TampCompressor;
 
 
@@ -48,14 +62,23 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[in] input Pointer to the input data to be sinked into compressor.
  * @param[in] input_size Size of input.
- * @param[out] consumed_size Number of bytes of input consumed. May be NULL.
+ * @return Number of input bytes consumed
  */
+#if TAMP_32BIT
+size_t tamp_compressor_sink(
+        TampCompressor *compressor,
+        const unsigned char *input,
+        size_t input_size
+        // size_t *consumed_size
+        );
+#else
 void tamp_compressor_sink(
         TampCompressor *compressor,
         const unsigned char *input,
         size_t input_size,
         size_t *consumed_size
         );
+#endif
 
 /**
  * @brief Run a single compression iteration on the internal input buffer.
