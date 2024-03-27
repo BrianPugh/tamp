@@ -268,15 +268,16 @@ Memory Usage
 ^^^^^^^^^^^^
 The following table shows approximately how much memory each algorithm uses during compression and decompression.
 
-+---------------+-------------------+------------------------------+-------------------+
-| Action        | tamp              | zlib                         | heatshrink        |
-+===============+===================+==============================+===================+
-| Compression   | (1 << windowBits) | (1 << (windowBits+2)) + 7 KB | (1 << windowBits) |
-+---------------+-------------------+------------------------------+-------------------+
-| Decompression | (1 << windowBits) | (1 << windowBits) + 7 KB     | (1 << windowBits) |
-+---------------+-------------------+------------------------------+-------------------+
++---------------+-------------------+------------------------------+-------------------------+
+| Action        | tamp              | zlib                         | heatshrink              |
++===============+===================+==============================+=========================+
+| Compression   | (1 << windowBits) | (1 << (windowBits+2)) + 7 KB | (1 << (windowBits + 1)) |
++---------------+-------------------+------------------------------+-------------------------+
+| Decompression | (1 << windowBits) | (1 << windowBits) + 7 KB     | (1 << (windowBits + 1)) |
++---------------+-------------------+------------------------------+-------------------------+
 
-Both tamp and heatshrink have a few dozen bytes of overhead in addition to the primary window buffer, but are implementation-specific and ignored for clarity here.
+Both Tamp and Heatshrink have a few dozen bytes of overhead in addition to the primary window buffer, but are implementation-specific and ignored for clarity here.
+Tamp uses significantly less memory than ZLib, and half the memory of Heatshrink.
 
 Runtime
 ^^^^^^^
@@ -293,7 +294,7 @@ These tests were performed on an M1 Macbook Air.
 +---------------+--------------------+-------+------+--------------+-----------------+
 
 Heatshrink v0.4.1 was used in these benchmarks.
-When heathshrink uses an index, an additional ``(1 << (windowBits + 1))`` bytes of memory are used, tripling the memory requirement.
+When heathshrink uses an index, an additional ``(1 << (windowBits + 1))`` bytes of memory are used, resulting in 4x more memory-usage than Tamp.
 Tamp could use a similar indexing to increase compression speed, but has chosen not to to focus on the primary goal of a low-memory compressor.
 
 To give an idea of Tamp's speed on an embedded device, the following table shows compression/decompression in **bytes/second of the first 100KB of enwik8 on a pi pico (rp2040)** at the default 125MHz clock rate.
