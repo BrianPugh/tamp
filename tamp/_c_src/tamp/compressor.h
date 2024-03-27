@@ -1,6 +1,8 @@
 #ifndef TAMP_COMPRESSOR_H
 #define TAMP_COMPRESSOR_H
 
+/* Modification of the original tamp compressor.h, 2024 <https://github.com/BitsForPeople> */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -69,7 +71,6 @@ size_t tamp_compressor_sink(
         TampCompressor *compressor,
         const unsigned char *input,
         size_t input_size
-        // size_t *consumed_size
         );
 #else
 void tamp_compressor_sink(

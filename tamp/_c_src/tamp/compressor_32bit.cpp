@@ -112,71 +112,74 @@ static void shift_input(TampCompressor* compressor) noexcept {
 
 // Object to hold a temporary copy of input data (also enforcing alignment)
 class InputCopy {
-    const TampCompressor& compressor;
-    alignas(16) uint8_t input[sizeof(TampCompressor::input)];
     public:
 
-    InputCopy(const TampCompressor& compressor) noexcept : compressor {compressor} {
-        (void)input;
-    }
-
-    /**
-     * @brief Returns a pointer to a sequence of at least \p minBytes bytes from the compressor's current input
-     * buffer. Makes a copy of the bytes and returns a pointer into \c this->input if necessary.
-     * 
-     * @param minBytes minimum amount of sequential bytes wanted
-     * @return pointer to a sequence of input bytes, either in \c compressor.input or to the copy in \c this->input. 
-     */
-    const uint8_t* getInput(const uint32_t minBytes) noexcept {
-        constexpr uint32_t INBUF_SIZE = sizeof(TampCompressor::input);
-
-        const uint32_t ipos = compressor.input_pos;
-        if(ipos == 0) {
-            // Nothing to be done.
-            return compressor.input;
+        InputCopy(const TampCompressor& compressor) noexcept : compressor {compressor} {
+            (void)input;
         }
 
-        if constexpr (tamp::Arch::ESP32S3 && INBUF_SIZE == 16) {
+        /**
+         * @brief Returns a pointer to a sequence of at least \p minBytes bytes from the compressor's current input
+         * buffer. Makes a copy of the bytes and returns a pointer into \c this->input if necessary.
+         * 
+         * @param minBytes minimum amount of sequential bytes wanted
+         * @return pointer to a sequence of input bytes, either in \c compressor.input or to the copy in \c this->input. 
+         */
+        const uint8_t* getInput(const uint32_t minBytes) noexcept {
+            constexpr uint32_t INBUF_SIZE = sizeof(TampCompressor::input);
 
-            // Rotate 16 bytes from compressor.input 'right' (down) by ipos bytes and
-            // store in this->input.
-
-            asm volatile (
-                // Load
-                "EE.LD.128.USAR.IP q0, %[input], 16" "\n"
-                "EE.VLD.128.IP q1, %[input], -16" "\n"
-                // Align
-                "EE.SRC.Q q0, q0, q1" "\n"
-                // Rotate
-                "WUR.SAR_BYTE %[shift]" "\n"
-                "EE.SRC.Q q0, q0, q0" "\n"
-                // Store
-                "EE.VST.128.IP q0, %[out], 0" "\n"
-                : 
-                    "=m" (this->input)
-                : 
-                    [input] "r" (compressor.input),
-                    [shift] "r" (ipos),
-                    [out] "r" (this->input),
-                    "m" (compressor.input)
-            );
-
-            return this->input;
-
-        } else {
-
-            const uint32_t l1 = INBUF_SIZE - ipos;
-            if(minBytes <= l1) {
+            const uint32_t ipos = compressor.input_pos;
+            if(ipos == 0) {
                 // Nothing to be done.
-                return compressor.input + ipos;
-            } else {      
-                mem::cpy_short<INBUF_SIZE>(this->input, compressor.input + ipos, l1);
-                mem::cpy_short<INBUF_SIZE>(this->input + l1, compressor.input, minBytes - l1);
-                return this->input;
+                return compressor.input;
             }
+
+            if constexpr (tamp::Arch::ESP32S3 && INBUF_SIZE == 16) {
+
+                // Rotate 16 bytes from compressor.input 'right' (down) by ipos bytes and
+                // store in this->input.
+
+                asm volatile (
+                    // Load
+                    "EE.LD.128.USAR.IP q0, %[input], 16" "\n"
+                    "EE.VLD.128.IP q1, %[input], -16" "\n"
+                    // Align
+                    "EE.SRC.Q q0, q0, q1" "\n"
+                    // Rotate
+                    "WUR.SAR_BYTE %[shift]" "\n"
+                    "EE.SRC.Q q0, q0, q0" "\n"
+                    // Store
+                    "EE.VST.128.IP q0, %[out], 0" "\n"
+                    : 
+                        "=m" (this->input)
+                    : 
+                        [input] "r" (compressor.input),
+                        [shift] "r" (ipos),
+                        [out] "r" (this->input),
+                        "m" (compressor.input)
+                );
+
+                return this->input;
+
+            } else {
+
+                const uint32_t l1 = INBUF_SIZE - ipos;
+                if(minBytes <= l1) {
+                    // Nothing to be done.
+                    return compressor.input + ipos;
+                } else {      
+                    mem::cpy_short<INBUF_SIZE>(this->input, compressor.input + ipos, l1);
+                    mem::cpy_short<INBUF_SIZE>(this->input + l1, compressor.input, minBytes - l1);
+                    return this->input;
+                }
+            }
+
         }
 
-    }
+    private:
+
+        const TampCompressor& compressor;
+        alignas(16) uint8_t input[sizeof(TampCompressor::input)];    
 };
 
 /**
@@ -225,8 +228,6 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
             return TAMP_INVALID_CONF;
     }
 
-    // for(u8 i=0; i < sizeof(TampCompressor); i++)  // Zero-out the struct
-    //     ((unsigned char *)compressor)[i] = 0;
     std::memset(compressor,0,sizeof(*compressor));
 
     compressor->conf_literal = conf->literal;
@@ -298,43 +299,16 @@ tamp_res tamp_compressor_compress_poll(TampCompressor* const compressor, unsigne
             write_to_bit_buffer(compressor, match_index, compressor->conf_window);
         }
     }
-    // if(false) {
-    //     const uint32_t ws = WINDOW_SIZE;
-    //     uint32_t wl1 = ws - compressor->window_pos;
-    //     // uint32_t il1 = sizeof(TampCompressor::input)-compressor->input_pos;
-    //     uint32_t l1 = MIN(wl1,match_size);
-    //     // l1 = MIN(match_size,wl1);
-    //     mem::cpy_short(compressor->window + compressor->window_pos, compressor->input + compressor->input_pos, l1);
-    //     if(l1 == match_size) [[likely]] {
-    //         compressor->window_pos += match_size;
-    //     } else {
-    //     // if(l1 < match_size) [[unlikely]] {
-    //         mem::cpy_short(compressor->window, compressor->input + compressor->input_pos + l1, match_size-l1);
-    //         compressor->window_pos = match_size-l1;
-    //     }
-    //     // compressor->window_pos = (compressor->window_pos + match_size) & window_mask;        
-    //     if(compressor->input_size != match_size) [[likely]] {
-    //         compressor->input_size -= match_size;
-    //         compressor->input_pos = input_add(match_size);            
-    //     } else {
-    //         compressor->input_size = 0;
-    //         compressor->input_pos = 0;
-    //     }
-        
-    // } else {
-        // Populate Window
-        for(u8 i=0; i < match_size; i++){
-            compressor->window[compressor->window_pos] = read_input(0);
-            compressor->window_pos = (compressor->window_pos + 1) & window_mask;
-            compressor->input_pos = input_add(1);
-        }
-        compressor->input_size -= match_size;
-        // if(compressor->input_size == 0) {
-        //     compressor->input_pos = 0;
-        // }
+    // Populate Window
+    for(u8 i=0; i < match_size; i++){
+        compressor->window[compressor->window_pos] = read_input(0);
+        compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+        compressor->input_pos = input_add(1);
+    }
+    compressor->input_size -= match_size;
+    // if(compressor->input_size == 0) {
+    //     compressor->input_pos = 0;
     // }
-
-    // shift_input(compressor);
 
     return TAMP_OK;
 }
@@ -487,6 +461,7 @@ tamp_res tamp_compressor_compress_and_flush(
             input_size,
             input_consumed_size
             );
+
     if(TAMP_UNLIKELY(res != TAMP_OK))
         return res;
 
@@ -500,10 +475,7 @@ tamp_res tamp_compressor_compress_and_flush(
 
     (*output_written_size) += flush_size;
 
-    // if(TAMP_UNLIKELY(res != TAMP_OK))
-        return res;
-
-    // return TAMP_OK;
+    return res;
 }
 
 } // extern "C"
