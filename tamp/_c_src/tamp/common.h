@@ -1,6 +1,8 @@
 #ifndef TAMP_COMMON_H
 #define TAMP_COMMON_H
 
+/* Modification of the original tamp compressor.h, 2024 <https://github.com/BitsForPeople> */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -8,6 +10,11 @@ extern "C" {
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+/* Should the (32-bit) optimized variant be built? (Faster on 32 bit architectures.) */
+#ifndef TAMP_32BIT
+    #define TAMP_32BIT 1
+#endif
 
 /* Compiler branch optimizations */
 #if defined(__clang__) || (defined(__GNUC__) && (__GNUC__ > 2))
