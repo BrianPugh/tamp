@@ -44,7 +44,7 @@ Compressed output in bytes vs. window size ("window bits (bytes)"), i.e. RAM req
 
 Input: Espressif logo in 24-bit BMP format, 25862 bytes
 
-Compressed output in bytes vs. window size (log2)
+Compressed output in bytes vs. window size ("window bits (bytes)")
 
 +-------------+--------------+----------+----------+----------+----------+----------+----------+
 |             | Uncompressed | 8 (256b) | 9 (512b) | 10 (1kb) | 11 (2kb) | 12 (4kb) | 13 (8kb) |
