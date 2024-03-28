@@ -59,11 +59,11 @@ Compressed output in bytes vs. window size (log2)
 Speed
 -----
 
-Performance on an ESP32-S3 (Xtensa) @ 240 MHz:
+Performance on an **ESP32-S3** (Xtensa) @ **240 MHz**:
 
 Input: Espressif logo in 24-bit BMP format, 25862 bytes
 
-Original C version:
+**Original C** version:
 
 +------------+------------+------------+-----------+-----------+-----------+-----------+
 |            | 8          | 9          | 10        | 11        | 12        | 13        |
@@ -73,7 +73,7 @@ Original C version:
 | Throughput | 244,0 kb/s | 138,7 kb/s | 99,9 kb/s | 60,0 kb/s | 32,3 kb/s | 17,8 kb/s |
 +------------+------------+------------+-----------+-----------+-----------+-----------+
 
-Optimized C/C++ variant:
+**Optimized C/C++** variant:
 
 +-------------+------------+------------+------------+------------+------------+-----------+
 |             | 8          | 9          | 10         | 11         | 12         | 13        |
@@ -85,7 +85,7 @@ Optimized C/C++ variant:
 | Speed (rel) | 2,9 x      | 3,2 x      | 3,4 x      | 3,4 x      | 3,5 x      | 3,6 x     |
 +-------------+------------+------------+------------+------------+------------+-----------+
 
-ESP32-S3 SIMD/PIE variant:
+**ESP32-S3 SIMD/PIE** variant:
 
 +-------------+-------------+-------------+-------------+-------------+------------+------------+
 |             | 8           | 9           | 10          | 11          | 12         | 13         |
@@ -97,6 +97,9 @@ ESP32-S3 SIMD/PIE variant:
 | Speed (rel) | 8,0 x       | 11,8 x      | 14,9 x      | 17,8 x      | 21,8 x     | 24,0 x     |
 +-------------+-------------+-------------+-------------+-------------+------------+------------+
 
+An **ESP32-C3** (RISC-V, max. 160 MHz) consistently runs the original variant about 5% faster and the
+optimized C/C++ variant about 10% faster *per CPU clock cycle* than the ESP32-S3; so the C3 is, for
+this workload, a little more efficient than the S3.
 
 Tamp's original Readme below.
 
