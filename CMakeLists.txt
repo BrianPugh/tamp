@@ -13,16 +13,16 @@ idf_component_register(
     SRCS
         "tamp/_c_src/tamp/common.c"
         "tamp/_c_src/tamp/compressor.c"
-        "tamp/_c_src/tamp/compressor_32bit.cpp"
+        "tamp/_c_src/tamp/compressor_esp32.cpp"
         "tamp/_c_src/tamp/decompressor.c"
     INCLUDE_DIRS "tamp/_c_src"
     PRIV_INCLUDE_DIRS "tamp/_c_src/tamp"
 )
 
-if(CONFIG_TAMP_32BIT)
-    # add_compile_definitions(HEATSHRINK_32BIT=1)
-    add_definitions(-DTAMP_32BIT=1)
+if(CONFIG_TAMP_ESP32)
+    # add_compile_definitions(TAMP_ESP32=1)
+    add_definitions(-DTAMP_ESP32=1)
 else()
-    # add_compile_definitions(HEATSHRINK_32BIT=0)
-    add_definitions(-DTAMP_32BIT=0)
+    # add_compile_definitions(TAMP_ESP32=0)
+    add_definitions(-DTAMP_ESP32=0)
 endif()
