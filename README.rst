@@ -55,6 +55,9 @@ Compressed output in bytes vs. window size (log2)
 | Compression | 1,0 x        | 3,4 x  | 3,3 x  | 4,0 x  | 4,0 x  | 3,9 x  | 3,9 x  |
 +-------------+--------------+--------+--------+--------+--------+--------+--------+
 
+Speed
+-----
+
 Performance on an ESP32-S3 (Xtensa) @ 240 MHz:
 
 Input: Espressif logo in 24-bit BMP format, 25862 bytes
