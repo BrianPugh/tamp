@@ -16,7 +16,7 @@ typedef struct TampCompressor{
     unsigned char input[16] /* __attribute__ ((aligned (16)))*/;
     uint32_t bit_buffer;
 
-#if TAMP_32BIT // Avoid bitfields for speed.
+#if TAMP_ESP32 // Avoid bitfields for speed.
     uint32_t window_pos;
     uint32_t bit_buffer_pos;
 
@@ -66,7 +66,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  * @param[in] input_size Size of input.
  * @return Number of input bytes consumed
  */
-#if TAMP_32BIT
+#if TAMP_ESP32
 size_t tamp_compressor_sink(
         TampCompressor *compressor,
         const unsigned char *input,

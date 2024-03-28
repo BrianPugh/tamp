@@ -1,7 +1,7 @@
 #include "common.h"
 
 
-#if !TAMP_32BIT
+#if !TAMP_ESP32
 
 #include "compressor.h"
 #include <stdlib.h>
@@ -362,4 +362,4 @@ tamp_res tamp_compressor_compress_and_flush(
     return TAMP_OK;
 }
 
-#endif // !TAMP_32BIT
+#endif // !TAMP_ESP32

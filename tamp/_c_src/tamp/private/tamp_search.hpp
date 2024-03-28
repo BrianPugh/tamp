@@ -71,17 +71,6 @@ namespace tamp {
     /**
      * @brief Optimized functions for locating substring ("pattern") matches.
      *
-     * These are heatshrink-specific versions because for heatshrink a match only needs
-     * to \e start inside the given region of memory ("data") and may extend beyond that.
-     * 
-     * Unlike original heatshrink, these search functions do \e forward scans, returning the
-     * lowest-address match instead of the highest-address match. Backward scans may be a bit
-     * faster if recent data is more likely to contain a current byte sequence than not-so-recent
-     * data; and the offsets in the backreferences tend to be smaller values, which might be
-     * beneficial for subsequent entropy coding.
-     * However, using the S3's PIE to iterate in the backward direction would be somewhat clumsy,
-     * so ...
-     *
      */
     class Locator {
         private:
@@ -166,7 +155,7 @@ namespace tamp {
              * 
              * @tparam M 
              * @param x 
-             * @return greates integer multiple of \p M <= \p x
+             * @return greatest integer multiple of \p M <= \p x
              */
             template<uint32_t M>
             static uint32_t multof(const uint32_t x) noexcept {
@@ -197,19 +186,6 @@ namespace tamp {
                 }
             }
 
-            // template<uint32_t M, uint32_t N = 0>
-            // static bool __attribute__((always_inline)) unrolled_find_3(const uint8_t*& data, const uint32_t v) noexcept {
-            //     if((as<uint32_t>(data+N)<<8) != v) [[likely]] {
-            //         if constexpr (N+1 < M) {
-            //             return unrolled_find_3<M,N+1>(data,v);
-            //         } else {
-            //             return false;
-            //         }
-            //     } else {
-            //         incptr<N>(data);
-            //         return true;
-            //     }
-            // }
 
             template<uint32_t M, uint32_t N = 0>
             static bool __attribute__((always_inline)) unrolled_find_3(const uint8_t*& data, const uint32_t vl, const uint32_t vh) noexcept {
@@ -816,7 +792,7 @@ namespace tamp {
                                         return s1-1;
                                     }
                                 } else {
-                                    // Found match begins beyond the end of data.
+                                    // Found match would extend beyond the end of data.
                                     return nullptr;
                                 }
 
@@ -855,7 +831,6 @@ namespace tamp {
                 {
                     const uint8_t* match;
                     uint32_t searchLen = 2; /* std::max((uint32_t)2,minMatchLen); */
-                    // const uint8_t* const end = data + dataLen;
                     do {
                         match = find_pattern(pattern, searchLen, data, dataLen);
                         if(match) {

@@ -11,10 +11,12 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Should the (32-bit) optimized variant be built? (Faster on 32 bit architectures.) */
-#ifndef TAMP_32BIT
-    #define TAMP_32BIT 1
+/* Should the ESP32-optimized variant be built? */
+#ifndef TAMP_ESP32
+    #define TAMP_ESP32 0
 #endif
+// #undef TAMP_ESP32
+// #define TAMP_ESP32 0
 
 /* Compiler branch optimizations */
 #if defined(__clang__) || (defined(__GNUC__) && (__GNUC__ > 2))
