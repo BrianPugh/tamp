@@ -2,7 +2,7 @@
 
 /* Modification of the original tamp compressor.c, 2024 <https://github.com/BitsForPeople> */
 
-#if TAMP_32BIT
+#if TAMP_ESP32
 
 #include "compressor.h"
 #include <stdlib.h>
@@ -64,51 +64,6 @@ static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *
     return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
 
-static void shift_input(TampCompressor* compressor) noexcept {
-
-    const uint32_t ipos = compressor->input_pos;
-    if(ipos == 0) {
-        // Nothing to be done.
-        return;
-    }
-    const uint32_t isize = compressor->input_size;
-    if(isize == 0) [[unlikely]] {
-        // Nothing to be done.
-        return;
-    }
-
-
-    constexpr uint32_t INBUF_SIZE = sizeof(TampCompressor::input);
-
-    const uint32_t l1 = INBUF_SIZE - ipos;
-    uint8_t* const input = compressor->input;    
-    if(isize > l1) {
-        // Input wraps around.
-        uint8_t temp[INBUF_SIZE];
-        const uint32_t l2 = isize - l1;
-        if(l1 >= l2) {
-            // "Rescue" l1, move l2, put back l1.
-            mem::cpy_short<INBUF_SIZE>(temp, input+ipos, l1);
-            mem::cpy_short<INBUF_SIZE>(input+l1, input, l2);
-            mem::cpy_short<INBUF_SIZE>(input, temp, l1);
-        } else {
-            // l1 < l2. "Rescue" l2, move l1, put back l2.
-            mem::cpy_short<INBUF_SIZE>(temp, input, l2);
-            mem::cpy_short<INBUF_SIZE>(input, input+ipos, l1);
-            mem::cpy_short<INBUF_SIZE>(input+l1, temp, l2);
-        }
-    
-    } else {
-        // No wrap-around, just shift down.
-
-        // assert( isize < 16 ) - because otherwise it would either a) wrap around (handled above), or b) ipos == 0 (handled even more above)
-        mem::cpy_short(input, input+ipos, isize);
-    }
-
-    compressor->input_pos = 0;
-
-
-}
 
 // Object to hold a temporary copy of input data (also enforcing alignment)
 class InputCopy {
@@ -178,9 +133,11 @@ class InputCopy {
 
     private:
 
-        const TampCompressor& compressor;
-        alignas(16) uint8_t input[sizeof(TampCompressor::input)];    
+        alignas(16) uint8_t input[sizeof(TampCompressor::input)];
+        const TampCompressor& compressor;        
 };
+
+// static_assert(sizeof(InputCopy) == 0);
 
 /**
  * @brief Find the best match for the current input buffer.
@@ -218,7 +175,6 @@ static inline tamp::byte_span find_best_match(const TampCompressor* const compre
 static constexpr TampConf CONF_DEFAULT {.window=10, .literal=8, .use_custom_dictionary=false};
 
 tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window){
-    // const TampConf conf_default = {.window=10, .literal=8, .use_custom_dictionary=false};
     if(!conf) {
         conf = &CONF_DEFAULT;
     } else {
@@ -480,4 +436,4 @@ tamp_res tamp_compressor_compress_and_flush(
 
 } // extern "C"
 
-#endif // TAMP_32BIT
+#endif // TAMP_ESP32
