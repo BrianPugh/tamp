@@ -67,20 +67,56 @@ static inline void find_best_match(
     if(TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size))
         return;
 
+    // input buffer is guaranteed to have >=2 characters.
+
     const uint16_t first_second = (read_input(0) << 8) | read_input(1);
+    const uint8_t third = read_input(2);
     const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
+    const uint16_t window_size_minus_2 = WINDOW_SIZE - 2;
+    const uint16_t window_size_minus_3 = WINDOW_SIZE - 3;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
-    uint16_t window_rolling_2_byte = compressor->window[0];
+    uint32_t window_rolling_4_byte = compressor->window[0];
     unsigned char c;
 
-    for(uint16_t window_index=0; window_index < window_size_minus_1; window_index++){
-        window_rolling_2_byte <<= 8;
-        window_rolling_2_byte |= compressor->window[window_index + 1];
-        if(TAMP_LIKELY(window_rolling_2_byte != first_second)){
+    uint16_t window_index = 0;
+
+    /* look for <4 matches */
+    for(; window_index < window_size_minus_2; window_index++){
+        window_rolling_4_byte = ((window_rolling_4_byte & 0xFF) << 8) | compressor->window[window_index + 1];
+        if(TAMP_LIKELY(window_rolling_4_byte != first_second)){
+            continue;
+        }
+        *match_index = window_index;
+        *match_size = 2;
+        if(TAMP_UNLIKELY(compressor->window[window_index + 2] == third)){
+            window_rolling_4_byte = (window_rolling_4_byte << 8) | third;
+            *match_size = 3;
+            break;
+        }
+    }
+    if(TAMP_UNLIKELY(*match_size >= max_pattern_size)){  // If the input buffer is only 2 long.
+        *match_size = max_pattern_size;
+        return;
+    }
+    else if(TAMP_UNLIKELY(*match_size == 0)){  // If no matches yet, check the final location. (length 2)
+        // the last prior character shifted into window_rolling_4_byte is window[WINDOW_SIZE - 2]  # i.e. the penultimate character
+        window_rolling_4_byte = ((window_rolling_4_byte & 0xFF) << 8) | compressor->window[window_index + 1];
+        if(TAMP_UNLIKELY(window_rolling_4_byte == first_second)){
+            *match_size = 2;
+            *match_index = window_size_minus_2;
+        }
+        return;
+    }
+
+    const uint32_t first_second_third_forth = (first_second << 16) | (third << 8) | read_input(3);
+    // look for >=4 matches
+    for(; window_index < window_size_minus_3; window_index++){
+        window_rolling_4_byte = (window_rolling_4_byte << 8) | compressor->window[window_index + 3];
+        if(TAMP_LIKELY(window_rolling_4_byte != first_second_third_forth)){
             continue;
         }
 
-        for(uint8_t input_offset=2; ; input_offset++){
+        for(uint8_t input_offset=4; ; input_offset++){
             if(TAMP_UNLIKELY(input_offset > *match_size)){
                 *match_size = input_offset;
                 *match_index = window_index;

@@ -109,7 +109,7 @@ class TestCompressorAndDecompressor(unittest.TestCase):
 
                 f.seek(0)
                 d = Decompressor(f)
-                actual = d.read()
+                actual = bytes(d.read())
 
                 assert actual == tale_of_two_cities
 
