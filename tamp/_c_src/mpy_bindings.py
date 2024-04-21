@@ -7,22 +7,22 @@ class Compressor:
         literal=8,
         dictionary=None,
     ):
-        self._close_f_on_close = False
+        self._cf = False  # shorter name to save binary space
         if not hasattr(f, "write"):  # It's probably a path-like object.
             f = open(str(f), "wb")
-            self._close_f_on_close = True
+            self._cf = True
         self.f = f
         custom = dictionary is not None
         if not dictionary:
             dictionary = bytearray(1 << window)
-        self._c = _Compressor(f, window, literal, dictionary, custom)
+        self._c = _C(f, window, literal, dictionary, custom)
 
     def write(self, data):
         return self._c.write(data)
 
     def close(self) -> int:
         bytes_written = self.flush(write_token=False)
-        if self._close_f_on_close:
+        if self._cf:
             self.f.close()
         return bytes_written
 
@@ -36,11 +36,7 @@ class Compressor:
         self.close()
 
 
-class TextCompressor(Compressor):
-    """Compresses text to a file or stream."""
-
-    def write(self, data: str) -> int:
-        return super().write(data.encode())
+TextCompressor = Compressor
 
 
 def compress(data, *args, **kwargs) -> bytes:
@@ -65,13 +61,13 @@ class Decompressor:
         *,
         dictionary=None,
     ):
-        self._close_f_on_close = False
+        self._cf = False  # shorter name to save binary space
         if not hasattr(f, "read"):  # It's probably a path-like object.
             f = open(str(f), "rb")
-            self._close_f_on_close = True
+            self._cf = True
         self.f = f
         # dictionary is checked further in C
-        self._d = _Decompressor(f, dictionary)
+        self._d = _D(f, dictionary)
 
     def read(self, size=-1):  # -> bytearray
         chunks = []
@@ -98,7 +94,7 @@ class Decompressor:
         return self._d.readinto(buf)
 
     def close(self):
-        if self._close_f_on_close:
+        if self._cf:
             self.f.close()
 
     def __enter__(self):

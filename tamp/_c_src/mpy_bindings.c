@@ -221,7 +221,7 @@ static mp_obj_t decompressor_readinto(mp_obj_t self_in_obj, mp_obj_t output_buff
         total_written_size += output_buffer_written_size;
         self->input_buffer_consumed_size += input_buffer_consumed_size;
 
-        if (res == TAMP_INPUT_EXHAUSTED){
+        if (TAMP_LIKELY(res == TAMP_INPUT_EXHAUSTED)){
             mp_obj_t bytes_read = mp_call_function_n_kw(readinto_method, 1, 0, &self->input_buffer_obj);
             self->input_buffer_size = mp_obj_get_int(bytes_read);
             self->input_buffer_consumed_size = 0;
@@ -229,7 +229,7 @@ static mp_obj_t decompressor_readinto(mp_obj_t self_in_obj, mp_obj_t output_buff
                 break;
             }
         }
-        else if (res < TAMP_OK){
+        else if (TAMP_UNLIKELY(res < TAMP_OK)){
             mp_raise_ValueError("");
         }
     } while(res != TAMP_OUTPUT_FULL);
@@ -258,7 +258,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     // Initialise the type.
     mp_type_compressor.base.type = (void*)&mp_type_type;
     mp_type_compressor.flags = MP_TYPE_FLAG_NONE;
-    mp_type_compressor.name = MP_QSTR__Compressor;
+    mp_type_compressor.name = MP_QSTR__C;
 
     // Set the constructor
     MP_OBJ_TYPE_SET_SLOT(&mp_type_compressor, make_new, compressor_make_new, 0);
@@ -269,14 +269,14 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     compressor_locals_dict_table[1] = (mp_map_elem_t){ MP_OBJ_NEW_QSTR(MP_QSTR_flush), MP_OBJ_FROM_PTR(&compressor_flush_obj) };
 
     // Make the _Compressor type available on the module.
-    mp_store_global(MP_QSTR__Compressor, MP_OBJ_FROM_PTR(&mp_type_compressor));
+    mp_store_global(MP_QSTR__C, MP_OBJ_FROM_PTR(&mp_type_compressor));
 
     /****************
      * DECOMPRESSOR *
      ****************/
     mp_type_decompressor.base.type = (void*)&mp_type_type;
     mp_type_decompressor.flags = MP_TYPE_FLAG_NONE;
-    mp_type_decompressor.name = MP_QSTR__Decompressor;
+    mp_type_decompressor.name = MP_QSTR__D;
 
     // Set the constructor
     MP_OBJ_TYPE_SET_SLOT(&mp_type_decompressor, make_new, decompressor_make_new, 0);
@@ -286,7 +286,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     decompressor_locals_dict_table[0] = (mp_map_elem_t){ MP_OBJ_NEW_QSTR(MP_QSTR_readinto), MP_OBJ_FROM_PTR(&decompressor_readinto_obj) };
 
     // Make the _Decompressor type available on the module.
-    mp_store_global(MP_QSTR__Decompressor, MP_OBJ_FROM_PTR(&mp_type_decompressor));
+    mp_store_global(MP_QSTR__D, MP_OBJ_FROM_PTR(&mp_type_decompressor));
 
 
     // This must be last, it restores the globals dict
