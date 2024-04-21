@@ -15,8 +15,8 @@ ifdef MPY_DIR
 #     * xtensawin
 ARCH ?= x64
 MOD = tamp
+CFLAGS += -Itamp/_c_src -fno-tree-loop-distribute-patterns
 SRC = tamp/_c_src/mpy_bindings.c tamp/_c_src/mpy_bindings.py tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c tamp/_c_src/tamp/common.c
-CFLAGS += -Itamp/_c_src
 include $(MPY_DIR)/py/dynruntime.mk
 endif
 
