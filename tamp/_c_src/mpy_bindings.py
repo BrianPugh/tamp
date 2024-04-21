@@ -12,8 +12,10 @@ class Compressor:
             f = open(str(f), "wb")
             self._close_f_on_close = True
         self.f = f
-        # dictionary is checked further in C
-        self._c = _Compressor(f, window, literal, dictionary)
+        custom = dictionary is not None
+        if not dictionary:
+            dictionary = bytearray(1 << window)
+        self._c = _Compressor(f, window, literal, dictionary, custom)
 
     def write(self, data):
         return self._c.write(data)

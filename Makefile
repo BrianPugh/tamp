@@ -4,6 +4,15 @@
 ifdef MPY_DIR
 # Native machine code in .mpy files
 # User can define architecture in call like "make ARCH=armv6m"
+# Options:
+#     * x86
+#     * x64
+#     * armv6m
+#     * armv7m
+#     * armv7emsp
+#     * armv7emdp
+#     * xtensa
+#     * xtensawin
 ARCH ?= x64
 MOD = tamp
 SRC = tamp/_c_src/mpy_bindings.c tamp/_c_src/mpy_bindings.py tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c tamp/_c_src/tamp/common.c

@@ -20,8 +20,7 @@
 
 typedef struct {
     mp_obj_base_t base;
-    mp_obj_t dictionary;  // To prevent GC from collecting user-provided window_buffer.
-    uint8_t *window_buffer; // TODO: optimize out
+    mp_obj_t dictionary;  // To prevent GC from collecting python-provided window_buffer.
     mp_obj_t f;
     TampCompressor c;
 } mp_obj_compressor_t;
@@ -36,28 +35,20 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
     TampConf conf = {
         .window=mp_obj_get_int(args_in[1]),
         .literal=mp_obj_get_int(args_in[2]),
-        .use_custom_dictionary=args_in[3] != mp_const_none,
+        .use_custom_dictionary=mp_obj_get_int(args_in[4]),
     };
 
     mp_obj_compressor_t *o = mp_obj_malloc(mp_obj_compressor_t, type);
     o->f = args_in[0];
     o->dictionary = args_in[3];
 
-    if(TAMP_UNLIKELY(conf.use_custom_dictionary)){
-        if (!mp_obj_is_type(o->dictionary, &mp_type_bytearray)) {
-            mp_raise_TypeError("dictionary must be a bytearray.");
-        }
-        size_t len;
-        o->window_buffer = (uint8_t *)mp_obj_str_get_data(o->dictionary, &len);
-        if (len < (1 << conf.window)){
-            mp_raise_ValueError("Dictionary must be >=window.");
-        }
-    }
-    else{
-        o->window_buffer = m_malloc(1 << conf.window);
+    mp_buffer_info_t dictionary_buffer_info;
+    mp_get_buffer_raise(o->dictionary, &dictionary_buffer_info, MP_BUFFER_RW);
+    if(dictionary_buffer_info.len < (1 << conf.literal)){
+        mp_raise_ValueError("");
     }
 
-    tamp_res res = tamp_compressor_init(&o->c, &conf, o->window_buffer);
+    tamp_res res = tamp_compressor_init(&o->c, &conf, dictionary_buffer_info.buf);
     if(res){
         mp_raise_ValueError("");
     }
@@ -137,7 +128,6 @@ static MP_DEFINE_CONST_FUN_OBJ_2(compressor_flush_obj, compressor_flush);
 typedef struct {
     mp_obj_base_t base;
     mp_obj_t dictionary;  // To prevent GC from collecting user-provided window_buffer.
-    uint8_t *window_buffer;
     mp_obj_t f;
     TampDecompressor d;
     mp_obj_t input_buffer_obj;
@@ -164,6 +154,7 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
     mp_obj_t readinto_method = mp_load_attr(o->f, MP_QSTR_readinto);
     mp_obj_t amount_read = mp_call_function_n_kw(readinto_method, 1, 0, &o->input_buffer_obj);
     o->input_buffer_size = mp_obj_get_int(amount_read);
+    o->input_buffer_consumed_size = 0;
 
     {
         /* Read the Tamp Header */
@@ -186,20 +177,21 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
         if(conf.use_custom_dictionary){
             mp_raise_ValueError("");
         }
-        o->window_buffer = m_malloc(1 << conf.window);
+        o->dictionary = mp_obj_new_bytearray_by_ref(1 << conf.window, m_malloc(1 << conf.window));
     }
-    else{
+
+    {
         mp_buffer_info_t dictionary_buffer_info;
         mp_get_buffer_raise(o->dictionary, &dictionary_buffer_info, MP_BUFFER_RW);
         if (dictionary_buffer_info.len < (1 << conf.window)){
             mp_raise_ValueError("Dictionary must be >=window.");
         }
-        o->window_buffer = dictionary_buffer_info.buf;
-    }
 
-    res = tamp_decompressor_init(&o->d, &conf, o->window_buffer);
-    if(res){
-        mp_raise_ValueError("");
+        res = tamp_decompressor_init(&o->d, &conf, dictionary_buffer_info.buf);
+
+        if(res){
+            mp_raise_ValueError("");
+        }
     }
 
     return MP_OBJ_FROM_PTR(o);
@@ -256,10 +248,9 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     // This must be first, it sets up the globals dict and other things
     MP_DYNRUNTIME_INIT_ENTRY
 
-    /**************
+    /**********
      * COMMON *
-     **************/
-    mp_store_global(MP_QSTR_CHUNK_SIZE, MP_OBJ_NEW_SMALL_INT(CHUNK_SIZE));
+     **********/
 
     /**************
      * COMPRESSOR *
