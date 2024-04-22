@@ -609,13 +609,13 @@ tests = ["pytest", "pytest-cov", "pytest-xdist"]
 
 [[package]]
 name = "cyclopts"
-version = "2.6.0"
+version = "2.6.1"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "cyclopts-2.6.0-py3-none-any.whl", hash = "sha256:2cc146ff043866230bf3dad7d24ce5d989e2a28e78509a5d34f6880460dfeb98"},
-    {file = "cyclopts-2.6.0.tar.gz", hash = "sha256:ea35cd372ff6bdff843c8822299f299d96eb156de74ff83cc8f9743014644da5"},
+    {file = "cyclopts-2.6.1-py3-none-any.whl", hash = "sha256:12cf686c0b99b31160dfbfab3a441f77d01d83858188806b11e1f8bbf19b2312"},
+    {file = "cyclopts-2.6.1.tar.gz", hash = "sha256:4acce6e650d21af464181f0242c2eda6478b46589522218b97cb45d84414c7aa"},
 ]
 
 [package.dependencies]
