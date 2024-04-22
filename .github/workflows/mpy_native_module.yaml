@@ -1,0 +1,182 @@
+name: Build MicroPython Native Module
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        micropython_version: ["1.22.2", "1.21.0"]
+        ARCH:
+          - "x86"
+          - "x64"
+          - "armv6m"
+          - "armv7m"
+          - "armv7emsp"
+          - "armv7emdp"
+          - "xtensa"
+          - "xtensawin"
+    env:
+      ARCH: ${{ matrix.ARCH }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Get Tag or Commit Hash
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(git rev-parse --short HEAD)
+          fi
+          echo "Detected version is: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV  # Set for later use in the job
+
+          export MICROPYTHON_VERSION=${{ matrix.micropython_version }}
+          export MICROPYTHON_VERSION_MAJOR_MINOR=${MICROPYTHON_VERSION%.*}
+          echo "Detected Micropython Major.Minor: $MICROPYTHON_VERSION_MAJOR_MINOR"
+          echo "MICROPYTHON_VERSION_MAJOR_MINOR=$MICROPYTHON_VERSION_MAJOR_MINOR" >> $GITHUB_ENV  # Set for later use in the job
+
+      - name: arm-none-eabi-gcc GNU Arm Embedded Toolchain
+        if: startsWith(env.ARCH, 'arm')
+        uses: carlosperate/arm-none-eabi-gcc-action@v1.8.1
+
+      - name: Install Xtensa dependencies
+        if: startsWith(env.ARCH, 'xtensa')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gperf \
+            help2man \
+            libtool-bin
+
+      - name: Cache Setup ESP-IDF (ESP32)
+        if: startsWith(env.ARCH, 'xtensa')
+        uses: actions/cache@v4
+        with:
+          path: |
+            esp-idf
+            ~/.espressif
+            !esp-idf/.git
+          key: esp-idf-${{ hashFiles('**/Makefile') }}
+          restore-keys: |
+            esp-idf-
+
+      - name: Setup ESP-IDF (ESP32)
+        if: startsWith(env.ARCH, 'xtensa')
+        run: |
+          if [ ! -d "esp-idf" ]; then
+            git clone -b v5.0.6 --recursive https://github.com/espressif/esp-idf.git
+            cd esp-idf
+            git submodule update --init --recursive
+            ./install.sh
+            cd ..
+          fi
+          cd esp-idf
+          ENV_BEFORE=$(env)
+          source export.sh
+          ENV_AFTER=$(env)
+          echo "$ENV_AFTER" | grep -vxF "$ENV_BEFORE" | grep '=' | while IFS='=' read -r name value
+          do
+            echo "exporting to GITHUB_ENV: ${name}=${value}"
+            echo "${name}=${value}" >> $GITHUB_ENV
+          done
+
+      - name: Cache Setup Xtensa Toolchain (ESP8266)
+        if: startsWith(env.ARCH, 'xtensa')
+        uses: actions/cache@v4
+        with:
+          path: |
+            esp-open-sdk/xtensa-lx106-elf
+          key: xtensa-toolchain-${{ hashFiles('**/Makefile') }}
+          restore-keys: |
+            xtensa-toolchain-
+
+      - name: Clone and build Xtensa toolchain
+        if: startsWith(env.ARCH, 'xtensa')
+        run: |
+          if [ ! -d "esp-open-sdk" ]; then
+            git clone --branch fix-ubuntu-21.10-build --recursive https://github.com/BrianPugh/esp-open-sdk.git
+            cd esp-open-sdk
+            make
+            cd ..
+          fi
+          echo "$PWD/esp-open-sdk/xtensa-lx106-elf/bin" >> $GITHUB_PATH
+
+      - name: Set up python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install gcc-multilib
+          pip install pyelftools
+
+      - name: Install MicroPython
+        uses: BrianPugh/install-micropython@v2
+        with:
+          reference: v${{ matrix.micropython_version }}
+
+      - name: Build MicroPython Native Module
+        run: |
+          echo "Building architecture $ARCH Complete"
+          make clean
+          make ARCH=$ARCH
+          mv tamp.mpy tamp-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
+          make clean
+
+          echo "Building architecture $ARCH Compressor"
+          make clean
+          make ARCH=$ARCH TAMP_DECOMPRESSOR=0
+          mv tamp.mpy tamp[compressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
+          make clean
+
+          echo "Building architecture $ARCH Decompressor"
+          make clean
+          make ARCH=$ARCH TAMP_COMPRESSOR=0
+          mv tamp.mpy tamp[decompressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
+          make clean
+
+      - name: Upload Native Module MPY Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpy-native-module-tamp-${{ env.VERSION }}-mpy${{ env.MICROPYTHON_VERSION_MAJOR_MINOR }}-${{ env.ARCH }}
+          path: "*.mpy"
+
+  release_upload:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - name: Download All Native Module Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: mpy-native-modules
+          pattern: mpy-native-module-*
+          merge-multiple: true
+
+      - name: Display All Native Module Artifacts
+        run: ls -alh mpy-native-modules
+
+      - name: Upload Single Native Module MPY Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpy-native-module-all
+          path: "mpy-native-modules/*.mpy"
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            "native-modules/*"
