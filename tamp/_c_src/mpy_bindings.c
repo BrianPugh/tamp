@@ -3,8 +3,6 @@
  * Requires Micropython >= 1.23.0
  */
 #include "py/dynruntime.h"
-#include "tamp/compressor.h"
-#include "tamp/decompressor.h"
 
 /**********
  * COMMON *
@@ -17,6 +15,8 @@
 /**************
  * COMPRESSOR *
  **************/
+#if TAMP_COMPRESSOR
+#include "tamp/compressor.h"
 
 typedef struct {
     mp_obj_base_t base;
@@ -121,10 +121,13 @@ static mp_obj_t compressor_flush(mp_obj_t self_in, mp_obj_t write_token_in){
     return mp_obj_new_int(output_written_size);
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(compressor_flush_obj, compressor_flush);
-
+#endif
 /****************
  * DECOMPRESSOR *
  ****************/
+#if TAMP_DECOMPRESSOR
+#include "tamp/decompressor.h"
+
 typedef struct {
     mp_obj_base_t base;
     mp_obj_t dictionary;  // To prevent GC from collecting user-provided window_buffer.
@@ -237,7 +240,7 @@ static mp_obj_t decompressor_readinto(mp_obj_t self_in_obj, mp_obj_t output_buff
     return mp_obj_new_int(total_written_size);
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(decompressor_readinto_obj, decompressor_readinto);
-
+#endif
 
 /***************
  * MODULE INIT *
@@ -255,6 +258,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     /**************
      * COMPRESSOR *
      **************/
+#if TAMP_COMPRESSOR
     // Initialise the type.
     mp_type_compressor.base.type = (void*)&mp_type_type;
     mp_type_compressor.flags = MP_TYPE_FLAG_NONE;
@@ -270,10 +274,11 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
 
     // Make the _Compressor type available on the module.
     mp_store_global(MP_QSTR__C, MP_OBJ_FROM_PTR(&mp_type_compressor));
-
+#endif
     /****************
      * DECOMPRESSOR *
      ****************/
+#if TAMP_DECOMPRESSOR
     mp_type_decompressor.base.type = (void*)&mp_type_type;
     mp_type_decompressor.flags = MP_TYPE_FLAG_NONE;
     mp_type_decompressor.name = MP_QSTR__D;
@@ -287,8 +292,11 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
 
     // Make the _Decompressor type available on the module.
     mp_store_global(MP_QSTR__D, MP_OBJ_FROM_PTR(&mp_type_decompressor));
+#endif
 
-
+    /***********
+     * CLEANUP *
+     ***********/
     // This must be last, it restores the globals dict
     MP_DYNRUNTIME_INIT_EXIT
 }

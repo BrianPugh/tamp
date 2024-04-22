@@ -200,7 +200,7 @@ extend-immutable-calls = [
 convention = "numpy"
 
 [tool.ruff.per-file-ignores]
-"tamp/_c_src/mpy_bindings.py" = [
+"tamp/_c_src/mpy_bindings_*.py" = [
     "F821",  # Undefined names
 ]
 "tamp/*_viper.py" = [

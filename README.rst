@@ -27,6 +27,12 @@ Features
 
     * When available, Tamp will use a python-bound C implementation for speed.
 
+  * Micropython:
+
+    * Viper
+
+    * Native Module
+
   * C library:
 
     * ``tamp/_c_src/``
@@ -47,13 +53,17 @@ Features
 
 Installation
 ============
-Tamp contains 3 implementations:
+Tamp contains 4 implementations:
 
-1. A desktop Cpython implementation that is optimized for readability
+1. A referenceddesktop CPython implementation that is optimized for readability.
 
 2. A micropython viper implementation that is optimized for runtime performance.
 
-3. A C implementation (with python bindings) for accelerated desktop use and to be used in C projects.
+3. A micropython Native Module implementation that is faster than Viper and is compiled for specific architectures.
+
+4. A C implementation (with python bindings) for accelerated desktop use and to be used in C projects.
+
+This section instructs how to install each implementation.
 
 Desktop Python
 ^^^^^^^^^^^^^^
@@ -270,15 +280,15 @@ Memory Usage
 ^^^^^^^^^^^^
 The following table shows approximately how much memory each algorithm uses during compression and decompression.
 
-+---------------+-------------------+------------------------------+-------------------------+
-| Action        | tamp              | zlib                         | heatshrink              |
-+===============+===================+==============================+=========================+
-| Compression   | (1 << windowBits) | (1 << (windowBits+2)) + 7 KB | (1 << (windowBits + 1)) |
-+---------------+-------------------+------------------------------+-------------------------+
-| Decompression | (1 << windowBits) | (1 << windowBits) + 7 KB     | (1 << (windowBits + 1)) |
-+---------------+-------------------+------------------------------+-------------------------+
++---------------+-------------------+------------------------------+-------------------------+-----------------------+
+| Action        | tamp              | zlib                         | heatshrink              | deflate (micropython) |
++===============+===================+==============================+=========================+=======================+
+| Compression   | (1 << windowBits) | (1 << (windowBits+2)) + 7 KB | (1 << (windowBits + 1)) | (1 << windowBits)     |
++---------------+-------------------+------------------------------+-------------------------+-----------------------+
+| Decompression | (1 << windowBits) | (1 << windowBits) + 7 KB     | (1 << (windowBits + 1)) | (1 << windowBits)     |
++---------------+-------------------+------------------------------+-------------------------+-----------------------+
 
-Both Tamp and Heatshrink have a few dozen bytes of overhead in addition to the primary window buffer, but are implementation-specific and ignored for clarity here.
+All libraries have a few dozen bytes of overhead in addition to the primary window buffer, but are implementation-specific and ignored for clarity here.
 Tamp uses significantly less memory than ZLib, and half the memory of Heatshrink.
 
 Runtime
@@ -301,15 +311,16 @@ Tamp could use a similar indexing to increase compression speed, but has chosen 
 
 To give an idea of Tamp's speed on an embedded device, the following table shows compression/decompression in **bytes/second of the first 100KB of enwik8 on a pi pico (rp2040)** at the default 125MHz clock rate.
 This isn't exactly an apples-to-apples comparison because the C benchmark does not use a filesystem (and thusly, reduced overhead) nor dynamic memory allocation, but is good enough to get the idea across.
+In all tests, a 1KB window (10 bits) was used.
 
-+---------------+---------------------+------------+
-| Action        | tamp                | tamp       |
-|               | (Micropython Viper) | (C)        |
-+===============+=====================+============+
-| Compression   | ~4,300              | ~28,500    |
-+---------------+---------------------+------------+
-| Decompression | ~42,000             | ~1,042,524 |
-+---------------+---------------------+------------+
++---------------+---------------------+-----------------------------+------------+-----------------------+
+| Action        | tamp                | tamp                        | tamp       | deflate.DeflatIO      |
+|               | (Micropython Viper) | (Micropython Native Module) | (C)        | (micropython builtin) |
++===============+=====================+=============================+============+=======================+
+| Compression   | ~4,300              | ~12,770                     | ~28,500    | ~6,715                |
++---------------+---------------------+-----------------------------+------------+-----------------------+
+| Decompression | ~42,000             | ~644,010                    | ~1,042,524 | ~146,477              |
++---------------+---------------------+-----------------------------+------------+-----------------------+
 
 Binary Size
 ^^^^^^^^^^^
@@ -317,17 +328,19 @@ To give an idea on the resulting binary sizes, Tamp and other libraries were com
 All libraries were compiled with ``-O3``.
 Numbers reported in bytes.
 
-+--------------------+------------+--------------+---------------------------+
-| Library            | Compressor | Decompressor | Compressor + Decompressor |
-+====================+============+==============+===========================+
-| Tamp (micropython) | 4429       | 4205         | 7554                      |
-+--------------------+------------+--------------+---------------------------+
-| Tamp (C)           | 2008       | 1972         | 3864                      |
-+--------------------+------------+--------------+---------------------------+
-| Heatshrink         | 2956       | 3876         | 6832                      |
-+--------------------+------------+--------------+---------------------------+
-| uzlib              | 2355       | 3963         | 6318                      |
-+--------------------+------------+--------------+---------------------------+
++----------------------------------+------------+--------------+---------------------------+
+| Library                          | Compressor | Decompressor | Compressor + Decompressor |
++==================================+============+==============+===========================+
+| Tamp (micropython viper)         | 4429       | 4205         | 7554                      |
++----------------------------------+------------+--------------+---------------------------+
+| Tamp (micropython native module) | 2840       | 2669         | 5272                      |
++----------------------------------+------------+--------------+---------------------------+
+| Tamp (C)                         | 2008       | 1972         | 3864                      |
++----------------------------------+------------+--------------+---------------------------+
+| Heatshrink                       | 2956       | 3876         | 6832                      |
++----------------------------------+------------+--------------+---------------------------+
+| uzlib                            | 2355       | 3963         | 6318                      |
++----------------------------------+------------+--------------+---------------------------+
 
 Heatshrink doesn't include a high level API; in an apples-to-apples comparison the Tamp library would be even smaller.
 

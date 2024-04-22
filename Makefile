@@ -2,6 +2,8 @@
 
 
 ifdef MPY_DIR
+
+
 # Native machine code in .mpy files
 # User can define architecture in call like "make ARCH=armv6m"
 # Options:
@@ -15,8 +17,22 @@ ifdef MPY_DIR
 #     * xtensawin
 ARCH ?= x64
 MOD = tamp
-CFLAGS += -Itamp/_c_src -fno-tree-loop-distribute-patterns
-SRC = tamp/_c_src/mpy_bindings.c tamp/_c_src/mpy_bindings.py tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c tamp/_c_src/tamp/common.c
+
+CFLAGS += -Itamp/_c_src -fno-tree-loop-distribute-patterns -DTAMP_COMPRESSOR=${TAMP_COMPRESSOR} -DTAMP_DECOMPRESSOR=${TAMP_DECOMPRESSOR}
+
+SRC = tamp/_c_src/tamp/common.c tamp/_c_src/mpy_bindings.c
+
+TAMP_COMPRESSOR ?= 1  # Include Tamp compressor in build
+TAMP_DECOMPRESSOR ?= 1  # Include Tamp decompressor in build
+
+ifeq ($(strip $(TAMP_COMPRESSOR)),1)
+SRC += tamp/_c_src/mpy_bindings_compressor.py tamp/_c_src/tamp/compressor.c
+endif
+
+ifeq ($(strip $(TAMP_DECOMPRESSOR)),1)
+SRC += tamp/_c_src/mpy_bindings_decompressor.py tamp/_c_src/tamp/decompressor.c
+endif
+
 include $(MPY_DIR)/py/dynruntime.mk
 endif
 
