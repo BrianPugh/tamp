@@ -1,6 +1,6 @@
 /**
  * Micropython Native Module Bindings.
- * Requires Micropython >= 1.23.0
+ * Requires Micropython >= 1.21.0
  */
 #include "py/dynruntime.h"
 
@@ -8,8 +8,18 @@
  * COMMON *
  **********/
 
+#include "tamp/common.h"
 #define CHUNK_SIZE 16  // Must be <= 65535
 #define mp_type_bytearray (*(mp_obj_type_t *)(mp_load_global(MP_QSTR_bytearray)))
+
+static void TAMP_CHECK(tamp_res res){
+    if(res == TAMP_EXCESS_BITS){
+        nlr_raise(mp_obj_new_exception(mp_load_global(MP_QSTR_ExcessBitsError)));
+    }
+    else if(res < TAMP_OK){
+        mp_raise_ValueError("");
+    }
+}
 
 
 /**************
@@ -48,10 +58,8 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
         mp_raise_ValueError("");
     }
 
-    tamp_res res = tamp_compressor_init(&o->c, &conf, dictionary_buffer_info.buf);
-    if(res){
-        mp_raise_ValueError("");
-    }
+    TAMP_CHECK(tamp_compressor_init(&o->c, &conf, dictionary_buffer_info.buf));
+
     return MP_OBJ_FROM_PTR(o);
 }
 
@@ -65,7 +73,6 @@ static mp_obj_t compressor_write(mp_obj_t self_in, mp_obj_t data_in){
     uint8_t *input_buffer_end = (uint8_t*)input_buffer_info.buf + input_buffer_info.len;
     size_t output_buffer_written_size, input_consumed_size;
     uint8_t output_buffer[CHUNK_SIZE];
-    tamp_res res;
 
     mp_obj_t write_method = mp_load_attr(self->f, MP_QSTR_write);
     mp_obj_t bytearray_obj = mp_obj_new_bytearray_by_ref(CHUNK_SIZE, output_buffer);
@@ -76,7 +83,7 @@ static mp_obj_t compressor_write(mp_obj_t self_in, mp_obj_t data_in){
             input_buffer < input_buffer_end;
             input_buffer += input_consumed_size
         ){
-        res = tamp_compressor_compress(
+        TAMP_CHECK(tamp_compressor_compress(
             &self->c,
             output_buffer,
             CHUNK_SIZE,
@@ -84,11 +91,7 @@ static mp_obj_t compressor_write(mp_obj_t self_in, mp_obj_t data_in){
             input_buffer,
             input_buffer_end - input_buffer,
             &input_consumed_size
-        );
-        if(res < 0){
-            mp_raise_ValueError("Compressor error");
-        }
-
+        ));
         bytearray_ptr->len = output_buffer_written_size;
         mp_call_function_n_kw(write_method, 1, 0, &bytearray_obj);
         written_to_disk_size += output_buffer_written_size;
@@ -100,20 +103,16 @@ static MP_DEFINE_CONST_FUN_OBJ_2(compressor_write_obj, compressor_write);
 
 static mp_obj_t compressor_flush(mp_obj_t self_in, mp_obj_t write_token_in){
     mp_obj_compressor_t *self = MP_OBJ_TO_PTR(self_in);
-    tamp_res res;
     uint8_t output_buffer[CHUNK_SIZE];
     size_t output_written_size;
 
-    res = tamp_compressor_flush(
+    TAMP_CHECK(tamp_compressor_flush(
         &self->c,
         output_buffer,
         CHUNK_SIZE,
         &output_written_size,
         mp_obj_get_int(write_token_in)
-    );
-    if(res != TAMP_OK){
-        mp_raise_ValueError("Compressor error");
-    }
+    ));
     mp_obj_t bytes_obj = mp_obj_new_bytes(output_buffer, output_written_size);
     mp_obj_t write_method = mp_load_attr(self->f, MP_QSTR_write);
     mp_call_function_n_kw(write_method, 1, 0, &bytes_obj);
@@ -122,6 +121,7 @@ static mp_obj_t compressor_flush(mp_obj_t self_in, mp_obj_t write_token_in){
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(compressor_flush_obj, compressor_flush);
 #endif
+
 /****************
  * DECOMPRESSOR *
  ****************/
@@ -146,7 +146,6 @@ static MP_DEFINE_CONST_DICT(decompressor_locals_dict, decompressor_locals_dict_t
 // Essentially Decompressor.__new__ (but also kind of __init__).
 static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args_in) {
     TampConf conf;
-    tamp_res res;
 
     mp_obj_decompressor_t *o = mp_obj_malloc(mp_obj_decompressor_t, type);
     o->f = args_in[0];
@@ -164,15 +163,12 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
         size_t input_buffer_consumed_size;
         mp_buffer_info_t input_buffer_info;
         mp_get_buffer_raise(o->input_buffer_obj, &input_buffer_info, MP_BUFFER_READ);
-        res = tamp_decompressor_read_header(
+        TAMP_CHECK(tamp_decompressor_read_header(
                 &conf,
                 input_buffer_info.buf,
                 input_buffer_info.len,
                 &input_buffer_consumed_size
-                );
-        if(res){
-            mp_raise_ValueError("");
-        }
+                ));
         o->input_buffer_consumed_size += input_buffer_consumed_size;
     }
 
@@ -190,11 +186,7 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
             mp_raise_ValueError("Dictionary must be >=window.");
         }
 
-        res = tamp_decompressor_init(&o->d, &conf, dictionary_buffer_info.buf);
-
-        if(res){
-            mp_raise_ValueError("");
-        }
+        TAMP_CHECK(tamp_decompressor_init(&o->d, &conf, dictionary_buffer_info.buf));
     }
 
     return MP_OBJ_FROM_PTR(o);
@@ -232,9 +224,7 @@ static mp_obj_t decompressor_readinto(mp_obj_t self_in_obj, mp_obj_t output_buff
                 break;
             }
         }
-        else if (TAMP_UNLIKELY(res < TAMP_OK)){
-            mp_raise_ValueError("");
-        }
+        TAMP_CHECK(res);
     } while(res != TAMP_OUTPUT_FULL);
 
     return mp_obj_new_int(total_written_size);

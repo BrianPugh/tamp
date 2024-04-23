@@ -26,7 +26,7 @@ ifneq ($(CC),clang)
 CFLAGS += -fno-tree-loop-distribute-patterns
 endif
 
-SRC = tamp/_c_src/tamp/common.c tamp/_c_src/mpy_bindings.c
+SRC = tamp/_c_src/tamp/common.c tamp/_c_src/mpy_bindings.c tamp/_c_src/mpy_bindings_common.py
 
 ifeq ($(strip $(TAMP_COMPRESSOR)),1)
 SRC += tamp/_c_src/mpy_bindings_compressor.py tamp/_c_src/tamp/compressor.c
