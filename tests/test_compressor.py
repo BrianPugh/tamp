@@ -33,6 +33,7 @@ except ImportError:
 
 Compressors = []
 compresses = []
+NativeExcessBitsError = ExcessBitsError
 
 if micropython:
     from tamp.compressor_viper import Compressor as ViperCompressor
@@ -49,7 +50,6 @@ if micropython:
         Compressors.append(NativeCompressor)
         compresses.append(native_compress)
     except ImportError:
-        NativeExcessBitsError = ExcessBitsError
         print("Skipping Native Module.")
 else:
     from tamp.compressor import Compressor as PyCompressor

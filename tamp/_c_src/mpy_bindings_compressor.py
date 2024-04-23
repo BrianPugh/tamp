@@ -1,3 +1,6 @@
+import builtins
+
+
 class Compressor:
     def __init__(
         self,
@@ -9,7 +12,7 @@ class Compressor:
     ):
         self._cf = False  # shorter name to save binary space
         if not hasattr(f, "write"):  # It's probably a path-like object.
-            f = open(str(f), "wb")
+            f = builtins.open(str(f), "wb")
             self._cf = True
         self.f = f
         custom = dictionary is not None

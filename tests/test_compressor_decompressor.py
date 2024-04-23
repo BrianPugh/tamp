@@ -13,9 +13,19 @@ from tamp.decompressor import Decompressor as PyDecompressor
 if micropython is None:
     ViperCompressor = None
     ViperDecompressor = None
+    NativeCompressor = None
+    NativeDecompressor = None
 else:
     from tamp.compressor_viper import Compressor as ViperCompressor
     from tamp.decompressor_viper import Decompressor as ViperDecompressor
+
+    try:
+        from tamp_native import Compressor as NativeCompressor
+        from tamp_native import Decompressor as NativeDecompressor
+    except ImportError:
+        print("Skipping Native Module.")
+        NativeCompressor = None
+        NativeDecompressor = None
 
 try:
     from tamp._c_compressor import Compressor as CCompressor
@@ -25,8 +35,8 @@ except ImportError:
     CDecompressor = None
 
 
-Compressors = (PyCompressor, CCompressor, ViperCompressor)
-Decompressors = (PyDecompressor, CDecompressor, ViperDecompressor)
+Compressors = (PyCompressor, CCompressor, ViperCompressor, NativeCompressor)
+Decompressors = (PyDecompressor, CDecompressor, ViperDecompressor, NativeDecompressor)
 
 
 def walk_compressors_decompressors():

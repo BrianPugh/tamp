@@ -1,3 +1,6 @@
+import builtins
+
+
 class Decompressor:
     def __init__(
         self,
@@ -7,7 +10,7 @@ class Decompressor:
     ):
         self._cf = False  # shorter name to save binary space
         if not hasattr(f, "read"):  # It's probably a path-like object.
-            f = open(str(f), "rb")
+            f = builtins.open(str(f), "rb")
             self._cf = True
         self.f = f
         # dictionary is checked further in C

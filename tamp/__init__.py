@@ -91,14 +91,8 @@ def open(f, mode="rb", **kwargs):
         raise ValueError
 
     if "r" in mode:  # Decompressor
-        if "b" in mode:
-            return Decompressor(f, **kwargs)
-        else:
-            return TextDecompressor(f, **kwargs)
+        return Decompressor(f, **kwargs) if "b" in mode else TextDecompressor(f, **kwargs)
     elif "w" in mode:  # Compressor
-        if "b" in mode:
-            return Compressor(f, **kwargs)
-        else:
-            return TextCompressor(f, **kwargs)
+        return Compressor(f, **kwargs) if "b" in mode else TextCompressor(f, **kwargs)
     else:
         raise ValueError
