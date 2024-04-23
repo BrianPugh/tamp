@@ -172,18 +172,19 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
         o->input_buffer_consumed_size += input_buffer_consumed_size;
     }
 
+    const uint16_t window_size = 1 << conf.window;
     if(o->dictionary == mp_const_none){
         if(conf.use_custom_dictionary){
             mp_raise_ValueError("");
         }
-        o->dictionary = mp_obj_new_bytearray_by_ref(1 << conf.window, m_malloc(1 << conf.window));
+        o->dictionary = mp_obj_new_bytearray_by_ref(window_size, m_malloc(window_size));
     }
 
     {
         mp_buffer_info_t dictionary_buffer_info;
         mp_get_buffer_raise(o->dictionary, &dictionary_buffer_info, MP_BUFFER_RW);
-        if (dictionary_buffer_info.len < (1 << conf.window)){
-            mp_raise_ValueError("Dictionary must be >=window.");
+        if (dictionary_buffer_info.len < window_size){
+            mp_raise_ValueError("");
         }
 
         TAMP_CHECK(tamp_decompressor_init(&o->d, &conf, dictionary_buffer_info.buf));
@@ -216,7 +217,7 @@ static mp_obj_t decompressor_readinto(mp_obj_t self_in_obj, mp_obj_t output_buff
         total_written_size += output_buffer_written_size;
         self->input_buffer_consumed_size += input_buffer_consumed_size;
 
-        if (TAMP_LIKELY(res == TAMP_INPUT_EXHAUSTED)){
+        if (res == TAMP_INPUT_EXHAUSTED){
             mp_obj_t bytes_read = mp_call_function_n_kw(readinto_method, 1, 0, &self->input_buffer_obj);
             self->input_buffer_size = mp_obj_get_int(bytes_read);
             self->input_buffer_consumed_size = 0;

@@ -49,7 +49,7 @@ class Decompressor:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, r, w, b):
         self.close()
 
 
@@ -64,5 +64,4 @@ def decompress(data: bytes, *args, **kwargs) -> bytearray:
     from io import BytesIO
 
     with BytesIO(data) as f:
-        d = Decompressor(f, *args, **kwargs)
-        return d.read()
+        return Decompressor(f, *args, **kwargs).read()

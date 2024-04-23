@@ -20,11 +20,10 @@ class Compressor:
             dictionary = bytearray(1 << window)
         self._c = _C(f, window, literal, dictionary, custom)
 
-    def write(self, data):
-        return self._c.write(data)
+        self.write = self._c.write
 
     def close(self) -> int:
-        bytes_written = self.flush(write_token=False)
+        bytes_written = self.flush(False)
         if self._cf:
             self.f.close()
         return bytes_written
@@ -35,7 +34,7 @@ class Compressor:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, r, w, b):
         self.close()
 
 

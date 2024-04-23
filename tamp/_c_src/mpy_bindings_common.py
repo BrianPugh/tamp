@@ -9,12 +9,11 @@ class ExcessBitsError(Exception):
 
 
 def open(f, mode="rb", **kwargs):
-    if "r" in mode and "w" in mode:
-        raise ValueError
-
     if "r" in mode:  # Decompressor
-        return Decompressor(f, **kwargs) if "b" in mode else TextDecompressor(f, **kwargs)
+        if "w" in mode:
+            raise ValueError
+        return (Decompressor if "b" in mode else TextDecompressor)(f, **kwargs)
     elif "w" in mode:  # Compressor
-        return Compressor(f, **kwargs) if "b" in mode else TextCompressor(f, **kwargs)
+        return (Compressor if "b" in mode else TextCompressor)(f, **kwargs)
     else:
         raise ValueError
