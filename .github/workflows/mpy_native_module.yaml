@@ -30,21 +30,32 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: false
+          virtualenvs-in-project: false
 
       - name: Get Tag or Commit Hash
         run: |
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=$(git rev-parse --short HEAD)
-          fi
+          poetry self add "poetry-dynamic-versioning[plugin]"
+          poetry dynamic-versioning  # in-place updates files with correct version string
+          VERSION=$(poetry version | sed 's/tamp //; s/\x1b\[[0-9;]*m//g')
           echo "Detected version is: $VERSION"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV  # Set for later use in the job
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
           export MICROPYTHON_VERSION=${{ matrix.micropython_version }}
           export MICROPYTHON_VERSION_MAJOR_MINOR=${MICROPYTHON_VERSION%.*}
           echo "Detected Micropython Major.Minor: $MICROPYTHON_VERSION_MAJOR_MINOR"
-          echo "MICROPYTHON_VERSION_MAJOR_MINOR=$MICROPYTHON_VERSION_MAJOR_MINOR" >> $GITHUB_ENV  # Set for later use in the job
+          echo "MICROPYTHON_VERSION_MAJOR_MINOR=$MICROPYTHON_VERSION_MAJOR_MINOR" >> $GITHUB_ENV
 
       - name: arm-none-eabi-gcc GNU Arm Embedded Toolchain
         if: startsWith(env.ARCH, 'arm')
@@ -111,11 +122,6 @@ jobs:
             cd ..
           fi
           echo "$PWD/esp-open-sdk/xtensa-lx106-elf/bin" >> $GITHUB_PATH
-
-      - name: Set up python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
 
       - name: Install Build Dependencies
         run: |

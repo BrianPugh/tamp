@@ -19,6 +19,12 @@ readme = "README.rst"
 packages = [{include = "tamp"}]
 include = ["tamp/*.so", "tamp/*.dll", "tamp/*.pyd"]
 
+[tool.poetry-dynamic-versioning.substitution]
+files = [
+    "tamp/__init__.py",
+    "tamp/_c_src/mpy_bindings_common.py"
+]
+
 [tool.poetry.build]
 generate-setup-file = false
 script = 'build.py'
