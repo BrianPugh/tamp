@@ -41,6 +41,15 @@ if micropython:
 
     Compressors.append(ViperCompressor)
     compresses.append(viper_compress)
+
+    try:
+        from tamp_native import Compressor as NativeCompressor
+        from tamp_native import compress as native_compress
+
+        Compressors.append(NativeCompressor)
+        compresses.append(native_compress)
+    except ImportError:
+        print("Skipping Native Module.")
 else:
     from tamp.compressor import Compressor as PyCompressor
     from tamp.compressor import compress as py_compress

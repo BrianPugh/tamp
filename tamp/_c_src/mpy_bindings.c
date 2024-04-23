@@ -44,7 +44,7 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
 
     mp_buffer_info_t dictionary_buffer_info;
     mp_get_buffer_raise(o->dictionary, &dictionary_buffer_info, MP_BUFFER_RW);
-    if(dictionary_buffer_info.len < (1 << conf.literal)){
+    if(dictionary_buffer_info.len < (1 << conf.window)){
         mp_raise_ValueError("");
     }
 
