@@ -133,23 +133,42 @@ jobs:
         with:
           reference: v${{ matrix.micropython_version }}
 
+      - name: Install library
+        if: env.ARCH == 'x64'
+        run: poetry install --no-interaction
+
       - name: Build MicroPython Native Module
         run: |
           echo "Building architecture $ARCH Complete"
           make clean
           make ARCH=$ARCH
+          if [[ "$ARCH" == "x64" ]]; then
+            cp tamp.mpy tamp_native.mpy
+            belay run micropython -X heapsize=200M -m unittest tests/test_*.py
+            rm tamp_native.mpy
+          fi
           mv tamp.mpy tamp-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
           make clean
 
           echo "Building architecture $ARCH Compressor"
           make clean
           make ARCH=$ARCH TAMP_DECOMPRESSOR=0
+          if [[ "$ARCH" == "x64" ]]; then
+            cp tamp.mpy tamp_native.mpy
+            belay run micropython -X heapsize=200M -m unittest tests/test_compressor.py
+            rm tamp_native.mpy
+          fi
           mv tamp.mpy tamp[compressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
           make clean
 
           echo "Building architecture $ARCH Decompressor"
           make clean
           make ARCH=$ARCH TAMP_COMPRESSOR=0
+          if [[ "$ARCH" == "x64" ]]; then
+            cp tamp.mpy tamp_native.mpy
+            belay run micropython -X heapsize=200M -m unittest tests/test_decompressor.py
+            rm tamp_native.mpy
+          fi
           mv tamp.mpy tamp[decompressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
           make clean
 
