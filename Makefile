@@ -3,7 +3,6 @@
 
 ifdef MPY_DIR
 
-
 # Native machine code in .mpy files
 # User can define architecture in call like "make ARCH=armv6m"
 # Options:
@@ -26,17 +25,17 @@ ifneq ($(CC),clang)
 CFLAGS += -fno-tree-loop-distribute-patterns
 endif
 
-SRC = tamp/_c_src/tamp/common.c tamp/_c_src/mpy_bindings.c tamp/_c_src/mpy_bindings_common.py
+SRC = tamp/_c_src/tamp/common.c mpy_bindings/bindings.c mpy_bindings/bindings_common.py
 
 ifeq ($(strip $(TAMP_COMPRESSOR)),1)
-SRC += tamp/_c_src/mpy_bindings_compressor.py tamp/_c_src/tamp/compressor.c
+SRC += mpy_bindings/bindings_compressor.py tamp/_c_src/tamp/compressor.c
 endif
 
 ifeq ($(strip $(TAMP_DECOMPRESSOR)),1)
-SRC += tamp/_c_src/mpy_bindings_decompressor.py tamp/_c_src/tamp/decompressor.c
+SRC += mpy_bindings/bindings_decompressor.py tamp/_c_src/tamp/decompressor.c
 endif
 
-MPY_CROSS_FLAGS = -s $(subst compressor,c,$(subst decompressor,d,$(subst mpy_bindings,m,$(notdir $<))))
+MPY_CROSS_FLAGS = -s $(subst compressor,c,$(subst decompressor,d,$(subst bindings,m,$(notdir $<))))
 
 include $(MPY_DIR)/py/dynruntime.mk
 endif

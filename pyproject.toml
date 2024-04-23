@@ -22,7 +22,7 @@ include = ["tamp/*.so", "tamp/*.dll", "tamp/*.pyd"]
 [tool.poetry-dynamic-versioning.substitution]
 files = [
     "tamp/__init__.py",
-    "tamp/_c_src/mpy_bindings_common.py"
+    "mpy_bindings/bindings_common.py"
 ]
 
 [tool.poetry.build]
@@ -206,7 +206,7 @@ extend-immutable-calls = [
 convention = "numpy"
 
 [tool.ruff.per-file-ignores]
-"tamp/_c_src/mpy_bindings_*.py" = [
+"mpy_bindings/*.py" = [
     "F821",  # Undefined names
 ]
 "tamp/*_viper.py" = [
