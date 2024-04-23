@@ -16,28 +16,38 @@ Tamp is a low-memory, DEFLATE-inspired lossless compression library intended for
 
 Tamp delivers the highest data compression ratios, while using the least amount of RAM and firmware storage.
 
+
+**Documentation:** https://tamp.readthedocs.io/en/latest/
+
+**Source Code:** https://github.com/BrianPugh/tamp
+
+
 Features
 ========
 
-* Various implementations available:
+* Various language implementations available:
 
-  * Pure Python:
+  * Pure Python reference:
 
-    * ``tamp/compressor.py``, ``tamp/decompressor.py``
+    * ``tamp/__init__.py``, ``tamp/compressor.py``, ``tamp/decompressor.py``
 
-    * When available, Tamp will use a python-bound C implementation for speed.
+    * ``pip install tamp`` will use a python-bound C implementation optimized for speed.
 
   * Micropython:
 
-    * Viper
+    * Native Module (suggested micropython implementation).
 
-    * Native Module
+      * ``mpy_bindings/``
+
+    * Viper.
+
+      * ``tamp/__init__.py``, ``tamp/compressor_viper.py``, ``tamp/decompressor_viper.py``
 
   * C library:
 
     * ``tamp/_c_src/``
 
-* High compression ratios and low memory use.
+* High compression ratios, low memory use, and fast.
 
 * Compact compression and decompression implementations.
 
@@ -55,13 +65,13 @@ Installation
 ============
 Tamp contains 4 implementations:
 
-1. A referenceddesktop CPython implementation that is optimized for readability.
+1. A reference desktop CPython implementation that is optimized for readability (and **not** speed).
 
-2. A micropython viper implementation that is optimized for runtime performance.
+2. A Micropython Native Module implementation (fast).
 
-3. A micropython Native Module implementation that is faster than Viper and is compiled for specific architectures.
+3. A Micropython Viper implementation (not recommended, please use Native Module).
 
-4. A C implementation (with python bindings) for accelerated desktop use and to be used in C projects.
+4. A C implementation (with python bindings) for accelerated desktop use and to be used in C projects (very fast).
 
 This section instructs how to install each implementation.
 
@@ -75,6 +85,28 @@ The Tamp library and CLI requires Python ``>=3.8`` and can be installed via:
 
 MicroPython
 ^^^^^^^^^^^
+
+MicroPython Native Module
+-------------------------
+Tamp provides pre-compiled `native modules` that are easy to install, are small, and are incredibly fast.
+
+Download the appropriate ``.mpy`` file from the `release page`_.
+
+   * Match the micropython version running on your board.
+
+   * Match the architecture to the microcontroller (e.g. ``armv6m`` for a pi pico).
+
+Rename the file to ``tamp.mpy`` and transfer it to your board. If using `Belay`_, tamp can be installed by adding the following to ``pyproject.toml``.
+
+.. code-block:: toml
+
+   [tool.belay.dependencies]
+   tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.4.0/tamp-1.4.0-mpy1.22-armv6m.mpy"
+
+MicroPython Viper
+-----------------
+**NOT RECOMMENDED, PLEASE USE NATIVE MODULE**
+
 For micropython use, there are 3 main files:
 
 1. ``tamp/__init__.py`` - Always required.
@@ -128,26 +160,16 @@ If no output is specified, the compressed output stream will be written to stdou
 .. code-block:: bash
 
    $ tamp compress --help
+   Usage: tamp compress [ARGS] [OPTIONS]
 
-    Usage: tamp compress [OPTIONS] [INPUT_PATH]
+   Compress an input file or stream.
 
-    Compress an input file or stream.
-
-   ╭─ Arguments ────────────────────────────────────────────────────────────────────────╮
-   │   input_path      [INPUT_PATH]  Input file to compress or decompress. Defaults to  │
-   │                                 stdin.                                             │
-   ╰────────────────────────────────────────────────────────────────────────────────────╯
-   ╭─ Options ──────────────────────────────────────────────────────────────────────────╮
-   │ --output   -o      PATH                      Output file. Defaults to stdout.      │
-   │ --window   -w      INTEGER RANGE [8<=x<=15]  Number of bits used to represent the  │
-   │                                              dictionary window.                    │
-   │                                              [default: 10]                         │
-   │ --literal  -l      INTEGER RANGE [5<=x<=8]   Number of bits used to represent a    │
-   │                                              literal.                              │
-   │                                              [default: 8]                          │
-   │ --help                                       Show this message and exit.           │
-   ╰────────────────────────────────────────────────────────────────────────────────────╯
-
+   ╭─ Parameters ───────────────────────────────────────────────────────────────────────────────╮
+   │ INPUT,--input    -i  Input file to compress. Defaults to stdin.                            │
+   │ OUTPUT,--output  -o  Output compressed file. Defaults to stdout.                           │
+   │ --window         -w  Number of bits used to represent the dictionary window. [default: 10] │
+   │ --literal        -l  Number of bits used to represent a literal. [default: 8]              │
+   ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 
 Example usage:
 
@@ -176,19 +198,15 @@ If no output is specified, the compressed output stream will be written to stdou
 
 .. code-block:: bash
 
-  $ tamp decompress --help
+   $ tamp decompress --help
+   Usage: tamp decompress [ARGS] [OPTIONS]
 
-  Usage: tamp decompress [OPTIONS] [INPUT_PATH]
+   Decompress an input file or stream.
 
-  Decompress an input file or stream.
-
- ╭─ Arguments ────────────────────────────────────────────────────────────────────────╮
- │   input_path      [INPUT_PATH]  Input file. If not provided, reads from stdin.     │
- ╰────────────────────────────────────────────────────────────────────────────────────╯
- ╭─ Options ──────────────────────────────────────────────────────────────────────────╮
- │ --output  -o      PATH  Output file. Defaults to stdout.                           │
- │ --help                  Show this message and exit.                                │
- ╰────────────────────────────────────────────────────────────────────────────────────╯
+   ╭─ Parameters ───────────────────────────────────────────────────────────────────────────────╮
+   │ INPUT,--input    -i  Input file to decompress. Defaults to stdin.                          │
+   │ OUTPUT,--output  -o  Output decompressed file. Defaults to stdout.                         │
+   ╰────────────────────────────────────────────────────────────────────────────────────────────╯
 
 Example usage:
 
@@ -310,8 +328,8 @@ When heathshrink uses an index, an additional ``(1 << (windowBits + 1))`` bytes 
 Tamp could use a similar indexing to increase compression speed, but has chosen not to to focus on the primary goal of a low-memory compressor.
 
 To give an idea of Tamp's speed on an embedded device, the following table shows compression/decompression in **bytes/second of the first 100KB of enwik8 on a pi pico (rp2040)** at the default 125MHz clock rate.
-This isn't exactly an apples-to-apples comparison because the C benchmark does not use a filesystem (and thusly, reduced overhead) nor dynamic memory allocation, but is good enough to get the idea across.
-In all tests, a 1KB window (10 bits) was used.
+The C benchmark **does not** use a filesystem nor dynamic memory allocation, so it represents the maximum speed Tamp can achieve.
+In all tests, a 1KB window (10 bit) was used.
 
 +---------------+---------------------+-----------------------------+------------+-----------------------+
 | Action        | tamp                | tamp                        | tamp       | deflate.DeflatIO      |
@@ -321,6 +339,8 @@ In all tests, a 1KB window (10 bits) was used.
 +---------------+---------------------+-----------------------------+------------+-----------------------+
 | Decompression | ~42,000             | ~644,010                    | ~1,042,524 | ~146,477              |
 +---------------+---------------------+-----------------------------+------------+-----------------------+
+
+Tamp resulted in a **51637** byte archive, while Micropython's builtin ``deflate`` resulted in a larger **59442** byte archive.
 
 Binary Size
 ^^^^^^^^^^^
@@ -333,7 +353,7 @@ Numbers reported in bytes.
 +==================================+============+==============+===========================+
 | Tamp (micropython viper)         | 4429       | 4205         | 7554                      |
 +----------------------------------+------------+--------------+---------------------------+
-| Tamp (micropython native module) | 3091       | 2914         | 5376                      |
+| Tamp (micropython native module) | 3108       | 2931         | 5393                      |
 +----------------------------------+------------+--------------+---------------------------+
 | Tamp (C)                         | 2008       | 1972         | 3864                      |
 +----------------------------------+------------+--------------+---------------------------+
@@ -364,3 +384,5 @@ Heatshrink doesn't include a high level API; in an apples-to-apples comparison t
 .. _Enwik8: https://mattmahoney.net/dc/textdata.html
 .. _mip: https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip
 .. _the documentation: https://tamp.readthedocs.io/en/latest/c_library.html
+.. _native modules: https://docs.micropython.org/en/latest/develop/natmod.html
+.. _release page: https://github.com/BrianPugh/tamp/releases
