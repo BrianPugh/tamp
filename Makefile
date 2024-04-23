@@ -36,6 +36,8 @@ ifeq ($(strip $(TAMP_DECOMPRESSOR)),1)
 SRC += tamp/_c_src/mpy_bindings_decompressor.py tamp/_c_src/tamp/decompressor.c
 endif
 
+MPY_CROSS_FLAGS = -s $(subst compressor,c,$(subst decompressor,d,$(subst mpy_bindings,m,$(notdir $<))))
+
 include $(MPY_DIR)/py/dynruntime.mk
 endif
 
