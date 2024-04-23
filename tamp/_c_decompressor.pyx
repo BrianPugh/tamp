@@ -121,9 +121,11 @@ cdef class Decompressor:
         if size == 0:
             return bytearray()
 
+        chunk_size = CHUNK_SIZE
         out = []
         while True:
-            buf = bytearray(CHUNK_SIZE if size < 0 else size)
+            buf = bytearray(chunk_size if size < 0 else size)
+            chunk_size <<= 1  # Keep allocating larger chunks as we go on.
             read_size = self.readinto(buf)
             if size > 0:
                 # Read the entire contents in one go.

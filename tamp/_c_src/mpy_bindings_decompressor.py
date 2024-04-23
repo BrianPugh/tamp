@@ -15,14 +15,16 @@ class Decompressor:
 
     def read(self, size=-1):  # -> bytearray
         chunks = []
-        CHUNK_SIZE = 256  # noqa: N806
+        chunk_size = 256  # noqa: N806
         while True:
-            chunk = bytearray(CHUNK_SIZE)
+            chunk = bytearray(chunk_size)
             bytes_read = self.readinto(chunk)
             if not bytes_read:
                 break
-            if bytes_read < CHUNK_SIZE:
+            if bytes_read < chunk_size:
                 chunk = memoryview(chunk)[:bytes_read]
+            if chunk_size < 32768:  # sets an upper bound on allocation.
+                chunk_size <<= 1
             chunks.append(chunk)
 
         out = bytearray(sum(len(x) for x in chunks))

@@ -2,6 +2,7 @@ from io import BytesIO
 
 from . import compute_min_pattern_size, initialize_dictionary
 
+_CHUNK_SIZE = 1 << 20
 _FLUSH = object()
 
 # Each key here are the huffman codes or'd with 0x80
@@ -173,10 +174,12 @@ class Decompressor:
             written = len(buf)
             self.overflow = self.overflow[len(buf) :]
             return written
-        else:
+        elif self.overflow:
             buf[: len(self.overflow)] = self.overflow
             written = len(self.overflow)
             self.overflow = bytearray()
+        else:
+            written = 0
 
         while written < len(buf):
             try:
@@ -228,9 +231,11 @@ class Decompressor:
         if size == 0:
             return bytearray()
 
+        chunk_size = _CHUNK_SIZE
         out = []
         while True:
-            buf = bytearray((1 << 20) if size < 0 else size)
+            buf = bytearray(chunk_size if size < 0 else size)
+            chunk_size <<= 1  # Keep allocating larger chunks as we go on.
             read_size = self.readinto(buf)
             if size > 0:
                 # Read the entire contents in one go.
