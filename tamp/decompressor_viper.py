@@ -46,14 +46,11 @@ class Decompressor:
         self.overflow_pos = 0
         self.overflow_size = 0
 
-    def readinto(self, buf):
-        raise NotImplementedError
-
     @micropython.viper
-    def _decompress_into(self, out) -> int:
+    def readinto(self, buf) -> int:
         """Attempt to fill out, will place into overflow."""
-        out_capacity = int(len(out))  # const
-        out_buf = ptr8(out)
+        out_capacity = int(len(buf))  # const
+        out_buf = ptr8(buf)
 
         huffman_table = ptr8(_HUFFMAN_TABLE)
 
@@ -80,7 +77,7 @@ class Decompressor:
         # Copy overflow into out if available
         overflow_copy = int(min(overflow_size, out_capacity))
         for i in range(overflow_copy):
-            out[i] = overflow_buf_ptr[overflow_pos + i]
+            buf[i] = overflow_buf_ptr[overflow_pos + i]
         out_pos = overflow_copy
         overflow_pos += overflow_copy
         overflow_size -= overflow_copy
@@ -184,7 +181,7 @@ class Decompressor:
             decompressed_bytes = 0
             while True:
                 chunk = bytearray(chunk_size)
-                chunk_decompressed_bytes = self._decompress_into(chunk)
+                chunk_decompressed_bytes = self.readinto(chunk)
                 if chunk_decompressed_bytes != chunk_size:
                     chunk = chunk[:chunk_decompressed_bytes]
                 chunks.append(chunk)
@@ -195,7 +192,7 @@ class Decompressor:
             out = b"".join(chunks)
         else:
             out = bytearray(size)
-            decompressed_bytes = self._decompress_into(out)
+            decompressed_bytes = self.readinto(out)
             if decompressed_bytes != size:
                 out = out[:decompressed_bytes]
 
