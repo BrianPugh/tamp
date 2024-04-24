@@ -23,13 +23,10 @@ static void TAMP_CHECK(tamp_res res){
 
 static mp_obj_t initialize_dictionary(mp_obj_t obj) {
     mp_buffer_info_t buffer_info;
-    if (mp_obj_is_int(obj)) {
+    if(!mp_get_buffer(obj, &buffer_info, MP_BUFFER_RW)){
         buffer_info.len = mp_obj_get_int(obj);
         buffer_info.buf = m_malloc(buffer_info.len);
         obj = mp_obj_new_bytearray_by_ref(buffer_info.len, buffer_info.buf);
-    }
-    else{
-        mp_get_buffer_raise(obj, &buffer_info, MP_BUFFER_RW);
     }
     tamp_initialize_dictionary(buffer_info.buf, buffer_info.len);
     return obj;
