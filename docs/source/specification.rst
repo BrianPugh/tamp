@@ -98,12 +98,7 @@ All of this amounts to a few percent compression improvement for short messages.
            yield seed
 
 
-   def initialize_dictionary(size, seed=None):
-       if seed is None:
-           seed = 3758097560
-       elif seed == 0:
-           return bytearray(size)
-
+   def initialize_dictionary(size):
        chars = b" \x000ei>to<ans\nr/."  # 16 most common chars in dataset
 
        def _gen_stream(xorshift32):
@@ -118,7 +113,7 @@ All of this amounts to a few percent compression improvement for short messages.
                yield chars[value >> 24 & 0x0F]
                yield chars[value >> 28 & 0x0F]
 
-       return bytearray(_gen_stream(_xorshift32(seed)))
+       return bytearray(_gen_stream(_xorshift32(3758097560)))
 
 Huffman Coding
 ^^^^^^^^^^^^^^
