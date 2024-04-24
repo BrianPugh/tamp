@@ -118,6 +118,7 @@ jobs:
           if [ ! -d "esp-open-sdk" ]; then
             git clone --branch fix-ubuntu-21.10-build --recursive https://github.com/BrianPugh/esp-open-sdk.git
             cd esp-open-sdk
+            unset LD_LIBRARY_PATH
             make
             cd ..
           fi
