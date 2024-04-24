@@ -34,9 +34,89 @@ jobs:
           fetch-depth: 0
 
       - name: Set up python ${{ matrix.python-version }}
+        if: env.ARCH != 'xtensa'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install Xtensa dependencies
+        if: env.ARCH == 'xtensa'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gperf \
+            help2man \
+            libtool-bin \
+            python3 \
+            python3-dev
+
+      - name: arm-none-eabi-gcc GNU Arm Embedded Toolchain
+        if: startsWith(env.ARCH, 'arm')
+        uses: carlosperate/arm-none-eabi-gcc-action@v1.8.1
+
+      - name: Install Micropython Build Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install gcc-multilib
+          pip install pyelftools
+
+      - name: Cache Setup Xtensa Toolchain (ESP8266)
+        if: env.ARCH == 'xtensa'
+        uses: actions/cache@v4
+        with:
+          path: |
+            esp-open-sdk/xtensa-lx106-elf
+          key: xtensa-toolchain-${{ hashFiles('**/Makefile') }}
+          restore-keys: |
+            xtensa-toolchain-
+
+      - name: Clone and build Xtensa toolchain
+        if: env.ARCH == 'xtensa'
+        run: |
+          if [ ! -d "esp-open-sdk" ]; then
+            git clone --branch fix-ubuntu-21.10-build --recursive https://github.com/BrianPugh/esp-open-sdk.git
+            cd esp-open-sdk
+            unset LD_LIBRARY_PATH
+            make
+            cd ..
+          fi
+          echo "$PWD/esp-open-sdk/xtensa-lx106-elf/bin" >> $GITHUB_PATH
+
+      - name: Cache Setup ESP-IDF (ESP32)
+        if: env.ARCH == 'xtensawin'
+        uses: actions/cache@v4
+        with:
+          path: |
+            esp-idf
+            ~/.espressif
+            !esp-idf/.git
+          key: esp-idf-${{ hashFiles('**/Makefile') }}
+          restore-keys: |
+            esp-idf-
+
+      - name: Setup ESP-IDF (ESP32)
+        if: env.ARCH == 'xtensawin'
+        run: |
+          if [ ! -d "esp-idf" ]; then
+            git clone -b v5.0.6 --recursive https://github.com/espressif/esp-idf.git
+            cd esp-idf
+            git submodule update --init --recursive
+            ./install.sh
+            cd ..
+          fi
+          cd esp-idf
+          ENV_BEFORE=$(env)
+          source export.sh
+          ENV_AFTER=$(env)
+          echo "$ENV_AFTER" | grep -vxF "$ENV_BEFORE" | grep '=' | while IFS='=' read -r name value
+          do
+            echo "exporting to GITHUB_ENV: ${name}=${value}"
+            echo "${name}=${value}" >> $GITHUB_ENV
+          done
+
+      - name: Install MicroPython
+        uses: BrianPugh/install-micropython@v2
+        with:
+          reference: v${{ matrix.micropython_version }}
 
       - name: Install poetry
         uses: snok/install-poetry@v1
@@ -56,83 +136,6 @@ jobs:
           export MICROPYTHON_VERSION_MAJOR_MINOR=${MICROPYTHON_VERSION%.*}
           echo "Detected Micropython Major.Minor: $MICROPYTHON_VERSION_MAJOR_MINOR"
           echo "MICROPYTHON_VERSION_MAJOR_MINOR=$MICROPYTHON_VERSION_MAJOR_MINOR" >> $GITHUB_ENV
-
-      - name: arm-none-eabi-gcc GNU Arm Embedded Toolchain
-        if: startsWith(env.ARCH, 'arm')
-        uses: carlosperate/arm-none-eabi-gcc-action@v1.8.1
-
-      - name: Install Xtensa dependencies
-        if: startsWith(env.ARCH, 'xtensa')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gperf \
-            help2man \
-            libtool-bin
-
-      - name: Cache Setup ESP-IDF (ESP32)
-        if: startsWith(env.ARCH, 'xtensa')
-        uses: actions/cache@v4
-        with:
-          path: |
-            esp-idf
-            ~/.espressif
-            !esp-idf/.git
-          key: esp-idf-${{ hashFiles('**/Makefile') }}
-          restore-keys: |
-            esp-idf-
-
-      - name: Setup ESP-IDF (ESP32)
-        if: startsWith(env.ARCH, 'xtensa')
-        run: |
-          if [ ! -d "esp-idf" ]; then
-            git clone -b v5.0.6 --recursive https://github.com/espressif/esp-idf.git
-            cd esp-idf
-            git submodule update --init --recursive
-            ./install.sh
-            cd ..
-          fi
-          cd esp-idf
-          ENV_BEFORE=$(env)
-          source export.sh
-          ENV_AFTER=$(env)
-          echo "$ENV_AFTER" | grep -vxF "$ENV_BEFORE" | grep '=' | while IFS='=' read -r name value
-          do
-            echo "exporting to GITHUB_ENV: ${name}=${value}"
-            echo "${name}=${value}" >> $GITHUB_ENV
-          done
-
-      - name: Cache Setup Xtensa Toolchain (ESP8266)
-        if: startsWith(env.ARCH, 'xtensa')
-        uses: actions/cache@v4
-        with:
-          path: |
-            esp-open-sdk/xtensa-lx106-elf
-          key: xtensa-toolchain-${{ hashFiles('**/Makefile') }}
-          restore-keys: |
-            xtensa-toolchain-
-
-      - name: Clone and build Xtensa toolchain
-        if: startsWith(env.ARCH, 'xtensa')
-        run: |
-          if [ ! -d "esp-open-sdk" ]; then
-            git clone --branch fix-ubuntu-21.10-build --recursive https://github.com/BrianPugh/esp-open-sdk.git
-            cd esp-open-sdk
-            unset LD_LIBRARY_PATH
-            make
-            cd ..
-          fi
-          echo "$PWD/esp-open-sdk/xtensa-lx106-elf/bin" >> $GITHUB_PATH
-
-      - name: Install Build Dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install gcc-multilib
-          pip install pyelftools
-
-      - name: Install MicroPython
-        uses: BrianPugh/install-micropython@v2
-        with:
-          reference: v${{ matrix.micropython_version }}
 
       - name: Install library
         if: env.ARCH == 'x64'
