@@ -1,6 +1,45 @@
 .PHONY: clean test collect-data venv
 
 
+ifdef MPY_DIR
+
+# Native machine code in .mpy files
+# User can define architecture in call like "make ARCH=armv6m"
+# Options:
+#     * x86
+#     * x64
+#     * armv6m
+#     * armv7m
+#     * armv7emsp
+#     * armv7emdp
+#     * xtensa
+#     * xtensawin
+ARCH ?= x64
+MOD = tamp
+
+TAMP_COMPRESSOR ?= 1  # Include Tamp compressor in build
+TAMP_DECOMPRESSOR ?= 1  # Include Tamp decompressor in build
+
+CFLAGS += -Itamp/_c_src -DTAMP_COMPRESSOR=${TAMP_COMPRESSOR} -DTAMP_DECOMPRESSOR=${TAMP_DECOMPRESSOR}
+ifneq ($(CC),clang)
+CFLAGS += -fno-tree-loop-distribute-patterns
+endif
+
+SRC = tamp/_c_src/tamp/common.c mpy_bindings/bindings.c mpy_bindings/bindings_common.py
+
+ifeq ($(strip $(TAMP_COMPRESSOR)),1)
+SRC += mpy_bindings/bindings_compressor.py tamp/_c_src/tamp/compressor.c
+endif
+
+ifeq ($(strip $(TAMP_DECOMPRESSOR)),1)
+SRC += mpy_bindings/bindings_decompressor.py tamp/_c_src/tamp/decompressor.c
+endif
+
+MPY_CROSS_FLAGS = -s $(subst compressor,c,$(subst decompressor,d,$(subst bindings,m,$(notdir $<))))
+
+include $(MPY_DIR)/py/dynruntime.mk
+endif
+
 venv:
 	@. .venv/bin/activate
 
@@ -135,11 +174,10 @@ c-test: build/test_runner
 # This section is primarily to build a library to check for implementation size.
 BUILDDIR = build
 SRCDIR = tamp/_c_src
-CFLAGS = -Os -Wall -I$(SRCDIR) -ffunction-sections -fdata-sections -m32
+LIB_CFLAGS = -Os -Wall -I$(SRCDIR) -ffunction-sections -fdata-sections -m32
 
-# Collect all .c and .h files
-SRCS = $(shell find $(SRCDIR) -name "*.c")
-HEADERS = $(shell find $(SRCDIR) -name "*.h")
+SRCS = tamp/_c_src/tamp/common.c tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c
+HEADERS = tamp/_c_src/tamp/decompressor.h tamp/_c_src/tamp/compressor.h tamp/_c_src/tamp/common.h
 
 # Define the object files
 OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRCS))
@@ -154,8 +192,4 @@ tamp-c-library: build/tamp.a
 # Rule to create object files
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HEADERS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILDDIR)/%.o: %.c $(HEADERS)
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(LIB_CFLAGS) -c $< -o $@

@@ -1,3 +1,5 @@
+.. _C Library:
+
 C Library
 =========
 Tamp provides a C library optimized for low-memory-usage, fast runtime, and small binary footprint.

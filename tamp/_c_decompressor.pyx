@@ -64,20 +64,12 @@ cdef class Decompressor:
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
 
-    def read(self, int size = -1) -> bytearray:
+    def readinto(self, bytearray buf) -> int:
         cdef:
-            bytearray output_buffer = bytearray(CHUNK_SIZE)
-            unsigned char *output_buffer_ptr = output_buffer
+            unsigned char *output_buffer_ptr = buf
+            size_t output_written_size, input_chunk_consumed
 
-            size_t input_chunk_consumed
-            size_t output_size
-            size_t output_written_size
-
-        if size < 0:
-            size = 0x7FFFFFFF
-
-        output_list = []
-
+        size = len(buf)
         while size:
             output_size = min(CHUNK_SIZE, size)
 
@@ -92,9 +84,8 @@ cdef class Decompressor:
             )
             self.input_size -= input_chunk_consumed
             self.input_consumed += input_chunk_consumed
+            output_buffer_ptr += output_written_size
             size -= output_written_size
-
-            output_list.append(output_buffer[:output_written_size])
 
             if res == ctamp.TAMP_INPUT_EXHAUSTED:
                 # Read in more data
@@ -102,13 +93,52 @@ cdef class Decompressor:
                 self.input_consumed = 0
                 if self.input_size == 0:
                     break;
+            elif res == ctamp.TAMP_OUTPUT_FULL:
+                break
             elif res < 0:
                 raise ERROR_LOOKUP.get(res, NotImplementedError)
 
             # Check signals for things like KeyboardInterrupt
             PyErr_CheckSignals()
 
-        return bytearray().join(output_list)
+        return len(buf) - size
+
+    def read(self, int size = -1) -> bytearray:
+        """Decompresses data to bytes.
+
+        Parameters
+        ----------
+        size: int
+            Maximum number of bytes to return.
+            If a negative value is provided, all data will be returned.
+            Defaults to ``-1``.
+
+        Returns
+        -------
+        bytearray
+            Decompressed data.
+        """
+        if size == 0:
+            return bytearray()
+
+        chunk_size = CHUNK_SIZE
+        out = []
+        while True:
+            buf = bytearray(chunk_size if size < 0 else size)
+            chunk_size <<= 1  # Keep allocating larger chunks as we go on.
+            read_size = self.readinto(buf)
+            if size > 0:
+                # Read the entire contents in one go.
+                out.append(buf)
+                break
+            else:
+                if read_size < len(buf):
+                    if read_size:
+                        out.append(buf[:read_size])
+                    break
+                else:
+                    out.append(buf)
+        return out[0] if len(out) == 1 else bytearray(b"".join(out))
 
     def close(self):
         if self._close_f_on_close:

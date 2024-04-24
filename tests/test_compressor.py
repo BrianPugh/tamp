@@ -31,9 +31,9 @@ try:
 except ImportError:
     micropython = None
 
-
 Compressors = []
 compresses = []
+NativeExcessBitsError = ExcessBitsError
 
 if micropython:
     from tamp.compressor_viper import Compressor as ViperCompressor
@@ -41,6 +41,16 @@ if micropython:
 
     Compressors.append(ViperCompressor)
     compresses.append(viper_compress)
+
+    try:
+        from tamp_native import Compressor as NativeCompressor
+        from tamp_native import ExcessBitsError as NativeExcessBitsError
+        from tamp_native import compress as native_compress
+
+        Compressors.append(NativeCompressor)
+        compresses.append(native_compress)
+    except ImportError:
+        print("Skipping Native Module.")
 else:
     from tamp.compressor import Compressor as PyCompressor
     from tamp.compressor import compress as py_compress
@@ -237,7 +247,7 @@ class TestCompressor(unittest.TestCase):
             with self.subTest(Compressor=Compressor), io.BytesIO() as f:
                 compressor = Compressor(f, literal=7)
 
-                with self.assertRaises(ExcessBitsError):
+                with self.assertRaises((ExcessBitsError, NativeExcessBitsError)):
                     compressor.write(b"\xFF")
                     compressor.flush()
 

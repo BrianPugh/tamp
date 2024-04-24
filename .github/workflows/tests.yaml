@@ -64,9 +64,9 @@ jobs:
           installer-parallel: false # Currently there seems to be some race-condition in windows
 
       - name: Install MicroPython
-        uses: BrianPugh/install-micropython@v1
+        uses: BrianPugh/install-micropython@v2
         with:
-          reference: v1.20.0
+          reference: v1.22.0
 
       - name: Install library
         run: poetry install --no-interaction
@@ -92,7 +92,7 @@ jobs:
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
           python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
-          belay run micropython -m unittest tests/*.py
+          belay run micropython -X heapsize=200M -m unittest tests/*.py
           coverage report
 
       - name: Upload coverage to Codecov

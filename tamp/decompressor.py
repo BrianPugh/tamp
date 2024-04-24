@@ -2,6 +2,7 @@ from io import BytesIO
 
 from . import compute_min_pattern_size, initialize_dictionary
 
+_CHUNK_SIZE = 1 << 20
 _FLUSH = object()
 
 # Each key here are the huffman codes or'd with 0x80
@@ -160,12 +161,57 @@ class Decompressor:
             raise ValueError
 
         self._window_buffer = RingBuffer(
-            buffer=dictionary if dictionary else initialize_dictionary(1 << self.window_bits),
+            buffer=(dictionary if dictionary else initialize_dictionary(1 << self.window_bits)),
         )
 
         self.min_pattern_size = compute_min_pattern_size(self.window_bits, self.literal_bits)
 
         self.overflow = bytearray()
+
+    def readinto(self, buf) -> int:
+        if len(self.overflow) > len(buf):
+            buf[:] = self.overflow[: len(buf)]
+            written = len(buf)
+            self.overflow = self.overflow[len(buf) :]
+            return written
+        elif self.overflow:
+            buf[: len(self.overflow)] = self.overflow
+            written = len(self.overflow)
+            self.overflow = bytearray()
+        else:
+            written = 0
+
+        while written < len(buf):
+            try:
+                with self._bit_reader:
+                    is_literal = self._bit_reader.read(1)
+
+                    if is_literal:
+                        c = self._bit_reader.read(self.literal_bits)
+                        self._window_buffer.write_byte(c)
+                        buf[written] = c
+                        written += 1
+                    else:
+                        match_size = self._bit_reader.read_huffman()
+                        if match_size is _FLUSH:
+                            self._bit_reader.clear()
+                            continue
+                        match_size += self.min_pattern_size
+                        index = self._bit_reader.read(self.window_bits)
+
+                        string = self._window_buffer.buffer[index : index + match_size]
+                        self._window_buffer.write_bytes(string)
+
+                        to_buf = min(len(buf) - written, match_size)
+                        buf[written : written + to_buf] = string[:to_buf]
+                        written += to_buf
+                        if to_buf < match_size:
+                            self.overflow[:] = string[to_buf:]
+                            break
+            except EOFError:
+                break
+
+        return written
 
     def read(self, size=-1) -> bytearray:
         """Decompresses data to bytes.
@@ -182,48 +228,27 @@ class Decompressor:
         bytearray
             Decompressed data.
         """
-        if size < 0:
-            size = 0xFFFFFFFF
+        if size == 0:
+            return bytearray()
 
-        if len(self.overflow) > size:
-            out = self.overflow[:size]
-            self.overflow = self.overflow[size:]
-            return out
-        elif self.overflow:
-            out = self.overflow
-            self.overflow = bytearray()
-        else:
-            out = bytearray()
-
-        while len(out) < size:
-            try:
-                with self._bit_reader:
-                    is_literal = self._bit_reader.read(1)
-
-                    if is_literal:
-                        c = self._bit_reader.read(self.literal_bits)
-                        self._window_buffer.write_byte(c)
-                        out.append(c)
-                    else:
-                        match_size = self._bit_reader.read_huffman()
-                        if match_size is _FLUSH:
-                            self._bit_reader.clear()
-                            continue
-                        match_size += self.min_pattern_size
-                        index = self._bit_reader.read(self.window_bits)
-
-                        string = self._window_buffer.buffer[index : index + match_size]
-                        self._window_buffer.write_bytes(string)
-
-                        out.extend(string)
-                        if len(out) > size:
-                            self.overflow[:] = out[size:]
-                            out = out[:size]
-                            break
-            except EOFError:
+        chunk_size = _CHUNK_SIZE
+        out = []
+        while True:
+            buf = bytearray(chunk_size if size < 0 else size)
+            chunk_size <<= 1  # Keep allocating larger chunks as we go on.
+            read_size = self.readinto(buf)
+            if size > 0:
+                # Read the entire contents in one go.
+                out.append(buf)
                 break
-
-        return out
+            else:
+                if read_size < len(buf):
+                    if read_size:
+                        out.append(buf[:read_size])
+                    break
+                else:
+                    out.append(buf)
+        return out[0] if len(out) == 1 else bytearray(b"".join(out))
 
     def close(self):
         """Closes the input file or stream."""
