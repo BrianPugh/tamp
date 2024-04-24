@@ -21,6 +21,14 @@ static void TAMP_CHECK(tamp_res res){
     }
 }
 
+static mp_obj_t initialize_dictionary(mp_obj_t size_obj) {
+    mp_int_t size = mp_obj_get_int(size_obj);
+    uint8_t *buffer = m_malloc(size);
+    mp_obj_t buffer_obj = mp_obj_new_bytearray_by_ref(size, buffer);
+    tamp_initialize_dictionary(buffer, size);
+    return buffer_obj;
+}
+MP_DEFINE_CONST_FUN_OBJ_1(initialize_dictionary_obj, initialize_dictionary);
 
 /**************
  * COMPRESSOR *
@@ -245,6 +253,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     /**********
      * COMMON *
      **********/
+    mp_store_global(MP_QSTR_initialize_dictionary, MP_OBJ_FROM_PTR(&initialize_dictionary_obj));
 
     /**************
      * COMPRESSOR *
