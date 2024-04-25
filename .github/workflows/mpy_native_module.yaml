@@ -208,4 +208,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            "native-modules/*"
+            "mpy-native-modules/*"
