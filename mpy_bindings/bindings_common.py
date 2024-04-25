@@ -1,9 +1,6 @@
 __version__ = "0.0.0"
 
 
-from tamp.decompressor import TextDecompressor
-
-
 class ExcessBitsError(Exception):
     """Provided data has more bits than expected ``literal`` bits."""
 
