@@ -96,8 +96,9 @@ def build_cython_extensions():
         shutil.copyfile(output, relative_extension)
 
 
-try:
-    build_cython_extensions()
-except Exception:
-    if not allowed_to_fail:
-        raise
+if os.environ.get("TAMP_BUILD_C_EXTENSIONS", "1") == "1":
+    try:
+        build_cython_extensions()
+    except Exception:
+        if not allowed_to_fail:
+            raise
