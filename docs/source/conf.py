@@ -42,6 +42,7 @@ release = __version__
 extensions = [
     "sphinx_rtd_theme",
     "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx.ext.linkcode",
     "sphinx_copybutton",
@@ -56,6 +57,11 @@ templates_path = ["_templates"]
 exclude_patterns = []
 
 smartquotes = False
+
+# Intersphinx
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+}
 
 # Napoleon settings
 napoleon_google_docstring = True

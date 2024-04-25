@@ -92,7 +92,7 @@ Tamp provides pre-compiled `native modules` that are easy to install, are small,
 
 Download the appropriate ``.mpy`` file from the `release page`_.
 
-   * Match the micropython version running on your board.
+   * Match the micropython version.
 
    * Match the architecture to the microcontroller (e.g. ``armv6m`` for a pi pico).
 

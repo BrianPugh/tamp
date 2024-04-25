@@ -104,20 +104,6 @@ cdef class Decompressor:
         return len(buf) - size
 
     def read(self, int size = -1) -> bytearray:
-        """Decompresses data to bytes.
-
-        Parameters
-        ----------
-        size: int
-            Maximum number of bytes to return.
-            If a negative value is provided, all data will be returned.
-            Defaults to ``-1``.
-
-        Returns
-        -------
-        bytearray
-            Decompressed data.
-        """
         if size == 0:
             return bytearray()
 
@@ -151,8 +137,6 @@ cdef class Decompressor:
         self.close()
 
 class TextDecompressor(Decompressor):
-    """Decompresses a file or stream of tamp-compressed data into text."""
-
     def read(self, *args, **kwargs) -> str:
         return super().read(*args, **kwargs).decode()
 

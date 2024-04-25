@@ -1,5 +1,10 @@
 from io import BytesIO
 
+try:
+    from typing import Optional
+except ImportError:
+    pass
+
 from . import compute_min_pattern_size, initialize_dictionary
 
 _CHUNK_SIZE = 1 << 20
@@ -7,7 +12,7 @@ _FLUSH = object()
 
 # Each key here are the huffman codes or'd with 0x80
 # This is so that each lookup is easy/quick.
-huffman_lookup = {
+_huffman_lookup = {
     0b0: 0,
     0b11: 1,
     0b1000: 2,
@@ -26,7 +31,7 @@ huffman_lookup = {
 }
 
 
-class BitReader:
+class _BitReader:
     """Reads bits from a stream."""
 
     def __init__(self, f, close_f_on_close=False):
@@ -36,7 +41,7 @@ class BitReader:
 
     def read_huffman(self):
         proposed_code = 0
-        lookup = huffman_lookup
+        lookup = _huffman_lookup
         read = self.read
         for _ in range(8):
             proposed_code |= read(1)
@@ -74,7 +79,6 @@ class BitReader:
         self.backup_bit_pos = None
 
     def close(self):
-        self.f.close()
         if self.close_f_on_close:
             self.f.close()
 
@@ -99,7 +103,7 @@ class BitReader:
         self.backup_bit_pos = None
 
 
-class RingBuffer:
+class _RingBuffer:
     def __init__(self, buffer):
         self.buffer = buffer
         self.size = len(buffer)
@@ -121,20 +125,26 @@ class Decompressor:
     """Decompresses a file or stream of tamp-compressed data.
 
     Can be used as a context manager to automatically handle file
-    opening and closing::
+    opening and closing:
+
+    .. code-block:: python
 
         with tamp.Decompressor("compressed.tamp") as f:
             decompressed_data = f.read()
     """
 
-    def __init__(self, f, *, dictionary=None):
+    def __init__(self, f, *, dictionary: Optional[bytearray] = None):
         """
         Parameters
         ----------
         f: Union[file, str]
             File-like object to read compressed bytes from.
-        dictionary: bytearray
-            Use dictionary inplace as window buffer.
+        dictionary: Optional[bytearray]
+            Use the given **initialized** buffer inplace.
+            At compression time, the same initialized buffer must be provided.
+            Decompression stream's ``window`` must agree with the dictionary size.
+            If providing a pre-allocated buffer, but with default initialization, it must
+            first be initialized with :func:`~tamp.initialize_dictionary`
         """
         if not hasattr(f, "read"):  # It's probably a path-like object.
             f = open(str(f), "rb")
@@ -142,7 +152,7 @@ class Decompressor:
         else:
             close_f_on_close = False
 
-        self._bit_reader = BitReader(f, close_f_on_close=close_f_on_close)
+        self._bit_reader = _BitReader(f, close_f_on_close=close_f_on_close)
 
         # Read Header
         self.window_bits = self._bit_reader.read(3) + 8
@@ -157,10 +167,10 @@ class Decompressor:
         if more_header_bytes:
             raise NotImplementedError
 
-        if uses_custom_dictionary ^ bool(dictionary):
+        if uses_custom_dictionary and dictionary is None:
             raise ValueError
 
-        self._window_buffer = RingBuffer(
+        self._window_buffer = _RingBuffer(
             buffer=(dictionary if dictionary else initialize_dictionary(1 << self.window_bits)),
         )
 
@@ -168,7 +178,19 @@ class Decompressor:
 
         self.overflow = bytearray()
 
-    def readinto(self, buf) -> int:
+    def readinto(self, buf: bytearray) -> int:
+        """Decompresses data into provided buffer.
+
+        Parameters
+        ----------
+        buf: bytearray
+            Buffer to decode data into.
+
+        Returns
+        -------
+        int
+            Number of bytes decompressed into buffer.
+        """
         if len(self.overflow) > len(buf):
             buf[:] = self.overflow[: len(buf)]
             written = len(buf)
@@ -213,7 +235,7 @@ class Decompressor:
 
         return written
 
-    def read(self, size=-1) -> bytearray:
+    def read(self, size: int = -1) -> bytearray:
         """Decompresses data to bytes.
 
         Parameters
@@ -251,20 +273,28 @@ class Decompressor:
         return out[0] if len(out) == 1 else bytearray(b"".join(out))
 
     def close(self):
-        """Closes the input file or stream."""
+        """Closes the input file or stream, if tamp opened it."""
         self._bit_reader.close()
 
     def __enter__(self):
+        """Use :class:`Decompressor` as a context manager.
+
+        .. code-block:: python
+
+           with tamp.Decompressor("output.tamp") as f:
+               decompressed_data = f.read()
+        """
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """Calls :meth:`~Decompressor.close` on contextmanager exit."""
         self.close()
 
 
 class TextDecompressor(Decompressor):
     """Decompresses a file or stream of tamp-compressed data into text."""
 
-    def read(self, *args, **kwargs) -> str:
+    def read(self, size: int = -1) -> str:
         """Decompresses data to text.
 
         Parameters
@@ -279,20 +309,22 @@ class TextDecompressor(Decompressor):
         str
             Decompressed text.
         """
-        return super().read(*args, **kwargs).decode()
+        return super().read(size).decode()
 
 
-def decompress(data: bytes, *args, **kwargs) -> bytearray:
+def decompress(data: bytes, *, dictionary: Optional[bytearray] = None) -> bytearray:
     """Single-call to decompress data.
 
     Parameters
     ----------
     data: bytes
-        Plaintext data to compress.
-    *args: tuple
-        Passed along to :class:`Decompressor`.
-    **kwargs : dict
-        Passed along to :class:`Decompressor`.
+        Tamp-compressed data to decompress.
+    dictionary: Optional[bytearray]
+        Use the given **initialized** buffer inplace.
+        At compression time, the same initialized buffer must be provided.
+        Decompression stream's ``window`` must agree with the dictionary size.
+        If providing a pre-allocated buffer, but with default initialization, it must
+        first be initialized with :func:`~tamp.initialize_dictionary`
 
     Returns
     -------
@@ -300,5 +332,5 @@ def decompress(data: bytes, *args, **kwargs) -> bytearray:
         Decompressed data.
     """
     with BytesIO(data) as f:
-        d = Decompressor(f, *args, **kwargs)
+        d = Decompressor(f, dictionary=dictionary)
         return d.read()

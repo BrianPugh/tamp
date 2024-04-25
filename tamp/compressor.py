@@ -2,28 +2,20 @@ from collections import deque
 from io import BytesIO
 
 try:
-    from typing import Union
+    from typing import Optional, Union
 except ImportError:
     pass
 
 from . import ExcessBitsError, bit_size, compute_min_pattern_size, initialize_dictionary
 
-try:
-    from micropython import const
-except ImportError:
-
-    def const(x):
-        return x  # noqa: E721
-
-
 # encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths
-huffman_codes = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
+_huffman_codes = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
 # These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
-huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07"
-FLUSH_CODE = const(0xAB)  # 8 bits
+_huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07"
+_FLUSH_CODE = 0xAB  # 8 bits
 
 
-class BitWriter:
+class _BitWriter:
     """Writes bits to a stream."""
 
     def __init__(self, f, close_f_on_close=False):
@@ -33,7 +25,7 @@ class BitWriter:
         self.bit_pos = 0
 
     def write_huffman(self, pattern_size):
-        return self.write(huffman_codes[pattern_size], huffman_bits[pattern_size])
+        return self.write(_huffman_codes[pattern_size], _huffman_bits[pattern_size])
 
     def write(self, bits, num_bits, flush=True):
         bits &= (1 << num_bits) - 1
@@ -53,7 +45,7 @@ class BitWriter:
     def flush(self, write_token=True):
         bytes_written = 0
         if self.bit_pos > 0 and write_token:
-            bytes_written += self.write(FLUSH_CODE, 9)
+            bytes_written += self.write(_FLUSH_CODE, 9)
 
         while self.bit_pos > 0:
             byte = (self.buffer >> 24) & 0xFF
@@ -72,7 +64,7 @@ class BitWriter:
             self.f.close()
 
 
-class RingBuffer:
+class _RingBuffer:
     def __init__(self, buffer):
         self.buffer = buffer
         self.size = len(buffer)
@@ -97,23 +89,33 @@ class Compressor:
         self,
         f,
         *,
-        window=10,
-        literal=8,
-        dictionary=None,
+        window: int = 10,
+        literal: int = 8,
+        dictionary: Optional[bytearray] = None,
     ):
         """
         Parameters
         ----------
+        f: Union[str, Path, FileLike]
+            Path/FileHandle/Stream to write compressed data to.
         window: int
             Size of window buffer in bits.
-            Defaults to 10 (1024 byte buffer).
+            Higher values will typically result in higher compression ratios and higher computation cost.
+            A same size buffer is required at decompression time.
+            Valid range: ``[8, 15]``.
+            Defaults to ``10`` (``1024`` byte buffer).
         literal: int
-            Size of literals in bits.
-            Defaults to 8.
+            Number of used bits in each byte of data.
+            The default ``8`` bits can store all data.
+            A common other value is ``7`` for storing ascii characters where the most-significant-bit is always 0.
+            Smaller values result in higher compression ratios for no additional computation cost.
+            Valid range: ``[5, 8]``.
         dictionary: Optional[bytearray]
-            Use the given initialized buffer inplace.
-            At decompression time, the same buffer must be provided.
+            Use the given **initialized** buffer inplace.
+            At decompression time, the same initialized buffer must be provided.
             ``window`` must agree with the dictionary size.
+            If providing a pre-allocated buffer, but with default initialization, it must
+            first be initialized with :func:`~tamp.initialize_dictionary`
         """
         if not hasattr(f, "write"):  # It's probably a path-like object.
             # TODO: then close it on close
@@ -122,7 +124,7 @@ class Compressor:
         else:
             close_f_on_close = False
 
-        self._bit_writer = BitWriter(f, close_f_on_close=close_f_on_close)
+        self._bit_writer = _BitWriter(f, close_f_on_close=close_f_on_close)
         if dictionary and bit_size(len(dictionary) - 1) != window:
             raise ValueError("Dictionary-window size mismatch.")
 
@@ -134,7 +136,7 @@ class Compressor:
 
         self.literal_flag = 1 << self.literal_bits
 
-        self._window_buffer = RingBuffer(
+        self._window_buffer = _RingBuffer(
             buffer=dictionary if dictionary else initialize_dictionary(1 << window),
         )
 
@@ -192,12 +194,12 @@ class Compressor:
 
         return bytes_written
 
-    def write(self, data: bytes) -> int:
+    def write(self, data: Union[bytes, bytearray]) -> int:
         """Compress ``data`` to stream.
 
         Parameters
         ----------
-        data: bytes
+        data: Union[bytes, bytearray]
             Data to be compressed.
 
         Returns
@@ -216,18 +218,22 @@ class Compressor:
         return bytes_written
 
     def flush(self, write_token: bool = True) -> int:
-        """Flushes internal buffers.
+        """Flushes all internal buffers.
+
+        This compresses any data remaining in the input buffer,
+        and flushes any remaining data in the output buffer to
+        disk.
 
         Parameters
         ----------
         write_token: bool
             If appropriate, write a ``FLUSH`` token.
-            Defaults to ``True``.
+            Defaults to :obj:`True`.
 
         Returns
         -------
         int
-            Number of compressed bytes flushed.
+            Number of compressed bytes flushed to disk.
         """
         bytes_written = 0
         if self.flush_cb:
@@ -238,22 +244,30 @@ class Compressor:
         return bytes_written
 
     def close(self) -> int:
-        """Flushes internal buffers and close the output file or stream.
+        """Flushes all internal buffers and closes the output file or stream, if tamp opened it.
 
         Returns
         -------
         int
-            Number of compressed bytes flushed.
+            Number of compressed bytes flushed to disk.
         """
         bytes_written = 0
         bytes_written += self.flush(write_token=False)
         self._bit_writer.close()
         return bytes_written
 
-    def __enter__(self):
+    def __enter__(self) -> "Compressor":
+        """Use :class:`Compressor` as a context manager.
+
+        .. code-block:: python
+
+           with tamp.Compressor("output.tamp") as f:
+               f.write(b"foo")
+        """
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """Calls :meth:`~Compressor.close` on contextmanager exit."""
         self.close()
 
 
@@ -264,17 +278,37 @@ class TextCompressor(Compressor):
         return super().write(data.encode())
 
 
-def compress(data: Union[bytes, str], *args, **kwargs) -> bytes:
+def compress(
+    data: Union[bytes, str],
+    *,
+    window: int = 10,
+    literal: int = 8,
+    dictionary: Optional[bytearray] = None,
+) -> bytes:
     """Single-call to compress data.
 
     Parameters
     ----------
     data: Union[str, bytes]
         Data to compress.
-    *args: tuple
-        Passed along to :class:`Compressor`.
-    **kwargs : dict
-        Passed along to :class:`Compressor`.
+    window: int
+        Size of window buffer in bits.
+        Higher values will typically result in higher compression ratios and higher computation cost.
+        A same size buffer is required at decompression time.
+        Valid range: ``[8, 15]``.
+        Defaults to ``10`` (``1024`` byte buffer).
+    literal: int
+        Number of used bits in each byte of data.
+        The default ``8`` bits can store all data.
+        A common other value is ``7`` for storing ascii characters where the most-significant-bit is always 0.
+        Valid range: ``[5, 8]``.
+    dictionary: Optional[bytearray]
+        Use the given **initialized** buffer inplace.
+        At decompression time, the same initialized buffer must be provided.
+        ``window`` must agree with the dictionary size.
+        If providing a pre-allocated buffer, but with default initialization, it must
+        first be initialized with :func:`~tamp.initialize_dictionary`
+
 
     Returns
     -------
@@ -283,10 +317,10 @@ def compress(data: Union[bytes, str], *args, **kwargs) -> bytes:
     """
     with BytesIO() as f:
         if isinstance(data, str):
-            c = TextCompressor(f, *args, **kwargs)
+            c = TextCompressor(f, window=window, literal=literal, dictionary=dictionary)
             c.write(data)
         else:
-            c = Compressor(f, *args, **kwargs)
+            c = Compressor(f, window=window, literal=literal, dictionary=dictionary)
             c.write(data)
         c.flush(write_token=False)
         f.seek(0)

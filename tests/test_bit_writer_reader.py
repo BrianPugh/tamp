@@ -2,8 +2,8 @@ import io
 import random
 import unittest
 
-from tamp.compressor import BitWriter
-from tamp.decompressor import BitReader
+from tamp.compressor import _BitWriter
+from tamp.decompressor import _BitReader
 
 
 class TestBitWriterAndReader(unittest.TestCase):
@@ -19,14 +19,14 @@ class TestBitWriterAndReader(unittest.TestCase):
 
         # Write the chunks of bits using BitWriter
         with io.BytesIO() as f:
-            writer = BitWriter(f)
+            writer = _BitWriter(f)
             for bits, num_bits in chunks:
                 writer.write(bits, num_bits)
             writer.flush(write_token=False)
 
             # Read the chunks of bits back using BitReader
             f.seek(0)
-            reader = BitReader(f)
+            reader = _BitReader(f)
             for original_bits, num_bits in chunks:
                 read_bits = reader.read(num_bits)
                 self.assertEqual(read_bits, original_bits)
@@ -34,14 +34,14 @@ class TestBitWriterAndReader(unittest.TestCase):
     def test_writer_correct_size_no_flush_token(self):
         for i in range(1, 8 + 1):
             with io.BytesIO() as f:
-                writer = BitWriter(f)
+                writer = _BitWriter(f)
                 writer.write(0xFFFF, i)
                 writer.flush(write_token=False)
 
                 self.assertEqual(f.tell(), 1)
         for i in range(9, 16 + 1):
             with io.BytesIO() as f:
-                writer = BitWriter(f)
+                writer = _BitWriter(f)
                 writer.write(0xFFFF, i)
                 writer.flush(write_token=False)
 
@@ -55,5 +55,5 @@ class TestHuffmanReader(unittest.TestCase):
         """
         random_bytes = bytes(random.randint(0, 255) for _ in range(1024 * 1024))
         with io.BytesIO(random_bytes) as f:
-            reader = BitReader(f)
+            reader = _BitReader(f)
             reader.read_huffman()

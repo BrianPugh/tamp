@@ -1,4 +1,3 @@
-# Don't manually change, let poetry-dynamic-versioning-plugin handle it.
 __version__ = "0.0.0"
 
 
@@ -22,30 +21,14 @@ def _xorshift32(seed):
         yield seed
 
 
-def initialize_dictionary(size, seed=None):
-    """Initialize Dictionary.
-
-    Parameters
-    ----------
-    size: Union[int, bytearray]
-        If a ``bytearray``, will populate it with initial data.
-        If an ``int``, will allocate and initialize a bytearray of indicated size.
-
-    Returns
-    -------
-    bytearray
-        Initialized window dictionary.
-    """
+def initialize_dictionary(source, seed=None):
     if seed is None:
         seed = 3758097560
     elif seed == 0:
-        return bytearray(size)
+        return bytearray(source)
 
-    if isinstance(size, bytearray):
-        out = size
-        size = len(out)
-    else:
-        out = bytearray(size)
+    out = source if isinstance(source, bytearray) else bytearray(source)
+    size = len(out)
 
     chars = b" \x000ei>to<ans\nr/."  # 16 most common chars in dataset
 
@@ -63,24 +46,6 @@ def initialize_dictionary(size, seed=None):
 
 
 def compute_min_pattern_size(window, literal):
-    """Compute whether the minimum pattern length should be 2 or 3.
-
-    .. code-block:: python
-
-        # Easy to understand version; commented out for smaller optimized version;
-        if window > 15 or window < 8:
-            raise ValueError
-        if literal == 5:
-            return 2 + (window > 10)
-        elif literal == 6:
-            return 2 + (window > 12)
-        elif literal == 7:
-            return 2 + (window > 14)
-        elif literal == 8:
-            return 2
-        else:
-            raise ValueError
-    """
     if not (7 < window < 16 and 4 < literal < 9):
         raise ValueError
 
