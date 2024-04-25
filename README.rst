@@ -92,9 +92,9 @@ Tamp provides pre-compiled `native modules` that are easy to install, are small,
 
 Download the appropriate ``.mpy`` file from the `release page`_.
 
-   * Match the micropython version.
+* Match the micropython version.
 
-   * Match the architecture to the microcontroller (e.g. ``armv6m`` for a pi pico).
+* Match the architecture to the microcontroller (e.g. ``armv6m`` for a pi pico).
 
 Rename the file to ``tamp.mpy`` and transfer it to your board. If using `Belay`_, tamp can be installed by adding the following to ``pyproject.toml``.
 
@@ -357,9 +357,9 @@ Numbers reported in bytes.
 +----------------------------------+------------+--------------+---------------------------+
 | Tamp (C)                         | 2008       | 1972         | 3864                      |
 +----------------------------------+------------+--------------+---------------------------+
-| Heatshrink                       | 2956       | 3876         | 6832                      |
+| Heatshrink (C)                   | 2956       | 3876         | 6832                      |
 +----------------------------------+------------+--------------+---------------------------+
-| uzlib                            | 2355       | 3963         | 6318                      |
+| uzlib (C)                        | 2355       | 3963         | 6318                      |
 +----------------------------------+------------+--------------+---------------------------+
 
 Heatshrink doesn't include a high level API; in an apples-to-apples comparison the Tamp library would be even smaller.
