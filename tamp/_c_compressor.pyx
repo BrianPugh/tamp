@@ -131,7 +131,6 @@ cdef class Compressor:
 
 
 class TextCompressor(Compressor):
-    """Compresses text to a file or stream."""
 
     def write(self, data: str) -> int:
         return super().write(data.encode())

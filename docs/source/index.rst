@@ -8,5 +8,5 @@
    self
    Installation
    specification
-   api
+   python_api
    c_library

@@ -32,13 +32,16 @@ For development, its recommended to use Poetry:
    cd tamp
    poetry install
 
-MicroPython Native Module
--------------------------
+MicroPython
+^^^^^^^^^^^
+
+Native Module
+-------------
 Tamp provides pre-compiled `native modules` that are easy to install, are small, and are incredibly fast.
 
 Download the appropriate ``.mpy`` file from the `release page`_.
 
-   * Match the micropython version running on your board.
+   * Match the micropython version.
 
    * Match the architecture to the microcontroller (e.g. ``armv6m`` for a pi pico).
 
@@ -49,8 +52,8 @@ Rename the file to ``tamp.mpy`` and transfer it to your board. If using `Belay`_
    [tool.belay.dependencies]
    tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.4.0/tamp-1.4.0-mpy1.22-armv6m.mpy"
 
-MicroPython Viper
------------------
+Viper
+-----
 **NOT RECOMMENDED, PLEASE USE NATIVE MODULE**
 
 For micropython use, there are 3 main files:

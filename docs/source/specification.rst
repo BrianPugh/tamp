@@ -152,7 +152,7 @@ The maximum match-size is more likely than the second-highest match-size because
 .. image:: ../../assets/match-size-plot.png
    :alt: Match Size Plot
 
-For any given huffman coding schema, a equivalent coding can be obtained by inverting all the bits (reflecting the huffman tree). The single-bit, most common code ``0b0`` representing a pattern-size 2 is intentionally represented as ``0b0`` instead of ``0b1``. This makes the MSb of all other codes be 1, simplifing the decoding procedure because the number of bits read doesn't strictly have to be recorded.
+For any given huffman coding schema, a equivalent coding can be obtained by inverting all the bits (reflecting the huffman tree). The single-bit, most common code ``0b0`` representing a pattern-size 2 is intentionally represented as ``0b0`` instead of ``0b1``. This makes the MSb of all other codes be 1, simplifying the decoding procedure because the number of bits read doesn't strictly have to be recorded.
 
 Flush Symbol
 ------------
