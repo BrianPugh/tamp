@@ -21,6 +21,30 @@ static void TAMP_CHECK(tamp_res res){
     }
 }
 
+static mp_obj_t initialize_dictionary(mp_obj_t obj) {
+    mp_buffer_info_t buffer_info;
+#if MICROPY_VERSION_MAJOR == 1 && MICROPY_VERSION_MINOR <= 21
+    // "mp_get_buffer" is not available in micropython <= v1.21
+    if (mp_obj_is_int(obj)) {
+        buffer_info.len = mp_obj_get_int(obj);
+        buffer_info.buf = m_malloc(buffer_info.len);
+        obj = mp_obj_new_bytearray_by_ref(buffer_info.len, buffer_info.buf);
+    }
+    else{
+        mp_get_buffer_raise(obj, &buffer_info, MP_BUFFER_RW);
+    }
+#else
+    // ~20 byte smaller implementation using "mp_get_buffer"
+    if(!mp_get_buffer(obj, &buffer_info, MP_BUFFER_RW)){
+        buffer_info.len = mp_obj_get_int(obj);
+        buffer_info.buf = m_malloc(buffer_info.len);
+        obj = mp_obj_new_bytearray_by_ref(buffer_info.len, buffer_info.buf);
+    }
+#endif
+    tamp_initialize_dictionary(buffer_info.buf, buffer_info.len);
+    return obj;
+}
+MP_DEFINE_CONST_FUN_OBJ_1(initialize_dictionary_obj, initialize_dictionary);
 
 /**************
  * COMPRESSOR *
@@ -245,6 +269,7 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     /**********
      * COMMON *
      **********/
+    mp_store_global(MP_QSTR_initialize_dictionary, MP_OBJ_FROM_PTR(&initialize_dictionary_obj));
 
     /**************
      * COMPRESSOR *
