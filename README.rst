@@ -365,7 +365,7 @@ Numbers reported in bytes.
 Heatshrink doesn't include a high level API; in an apples-to-apples comparison the Tamp library would be even smaller.
 
 
-.. |GHA tests| image:: https://github.com/BrianPugh/tamp/workflows/tests/badge.svg
+.. |GHA tests| image:: https://github.com/BrianPugh/tamp/actions/workflows/tests.yaml/badge.svg?branch=main
    :target: https://github.com/BrianPugh/tamp/actions?query=workflow%3Atests
    :alt: GHA Status
 .. |Codecov report| image:: https://codecov.io/github/BrianPugh/tamp/coverage.svg?branch=main
