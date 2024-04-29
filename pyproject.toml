@@ -62,7 +62,7 @@ numpy = [
     {version = ">=1.24", python = ">=3.8,<3.12"},
     {version = ">=1.26", python = ">=3.12"}
 ]
-pyelftools = "^0.29"
+pyelftools = "^0.31"
 
 [tool.poetry.group.profile]
 optional = true
