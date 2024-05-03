@@ -44,7 +44,7 @@ Compressed output in bytes vs. window size ("window bits (bytes)"), i.e. RAM req
 
 Input: Espressif logo in 24-bit BMP format, 25862 bytes
 
-Compressed output in bytes vs. window size (log2)
+Compressed output in bytes vs. window size ("window bits (bytes)")
 
 +-------------+--------------+----------+----------+----------+----------+----------+----------+
 |             | Uncompressed | 8 (256b) | 9 (512b) | 10 (1kb) | 11 (2kb) | 12 (4kb) | 13 (8kb) |
@@ -55,6 +55,9 @@ Compressed output in bytes vs. window size (log2)
 +-------------+--------------+----------+----------+----------+----------+----------+----------+
 | Compression | 1,0 x        | 3,4 x    | 3,3 x    | 4,0 x    | 4,0 x    | 3,9 x    | 3,9 x    |
 +-------------+--------------+----------+----------+----------+----------+----------+----------+
+
+As to the overall compression efficiency, 7zip in "Ultra" mode compresses the same file down to 3022 bytes (11,7%),
+which should be a rough approximation of the entropy of that file, i.e. the theoretical limit of what is possible.
 
 Speed
 -----
