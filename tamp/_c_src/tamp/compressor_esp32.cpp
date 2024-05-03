@@ -76,9 +76,9 @@ class InputCopy {
         /**
          * @brief Returns a pointer to a sequence of at least \p minBytes bytes from the compressor's current input
          * buffer. Makes a copy of the bytes and returns a pointer into \c this->input if necessary.
-         * 
+         *
          * @param minBytes minimum amount of sequential bytes wanted
-         * @return pointer to a sequence of input bytes, either in \c compressor.input or to the copy in \c this->input. 
+         * @return pointer to a sequence of input bytes, either in \c compressor.input or to the copy in \c this->input.
          */
         const uint8_t* getInput(const uint32_t minBytes) noexcept {
             constexpr uint32_t INBUF_SIZE = sizeof(TampCompressor::input);
@@ -105,9 +105,9 @@ class InputCopy {
                     "EE.SRC.Q q0, q0, q0" "\n"
                     // Store
                     "EE.VST.128.IP q0, %[out], 0" "\n"
-                    : 
+                    :
                         "=m" (this->input)
-                    : 
+                    :
                         [input] "r" (compressor.input),
                         [shift] "r" (ipos),
                         [out] "r" (this->input),
@@ -122,7 +122,7 @@ class InputCopy {
                 if(minBytes <= l1) {
                     // Nothing to be done.
                     return compressor.input + ipos;
-                } else {      
+                } else {
                     mem::cpy_short<INBUF_SIZE>(this->input, compressor.input + ipos, l1);
                     mem::cpy_short<INBUF_SIZE>(this->input + l1, compressor.input, minBytes - l1);
                     return this->input;
@@ -134,7 +134,7 @@ class InputCopy {
     private:
 
         alignas(16) uint8_t input[sizeof(TampCompressor::input)];
-        const TampCompressor& compressor;        
+        const TampCompressor& compressor;
 };
 
 // static_assert(sizeof(InputCopy) == 0);
@@ -153,8 +153,8 @@ static inline tamp::byte_span find_best_match(const TampCompressor* const compre
         const uint32_t patLen = MIN(compressor->input_size, MAX_PATTERN_SIZE);
 
         /* We need the pattern to match to be sequential in memory.
-           If the current pattern wraps around in the input buffer, we make a 
-           straightened-out copy to use for the search. If not, we use the 
+           If the current pattern wraps around in the input buffer, we make a
+           straightened-out copy to use for the search. If not, we use the
            input data directly.
         */
 
@@ -214,7 +214,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor* const compressor, unsigne
     if(TAMP_UNLIKELY(compressor->input_size == 0)) {
         if(output_written_size) {
             *output_written_size = 0;
-        }        
+        }
         return TAMP_OK;
     }
 
@@ -224,7 +224,7 @@ tamp_res tamp_compressor_compress_poll(TampCompressor* const compressor, unsigne
         res = partial_flush(compressor, output, output_size, &flush_bytes_written);
         if(output_written_size) {
             *output_written_size = flush_bytes_written;
-        }        
+        }
         if(TAMP_UNLIKELY(res != TAMP_OK))
             return res;
         output_size -= flush_bytes_written;
@@ -276,7 +276,7 @@ size_t tamp_compressor_sink(
         size_t input_size
         ){
     {
-        const size_t space = sizeof(compressor->input) - compressor->input_size; 
+        const size_t space = sizeof(compressor->input) - compressor->input_size;
         input_size = MIN(input_size,space);
     }
     for(size_t i=0; i < input_size; i++){

@@ -21,7 +21,7 @@ typedef struct TampCompressor{
     uint32_t bit_buffer_pos;
 
     uint32_t input_size;
-    uint32_t input_pos;    
+    uint32_t input_pos;
 
     /* Conf attributes */
     uint8_t conf_window;   // number of window bits

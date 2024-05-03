@@ -1,13 +1,12 @@
 /*
-
     Copyright 2024, <https://github.com/BitsForPeople>
-     
+
     This program is free software: you can redistribute it and/or modify it
     under the terms of the GNU General Public License as published by the
     Free Software Foundation, either version 3 of the License, or (at your
     option) any later version.
 
-    This program is distributed in the hope that it will be useful, bu
+    This program is distributed in the hope that it will be useful, but
     WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
     or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
     for more details.
@@ -133,7 +132,7 @@ namespace tamp {
             template<typename T>
             static void __attribute__((always_inline)) incptr(T*& ptr, const int32_t inc) noexcept {
                 ptr = (T*)(p<uint8_t>(ptr) + inc);
-            }            
+            }
 
             template<typename T>
             static const T* p(const void* const ptr) noexcept {
@@ -152,9 +151,9 @@ namespace tamp {
 
             /**
              * @brief Returns \p x rounded down to the next lower multiple of \p M.
-             * 
-             * @tparam M 
-             * @param x 
+             *
+             * @tparam M
+             * @param x
              * @return greatest integer multiple of \p M <= \p x
              */
             template<uint32_t M>
@@ -170,7 +169,7 @@ namespace tamp {
                     // return (x / M) * M;
                     return (uint32_t)((x * OOM)>>32) * M;
                 }
-            }            
+            }
 
             template<typename T, uint32_t M, uint32_t N = 0>
             static bool __attribute__((always_inline)) unrolled_find(const uint8_t*& data, const uint32_t v) noexcept {
@@ -219,7 +218,7 @@ namespace tamp {
                         return true;
                     }
                 }
-            }            
+            }
             /**
              * @brief Scalar pattern search for patterns <= sizeof(uint32_t) bytes in length.
              *
@@ -245,12 +244,12 @@ namespace tamp {
                             incptr<LOOP_UNROLL_FACTOR>(data);
                         }
 
-                        if(data >= end_unrolled) { 
+                        if(data >= end_unrolled) {
                             // Nothing found so far.
                             while(data < end && as<uint32_t>(data) != v) {
                                 incptr<1>(data);
                             }
-                        }                            
+                        }
                     }
                     else
                     {
@@ -260,7 +259,7 @@ namespace tamp {
 
                         constexpr uint32_t LOOP_UNROLL_FACTOR = 8;
 
-                        const uint32_t vl = as<uint32_t>(pattern) << 8; 
+                        const uint32_t vl = as<uint32_t>(pattern) << 8;
                         const uint32_t vh = vl >> 8;
 
                         // Loop unrolled 8x.
@@ -269,16 +268,16 @@ namespace tamp {
                         while(data < end_unrolled && !unrolled_find_3<LOOP_UNROLL_FACTOR>(data,vl,vh)) [[likely]] {
                             incptr<LOOP_UNROLL_FACTOR>(data);
                         }
-                                                    
-                        if(data >= end_unrolled) { 
+
+                        if(data >= end_unrolled) {
                             // Nothing found so far.
                             while(data < end && (as<uint32_t>(data) << 8) != vl) {
                                 incptr<1>(data);
                             }
-                        } 
+                        }
 
                         // perf::probe[3].exit()
-                        //     .addItems(dataLen - (end-data));                                                       
+                        //     .addItems(dataLen - (end-data));
                     }
 
                 } else {
@@ -302,7 +301,7 @@ namespace tamp {
                             incptr<LOOP_UNROLL_FACTOR>(data);
                         }
 
-                        if(data >= end_unrolled) { 
+                        if(data >= end_unrolled) {
                             // Nothing found so far.
                             while(data < end && as<uint16_t>(data) != v) {
                                 incptr<1>(data);
@@ -478,8 +477,8 @@ namespace tamp {
                     );
 
                 } else {
-                    const uint8_t* const end = p<uint8_t>(d1) + len;                    
-                    
+                    const uint8_t* const end = p<uint8_t>(d1) + len;
+
                     // if(len >= 4) [[unlikely]] {
                     //     const uint8_t* const e4 = p<uint8_t>(d1) + (len & ~3);
                     //     do {
@@ -556,7 +555,7 @@ namespace tamp {
 
 
                     }
-                    
+
 
                     {
                         // Compare remaining data (0..3 bytes) byte-wise
@@ -628,7 +627,7 @@ namespace tamp {
 
 
             /**
-             * @brief Searches \p data for the first occurence of a \p pattern.
+             * @brief Searches \p data for the first occurrence of a \p pattern.
              * On ESP32-S3 targets, this uses SIMD instructions; delegates to ::find_pattern_scalar() on other targets.
              *
              * @param pattern start of pattern to search for
