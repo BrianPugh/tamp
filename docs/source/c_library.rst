@@ -157,8 +157,9 @@ Summary
    size_t input_consumed_size, output_written_size;
    tamp_compressor_compress_and_flush(
         &compressor,
+        output_buffer, sizeof(output_buffer), &output_written_size,
         input_string, sizeof(input_string), &input_consumed_size,
-        output_buffer, sizeof(output_buffer), &output_written_size
+        false  // Don't write flush token
    );
 
    // Compressed data is now in output_buffer
