@@ -66,20 +66,12 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  * @param[in] input_size Size of input.
  * @return Number of input bytes consumed
  */
-#if TAMP_ESP32
-size_t tamp_compressor_sink(
-        TampCompressor *compressor,
-        const unsigned char *input,
-        size_t input_size
-        );
-#else
 void tamp_compressor_sink(
         TampCompressor *compressor,
         const unsigned char *input,
         size_t input_size,
         size_t *consumed_size
         );
-#endif
 
 /**
  * @brief Run a single compression iteration on the internal input buffer.

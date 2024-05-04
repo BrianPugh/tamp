@@ -262,29 +262,29 @@ tamp_res tamp_compressor_compress_poll(TampCompressor* const compressor, unsigne
         compressor->input_pos = input_add(1);
     }
     compressor->input_size -= match_size;
-    // if(compressor->input_size == 0) {
-    //     compressor->input_pos = 0;
-    // }
 
     return TAMP_OK;
 }
 
-
-size_t tamp_compressor_sink(
-        TampCompressor* const compressor,
-        const unsigned char* const input,
-        size_t input_size
+void tamp_compressor_sink(
+        TampCompressor *compressor,
+        const unsigned char *input,
+        size_t input_size,
+        size_t *consumed_size
         ){
-    {
-        const size_t space = sizeof(compressor->input) - compressor->input_size;
-        input_size = MIN(input_size,space);
-    }
+    size_t consumed_size_proxy;
+    if(TAMP_LIKELY(consumed_size))
+        *consumed_size = 0;
+    else
+        consumed_size = &consumed_size_proxy;
+
     for(size_t i=0; i < input_size; i++){
+        if(TAMP_UNLIKELY(compressor->input_size == sizeof(compressor->input)))
+            break;
         compressor->input[input_add(compressor->input_size)] = input[i];
         compressor->input_size += 1;
+        (*consumed_size)++;
     }
-
-    return input_size;
 }
 
 tamp_res tamp_compressor_compress(
@@ -312,8 +312,8 @@ tamp_res tamp_compressor_compress(
     while(input_size > 0 && output_size > 0){
         {
             // Sink Data into input buffer.
-            size_t consumed =
-            tamp_compressor_sink(compressor, input, input_size);
+            size_t consumed;
+            tamp_compressor_sink(compressor, input, input_size, &consumed);
             input += consumed;
             input_size -= consumed;
             (*input_consumed_size) += consumed;
