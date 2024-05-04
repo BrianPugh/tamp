@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 
-set( SRCS "tamp/_c_src/tamp/common.c" "tamp/_c_src/tamp/decompressor.c")
+set( SRCS "../tamp/_c_src/tamp/common.c" "../tamp/_c_src/tamp/decompressor.c")
 # list both variants as sources to force a rebuild of both .objs after switching variants via Kconfig.
 # Otherwise, an incompatible .obj from a previous build may linger on and cause issues at link- or runtime!
 list(APPEND SRCS "tamp/_c_src/tamp/compressor_esp32.cpp")

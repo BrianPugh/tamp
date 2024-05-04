@@ -28,10 +28,11 @@ cdef extern from "tamp/compressor.h":
 
     tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window);
 
-    size_t tamp_compressor_sink(
+    void tamp_compressor_sink(
             TampCompressor *compressor,
             const unsigned char *input,
-            size_t input_size
+            size_t input_size,
+            size_t *consumed_size
             );
 
     tamp_res tamp_compressor_compress_poll(
