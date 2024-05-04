@@ -1,8 +1,6 @@
 #ifndef TAMP_COMPRESSOR_H
 #define TAMP_COMPRESSOR_H
 
-/* Modification of the original tamp compressor.h, 2024 <https://github.com/BitsForPeople> */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,7 +26,7 @@ typedef struct TampCompressor{
     uint8_t conf_literal;  // number of literal bits
     uint8_t conf_use_custom_dictionary;  // Use a custom initialized dictionary.
     uint8_t min_pattern_size;
-#else
+#else  // Use bitfields for reduced memory-usage
     /* Conf attributes */
     uint32_t conf_window:4;   // number of window bits
     uint32_t conf_literal:4;  // number of literal bits
@@ -64,7 +62,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[in] input Pointer to the input data to be sinked into compressor.
  * @param[in] input_size Size of input.
- * @return Number of input bytes consumed
+ * @param[out] consumed_size Number of bytes of input consumed. May be NULL.
  */
 void tamp_compressor_sink(
         TampCompressor *compressor,

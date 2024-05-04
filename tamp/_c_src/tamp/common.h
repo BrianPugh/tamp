@@ -1,8 +1,6 @@
 #ifndef TAMP_COMMON_H
 #define TAMP_COMMON_H
 
-/* Modification of the original tamp compressor.h, 2024 <https://github.com/BitsForPeople> */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
