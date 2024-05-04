@@ -1,5 +1,9 @@
-.. include:: ../../README.rst
-  :start-after: inclusion-marker-do-not-remove
+====
+Tamp
+====
+
+.. include:: ../../README.md
+   :parser: myst_parser.sphinx_
 
 .. toctree::
    :maxdepth: 2
