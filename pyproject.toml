@@ -15,7 +15,7 @@ repository = "https://github.com/BrianPugh/tamp"
 license = "Apache-2.0"
 description = ""
 authors = ["Brian Pugh"]
-readme = "README.rst"
+readme = "README.md"
 packages = [{include = "tamp"}]
 include = ["tamp/*.so", "tamp/*.dll", "tamp/*.pyd"]
 
@@ -43,6 +43,7 @@ sphinx = ">=4.5.0"
 sphinx_rtd_theme = ">=1.0.0"
 gitpython = ">=3.1.31"
 sphinx-copybutton = ">=0.5.2"
+myst-parser = {extras = ["linkify"], version = "^3.0.1"}
 
 [tool.poetry.group.dev.dependencies]
 coverage = {extras = ["toml"], version = ">=5.1"}
