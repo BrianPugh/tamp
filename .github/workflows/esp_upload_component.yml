@@ -1,4 +1,4 @@
-name: Push LittleFS to Espressif Component Service
+name: Espressif Component Registry
 
 on:
   workflow_dispatch:
@@ -26,13 +26,13 @@ jobs:
 
       - name: Copy source into espidf
         run: |
-          cp README.md espidf/
+          # cp README.md espidf/  # TODO: convert main README to md
           cp -r tamp/_c_src/* espidf/
 
       - name: Build package
         working-directory: ./espidf
         run: |
-          compote component pack --name=tamp --version=git
+          compote component pack --name=tamp --version=0.0.0
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
