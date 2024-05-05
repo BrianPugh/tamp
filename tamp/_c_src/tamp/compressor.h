@@ -98,7 +98,7 @@ void tamp_compressor_sink(
  *
  * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
-tamp_res tamp_compressor_compress_poll(
+tamp_res tamp_compressor_poll(
         TampCompressor *compressor,
         unsigned char *output,
         size_t output_size,
