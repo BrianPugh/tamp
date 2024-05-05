@@ -32,7 +32,7 @@ jobs:
       - name: Build package
         working-directory: ./espidf
         run: |
-          compote component pack --name=tamp --version=0.0.0
+          make component
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
