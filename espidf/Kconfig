@@ -1,0 +1,11 @@
+menu "tamp"
+
+	config TAMP_ESP32
+	bool "Use ESP-optimized code for compression"
+	default y
+	help
+		Enables TAMP_ESP32 (ESP32 speed optimizations).
+		On ESP32-S3, this also enables use of the chip's SIMD instructions ("PIE")
+		for increased speed.
+
+endmenu

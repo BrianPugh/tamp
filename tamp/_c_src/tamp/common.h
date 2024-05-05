@@ -9,6 +9,26 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+#if ESP_PLATFORM
+    // (External) code #including this header MUST use the SAME TAMP_ESP32 setting that is used when building this lib!
+    #include "sdkconfig.h"
+#endif
+
+
+/* Should the ESP32-optimized variant be built? */
+#ifdef CONFIG_TAMP_ESP32 // CONFIG_... from Kconfig takes precedence
+    #if CONFIG_TAMP_ESP32
+        #define TAMP_ESP32 1
+    #else
+        #define TAMP_ESP32 0
+    #endif
+#endif
+
+#ifndef TAMP_ESP32 // If not set via Kconfig, and not otherwise -D_efined, default TAMP_ESP32 to compatible version.
+    #define TAMP_ESP32 0
+#endif
+
+
 /* Compiler branch optimizations */
 #if defined(__clang__) || (defined(__GNUC__) && (__GNUC__ > 2))
 #define TAMP_LIKELY(c) (__builtin_expect(!!(c), 1))

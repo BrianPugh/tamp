@@ -11,9 +11,22 @@ extern "C" {
 typedef struct TampCompressor{
     /* nicely aligned attributes */
     unsigned char *window;
-    unsigned char input[16];
+    unsigned char input[16] /* __attribute__ ((aligned (16)))*/;
     uint32_t bit_buffer;
 
+#if TAMP_ESP32 // Avoid bitfields for speed.
+    uint32_t window_pos;
+    uint32_t bit_buffer_pos;
+
+    uint32_t input_size;
+    uint32_t input_pos;
+
+    /* Conf attributes */
+    uint8_t conf_window;   // number of window bits
+    uint8_t conf_literal;  // number of literal bits
+    uint8_t conf_use_custom_dictionary;  // Use a custom initialized dictionary.
+    uint8_t min_pattern_size;
+#else  // Use bitfields for reduced memory-usage
     /* Conf attributes */
     uint32_t conf_window:4;   // number of window bits
     uint32_t conf_literal:4;  // number of literal bits
@@ -26,6 +39,7 @@ typedef struct TampCompressor{
 
     uint32_t input_size:5;
     uint32_t input_pos:4;
+#endif
 } TampCompressor;
 
 
