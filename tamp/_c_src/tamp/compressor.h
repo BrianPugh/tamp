@@ -131,6 +131,24 @@ tamp_res tamp_compressor_flush(
                 );
 
 /**
+ * Callback-variant of tamp_compressor_compress.
+ *
+ * @param[in] callback User-provided function to be called every compression-cycle.
+ * @param[in,out] user_data Passed along to callback.
+ */
+tamp_res tamp_compressor_compress_cb(
+        TampCompressor *compressor,
+        unsigned char *output,
+        size_t output_size,
+        size_t *output_written_size,
+        const unsigned char *input,
+        size_t input_size,
+        size_t *input_consumed_size,
+        tamp_callback_t callback,
+        void *user_data
+        );
+
+/**
  * @brief Compress a chunk of data until input or output buffer is exhausted.
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
@@ -143,7 +161,7 @@ tamp_res tamp_compressor_flush(
  *
  * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
-tamp_res tamp_compressor_compress(
+inline tamp_res tamp_compressor_compress(
         TampCompressor *compressor,
         unsigned char *output,
         size_t output_size,
@@ -151,6 +169,33 @@ tamp_res tamp_compressor_compress(
         const unsigned char *input,
         size_t input_size,
         size_t *input_consumed_size
+        ){
+    return tamp_compressor_compress_cb(
+        compressor,
+        output, output_size, output_written_size,
+        input, input_size, input_consumed_size,
+        NULL, NULL
+        );
+
+}
+
+/**
+ * Callback-variant of tamp_compressor_compress_and_flush.
+ *
+ * @param[in] callback User-provided function to be called every compression-cycle.
+ * @param[in,out] user_data Passed along to callback.
+ */
+tamp_res tamp_compressor_compress_and_flush_cb(
+        TampCompressor *compressor,
+        unsigned char *output,
+        size_t output_size,
+        size_t *output_written_size,
+        const unsigned char *input,
+        size_t input_size,
+        size_t *input_consumed_size,
+        bool write_token,
+        tamp_callback_t callback,
+        void *user_data
         );
 
 /**
@@ -169,7 +214,7 @@ tamp_res tamp_compressor_compress(
  *
  * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
-tamp_res tamp_compressor_compress_and_flush(
+inline tamp_res tamp_compressor_compress_and_flush(
         TampCompressor *compressor,
         unsigned char *output,
         size_t output_size,
@@ -178,7 +223,16 @@ tamp_res tamp_compressor_compress_and_flush(
         size_t input_size,
         size_t *input_consumed_size,
         bool write_token
-        );
+        ){
+    return tamp_compressor_compress_and_flush_cb(
+        compressor,
+        output, output_size, output_written_size,
+        input, input_size, input_consumed_size,
+        write_token,
+        NULL, NULL
+    );
+
+}
 
 
 #ifdef __cplusplus

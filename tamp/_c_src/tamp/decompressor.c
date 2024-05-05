@@ -99,14 +99,16 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
     return res;
 }
 
-tamp_res tamp_decompressor_decompress(
+tamp_res tamp_decompressor_decompress_cb(
         TampDecompressor *decompressor,
         unsigned char *output,
         size_t output_size,
         size_t *output_written_size,
         const unsigned char *input,
         size_t input_size,
-        size_t *input_consumed_size
+        size_t *input_consumed_size,
+        tamp_callback_t callback,
+        void *user_data
         ){
     size_t input_consumed_size_proxy;
     size_t output_written_size_proxy;
@@ -240,7 +242,8 @@ tamp_res tamp_decompressor_decompress(
                 }
             }
         }
-
+        if(TAMP_UNLIKELY(callback && (res = callback(user_data, *output_written_size, input_size))))
+            return (tamp_res)res;
     }
     return TAMP_INPUT_EXHAUSTED;
 }

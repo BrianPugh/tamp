@@ -214,17 +214,20 @@ void tamp_compressor_sink(
     }
 }
 
-tamp_res tamp_compressor_compress(
+tamp_res tamp_compressor_compress_cb(
         TampCompressor *compressor,
         unsigned char *output,
         size_t output_size,
         size_t *output_written_size,
         const unsigned char *input,
         size_t input_size,
-        size_t *input_consumed_size
+        size_t *input_consumed_size,
+        tamp_callback_t callback,
+        void *user_data
         ){
     tamp_res res;
     size_t input_consumed_size_proxy, output_written_size_proxy;
+    size_t total_input_size = input_size;
 
     if(TAMP_LIKELY(output_written_size))
         *output_written_size = 0;
@@ -254,6 +257,9 @@ tamp_res tamp_compressor_compress(
             (*output_written_size) += chunk_output_written_size;
             if(TAMP_UNLIKELY(res != TAMP_OK))
                 return res;
+            if(TAMP_UNLIKELY(callback && (res = callback(user_data, *output_written_size, total_input_size))))
+                return (tamp_res)res;
+
         }
     }
     return TAMP_OK;
@@ -318,7 +324,7 @@ tamp_res tamp_compressor_flush(
     return TAMP_OK;
 }
 
-tamp_res tamp_compressor_compress_and_flush(
+tamp_res tamp_compressor_compress_and_flush_cb(
         TampCompressor *compressor,
         unsigned char *output,
         size_t output_size,
@@ -326,7 +332,9 @@ tamp_res tamp_compressor_compress_and_flush(
         const unsigned char *input,
         size_t input_size,
         size_t *input_consumed_size,
-        bool write_token
+        bool write_token,
+        tamp_callback_t callback,
+        void *user_data
         ){
     tamp_res res;
     size_t flush_size;
@@ -335,14 +343,11 @@ tamp_res tamp_compressor_compress_and_flush(
     if(!output_written_size)
         output_written_size = &output_written_size_proxy;
 
-    res = tamp_compressor_compress(
+    res = tamp_compressor_compress_cb(
             compressor,
-            output,
-            output_size,
-            output_written_size,
-            input,
-            input_size,
-            input_consumed_size
+            output, output_size, output_written_size,
+            input, input_size, input_consumed_size,
+            callback, user_data
             );
     if(TAMP_UNLIKELY(res != TAMP_OK))
         return res;

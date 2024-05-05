@@ -49,6 +49,24 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
 tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window);
 
 /**
+ * Callback-variant of tamp_compressor_decompress.
+ *
+ * @param[in] callback User-provided function to be called every decompression-cycle.
+ * @param[in,out] user_data Passed along to callback.
+ */
+tamp_res tamp_decompressor_decompress_cb(
+        TampDecompressor *decompressor,
+        unsigned char *output,
+        size_t output_size,
+        size_t *output_written_size,
+        const unsigned char *input,
+        size_t input_size,
+        size_t *input_consumed_size,
+        tamp_callback_t callback,
+        void *user_data
+        );
+
+/**
  * @brief Decompress an input stream of data.
  *
  * Input data is **not** guaranteed to be consumed.  Imagine if a 6-byte sequence has been encoded, and
@@ -78,7 +96,7 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
  *
  * @return Tamp Status Code. In cases of success, will return TAMP_INPUT_EXHAUSTED or TAMP_OUTPUT_FULL, in lieu of TAMP_OK.
  */
-tamp_res tamp_decompressor_decompress(
+inline tamp_res tamp_decompressor_decompress(
         TampDecompressor *decompressor,
         unsigned char *output,
         size_t output_size,
@@ -86,7 +104,14 @@ tamp_res tamp_decompressor_decompress(
         const unsigned char *input,
         size_t input_size,
         size_t *input_consumed_size
-        );
+        ){
+    return tamp_decompressor_decompress_cb(
+        decompressor,
+        output, output_size, output_written_size,
+        input, input_size, input_consumed_size,
+        NULL, NULL
+    );
+}
 
 #ifdef __cplusplus
 }
