@@ -294,3 +294,7 @@ To give an idea on the resulting binary sizes, Tamp and other libraries were com
 | uzlib (C)                 | 2355       | 3963         | 6318                      |
 
 Heatshrink doesn't include a high level API; in an apples-to-apples comparison the Tamp library would be even smaller.
+
+## Acknowledgement
+
+* Thanks @BitsForPeople for the esp32-optimized compressor implementation.
