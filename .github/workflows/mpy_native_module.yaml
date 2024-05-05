@@ -33,6 +33,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Fixes some bugs on some platforms?
+      - name: Replace "static const uint8_t" with "const uint8_t"
+        run: |
+          find . -type f -name "*.c" -exec sed -i 's/static const uint8_t/const uint8_t/g' {} +
+
       - name: Set up python ${{ matrix.python-version }}
         if: env.ARCH != 'xtensa'
         uses: actions/setup-python@v5

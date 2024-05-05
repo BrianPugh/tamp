@@ -14,10 +14,10 @@ from pathlib import Path
 
 import git
 
+from tamp import __version__
+
 sys.path.insert(0, str(Path("../..").absolute()))
 
-
-from tamp import __version__
 
 git_repo = git.Repo(".", search_parent_directories=True)
 git_commit = git_repo.head.commit
@@ -40,6 +40,7 @@ release = __version__
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    "myst_parser",
     "sphinx_rtd_theme",
     "sphinx.ext.autodoc",
     "sphinx.ext.intersphinx",
@@ -57,6 +58,11 @@ templates_path = ["_templates"]
 exclude_patterns = []
 
 smartquotes = False
+
+# Myst
+myst_enable_extensions = [
+    "linkify",
+]
 
 # Intersphinx
 intersphinx_mapping = {

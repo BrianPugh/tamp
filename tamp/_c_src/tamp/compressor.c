@@ -25,7 +25,7 @@
 #define FLUSH_CODE (0xAB)
 
 // encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths
-static const unsigned char huffman_codes[] = {
+static const uint8_t huffman_codes[] = {
     0x0, 0x3, 0x8, 0xb, 0x14, 0x24, 0x26, 0x2b, 0x4b, 0x54, 0x94, 0x95, 0xaa, 0x27
 };
 // These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
