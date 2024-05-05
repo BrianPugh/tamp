@@ -35,7 +35,7 @@ cdef extern from "tamp/compressor.h":
             size_t *consumed_size
             );
 
-    tamp_res tamp_compressor_compress_poll(
+    tamp_res tamp_compressor_poll(
             TampCompressor *compressor,
             unsigned char *output,
             size_t output_size,

@@ -96,7 +96,7 @@ To use these 2 functions effectively, loop over calling ``tamp_compressor_sink``
         {
             // Perform 1 compression cycle on internal input buffer
             size_t chunk_output_written_size;
-            res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
+            res = tamp_compressor_poll(compressor, output, output_size, &chunk_output_written_size);
             output += chunk_output_written_size;
             output_size -= chunk_output_written_size;
             assert(res == TAMP_OK);
@@ -118,7 +118,7 @@ The remaining ``"er the lazy dog"`` is still in the compressor's internal buffer
 
 To flush the remaining data, use ``tamp_compressor_flush`` that performs the following actions:
 
-1. Repeatedly call ``tamp_compressor_compress_poll`` until the 16-byte internal input buffer is empty.
+1. Repeatedly call ``tamp_compressor_poll`` until the 16-byte internal input buffer is empty.
 
 2. Flush the output buffer. If ``write_token=true``, then the special ``FLUSH`` token will be appended if padding was required.
 

@@ -135,7 +135,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 }
 
 
-tamp_res tamp_compressor_compress_poll(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
+tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size, size_t *output_written_size){
     tamp_res res;
     const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     size_t output_written_size_proxy;
@@ -247,7 +247,7 @@ tamp_res tamp_compressor_compress(
         if(TAMP_LIKELY(compressor->input_size == sizeof(compressor->input))){
             // Input buffer is full and ready to start compressing.
             size_t chunk_output_written_size;
-            res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
+            res = tamp_compressor_poll(compressor, output, output_size, &chunk_output_written_size);
             output += chunk_output_written_size;
             output_size -= chunk_output_written_size;
             (*output_written_size) += chunk_output_written_size;
@@ -275,7 +275,7 @@ tamp_res tamp_compressor_flush(
 
     while(compressor->input_size){
         // Compress the remainder of the input buffer.
-        res = tamp_compressor_compress_poll(compressor, output, output_size, &chunk_output_written_size);
+        res = tamp_compressor_poll(compressor, output, output_size, &chunk_output_written_size);
         (*output_written_size) += chunk_output_written_size;
         if(TAMP_UNLIKELY(res != TAMP_OK))
             return res;
