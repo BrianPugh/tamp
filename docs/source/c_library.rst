@@ -107,6 +107,21 @@ It is common to compress until an input buffer is exhausted, or an output buffer
 Tamp provides a higher level function, ``tamp_compressor_compress`` that does exactly this.
 Note: you may actually want to use ``tamp_compressor_compress_flush``, described in the next section.
 
+Both ``tamp_compressor_compress`` and ``tamp_compressor_compress_flush`` have callback-variants: ``tamp_compressor_compress_cb`` and ``tamp_compressor_compress_flush_cb``, respectively. These are the same as their non-callback variants, but they take 2 additional arguments:
+
+    * ``callback``, a function with signature:
+
+      .. code-block:: c
+
+          int callback(void *user_data, size_t bytes_processed, size_t total_bytes);
+
+      Where ``bytes_processed`` are the number of input bytes consumed so far, and
+      ``total_bytes`` are the number of total bytes provided.
+
+    * ``void *user_data``, arbitrary data to be passed along to the callback.
+
+The callback can be useful for resetting a watchdog, updating a progress bar, etc.
+
 Flushing
 --------
 Inside the compressor, there may be up to 16 **bytes** of uncompressed data in the input buffer, and 31 **bits** in an output buffer.
@@ -242,3 +257,20 @@ Data decompression is straight forward:
    //    TAMP_INPUT_EXHAUSTED - All data in input buffer has been consumed.
    //    TAMP_OUTPUT_FULL - Output buffer is full.
    // In all situations, output_written_size and input_consumed_size is updated.
+
+``tamp_decompressor_decompress`` has a callback-variant: ``tamp_decompressor_decompress_cb``.
+These are the same as their non-callback variants, but they take 2 additional arguments:
+
+    * ``callback``, a function with signature:
+
+      .. code-block:: c
+
+          int callback(void *user_data, size_t bytes_processed, size_t total_bytes);
+
+      Where ``bytes_processed`` are the number of input bytes consumed so far, and
+      ``total_bytes`` are the number of total input bytes provided.
+
+    * ``void *user_data``, arbitrary data to be passed along to the callback.
+
+The callback can be useful for resetting a watchdog, updating a progress bar, etc.
+Compred to compression, decompression is very very fast; it is unlikely that the decompression callback feature provides significant value.

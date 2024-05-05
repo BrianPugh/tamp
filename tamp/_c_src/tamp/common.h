@@ -58,6 +58,18 @@ typedef struct TampConf {
 } TampConf;
 
 /**
+ * User-provied callback to be invoked after each compression cycle in the higher-level API.
+ * @param[in,out] user_data Arbitrary user-provided data.
+ * @param[in] bytes_processed Number of input bytes consumed so far.
+ * @param[in] total_bytes Total number of input bytes.
+ *
+ * @return Some error code. If non-zero, abort current compression and return the value.
+ *         For clarity, is is recommend to avoid already-used tamp_res values.
+ *         e.g. start custom error codes at 100.
+ */
+typedef int (*tamp_callback_t)(void *user_data, size_t bytes_processed, size_t total_bytes);
+
+/**
  * @brief Pre-populate a window buffer with common characters.
  *
  * @param[out] buffer Populated output buffer.
