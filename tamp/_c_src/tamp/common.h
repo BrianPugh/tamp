@@ -38,6 +38,14 @@ extern "C" {
 #define TAMP_UNLIKELY(c) (c)
 #endif
 
+#if defined(_MSC_VER)
+#define TAMP_ALWAYS_INLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+#define TAMP_ALWAYS_INLINE inline __attribute__((always_inline))
+#else
+#define TAMP_ALWAYS_INLINE inline
+#endif
+
 enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,

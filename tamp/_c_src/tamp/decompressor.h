@@ -96,7 +96,7 @@ tamp_res tamp_decompressor_decompress_cb(
  *
  * @return Tamp Status Code. In cases of success, will return TAMP_INPUT_EXHAUSTED or TAMP_OUTPUT_FULL, in lieu of TAMP_OK.
  */
-inline tamp_res tamp_decompressor_decompress(
+TAMP_ALWAYS_INLINE tamp_res tamp_decompressor_decompress(
         TampDecompressor *decompressor,
         unsigned char *output,
         size_t output_size,
