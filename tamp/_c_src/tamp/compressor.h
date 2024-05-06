@@ -161,7 +161,7 @@ tamp_res tamp_compressor_compress_cb(
  *
  * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
-inline tamp_res tamp_compressor_compress(
+TAMP_ALWAYS_INLINE tamp_res tamp_compressor_compress(
         TampCompressor *compressor,
         unsigned char *output,
         size_t output_size,
@@ -214,7 +214,7 @@ tamp_res tamp_compressor_compress_and_flush_cb(
  *
  * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
-inline tamp_res tamp_compressor_compress_and_flush(
+TAMP_ALWAYS_INLINE tamp_res tamp_compressor_compress_and_flush(
         TampCompressor *compressor,
         unsigned char *output,
         size_t output_size,
