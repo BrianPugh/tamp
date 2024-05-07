@@ -1,8 +1,4 @@
 #include "common.h"
-
-
-#if !TAMP_ESP32
-
 #include "compressor.h"
 #include <stdlib.h>
 #include <stdbool.h>
@@ -54,6 +50,9 @@ static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *
     return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
 
+#if TAMP_ESP32
+extern void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size);
+#else
 /**
  * @brief Find the best match for the current input buffer.
  *
@@ -101,6 +100,8 @@ static inline void find_best_match(
         }
     }
 }
+
+#endif
 
 tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window){
     const TampConf conf_default = {.window=10, .literal=8, .use_custom_dictionary=false};
@@ -361,5 +362,3 @@ tamp_res tamp_compressor_compress_and_flush(
 
     return TAMP_OK;
 }
-
-#endif // !TAMP_ESP32
