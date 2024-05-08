@@ -9,6 +9,10 @@
 #include <stdbool.h>
 #include <cstring>
 
+#if TAMP_ESP32_AUTO_RESET_TASK_WDT
+#include "esp_task_wdt.h"
+#endif
+
 #include "private/tamp_search.hpp"
 #include "private/copyutil.hpp"
 
@@ -119,6 +123,10 @@ void find_best_match(
         uint8_t *match_size
         ){
     tamp::byte_span out {};
+
+#if TAMP_ESP32_AUTO_RESET_TASK_WDT
+    esp_task_wdt_reset();
+#endif
 
     if(TAMP_LIKELY(compressor->input_size >= compressor->min_pattern_size))
     {

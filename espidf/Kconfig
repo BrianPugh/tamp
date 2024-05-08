@@ -8,4 +8,11 @@ menu "tamp"
 		On ESP32-S3, this also enables use of the chip's SIMD instructions ("PIE")
 		for increased speed.
 
+	config TAMP_ESP32_AUTO_RESET_TASK_WDT
+	bool "Automatically reset task watch dog timer."
+	depends on TAMP_ESP32
+	default n
+	help
+		Automatically resets the task watchdog-timer after every compression cycle.
+
 endmenu
