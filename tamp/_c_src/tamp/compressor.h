@@ -104,6 +104,8 @@ tamp_res tamp_compressor_poll(
         size_t output_size,
         size_t *output_written_size
         );
+// backwards compatibility for old naming
+#define tamp_compressor_compress_poll tamp_compressor_poll
 
 /**
  * @brief Completely flush the internal bit buffer. Makes output "complete".
