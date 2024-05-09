@@ -46,4 +46,4 @@ jobs:
         env:
           IDF_COMPONENT_API_TOKEN: ${{ secrets.ESP_IDF_COMPONENT_API_TOKEN }}
         run: |
-          compote component upload --name=tamp --version=git
+          compote component upload --namespace=brianpugh --name=tamp --version=git
