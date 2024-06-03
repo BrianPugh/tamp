@@ -1578,17 +1578,16 @@ files = [
 
 [[package]]
 name = "mpremote"
-version = "1.22.0"
+version = "1.23.0"
 description = "Tool for interacting remotely with MicroPython devices"
 optional = false
 python-versions = ">=3.4"
 files = [
-    {file = "mpremote-1.22.0-py3-none-any.whl", hash = "sha256:e89750702bd0b1ce8b58101777f379986ffffe3915632cf1a9010309f01efcc6"},
-    {file = "mpremote-1.22.0.tar.gz", hash = "sha256:dbde10972819c1e0491d883adb8cbd17288246739adabddbf4a172e61ae00220"},
+    {file = "mpremote-1.23.0-py3-none-any.whl", hash = "sha256:e197a086eca6367da63bb716434a4e8075e0ea1886c4452bb3de046853d0ae5d"},
+    {file = "mpremote-1.23.0.tar.gz", hash = "sha256:efe1f9758d8694d29981852c0a946a207765797bc596ef405e3e01517a5f1d9c"},
 ]
 
 [package.dependencies]
-importlib-metadata = ">=1.4"
 pyserial = ">=3.3"
 
 [[package]]
