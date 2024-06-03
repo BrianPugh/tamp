@@ -82,7 +82,7 @@ Rename the file to `tamp.mpy` and transfer it to your board. If using [Belay](ht
 
 ``` toml
 [tool.belay.dependencies]
-tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.5.0/tamp-1.5.0-mpy1.23-armv6m.mpy"
+tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.6.0/tamp-1.6.0-mpy1.23-armv6m.mpy"
 ```
 
 ### MicroPython Viper
