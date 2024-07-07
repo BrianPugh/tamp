@@ -1,4 +1,6 @@
+import builtins
 cimport ctamp
+from libcpp cimport bool
 from cpython.exc cimport PyErr_CheckSignals
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
@@ -48,7 +50,7 @@ cdef class Compressor:
 
         conf.window = window
         conf.literal = literal
-        conf.use_custom_dictionary = bool(dictionary)
+        conf.use_custom_dictionary = builtins.bool(dictionary)
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
@@ -94,7 +96,7 @@ cdef class Compressor:
 
         return written_to_disk_size
 
-    cpdef int flush(self, write_token: bool = True) except -1:
+    cpdef int flush(self, bool write_token = True) except -1:
         cdef ctamp.tamp_res res
         cdef bytearray buffer = bytearray(24)
         cdef size_t output_written_size = 0
