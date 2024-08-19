@@ -235,13 +235,13 @@ files = [
 
 [[package]]
 name = "belay"
-version = "0.22.2"
+version = "0.22.4"
 description = ""
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "belay-0.22.2-py3-none-any.whl", hash = "sha256:f5b67af84d2d1b6db0570a7c53f236fa44ab90276cf56b062ddad91f690fc020"},
-    {file = "belay-0.22.2.tar.gz", hash = "sha256:dec4efbffb00b84c68564458c1c734716ccd5447503ab3d3bdc287a70dfd7cb5"},
+    {file = "belay-0.22.4-py3-none-any.whl", hash = "sha256:65c7fcc17dfd6eb80ac15f3872dbb6a22439a3f05b2dcb4e52a18ea669fd331e"},
+    {file = "belay-0.22.4.tar.gz", hash = "sha256:e3da7525807f72acc2833d2d8a8193dcb5a79acb977049d9581bb7ef4e9b7c6b"},
 ]
 
 [package.dependencies]
