@@ -27,6 +27,8 @@ jobs:
           - "xtensawin"
     env:
       ARCH: ${{ matrix.ARCH }}
+      POETRY_HOME: "~/poetry"
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -123,15 +125,29 @@ jobs:
         with:
           reference: v${{ matrix.micropython_version }}
 
+      - name: Cache Poetry Install
+        uses: actions/cache@v4
+        id: cached-poetry
+        with:
+          path: ${{ env.POETRY_HOME }}
+          key: poetry-cache-${{ runner.os }}-${{ env.PYTHON }}-${{ hashFiles('.github/workflows/tests.yaml') }}
+
       - name: Install poetry
         uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: false
-          virtualenvs-in-project: false
+        if: steps.cached-poetry.outputs.cache-hit != 'true'
+
+      - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
+        run: |
+          echo "$POETRY_HOME/bin" >> $GITHUB_PATH
+
+      - name: Configure Poetry # Needs to be separate from install-poetry because cache.
+        run: |
+          poetry self add "poetry-dynamic-versioning[plugin]"
+          poetry config virtualenvs.create false
+          poetry config virtualenvs.in-project false
 
       - name: Get Tag or Commit Hash
         run: |
-          poetry self add "poetry-dynamic-versioning[plugin]"
           poetry dynamic-versioning  # in-place updates files with correct version string
           VERSION=$(poetry version | sed 's/tamp //; s/\x1b\[[0-9;]*m//g')
           echo "Detected version is: $VERSION"
