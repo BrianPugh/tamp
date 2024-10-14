@@ -64,7 +64,7 @@ jobs:
       - name: Install Micropython Build Dependencies
         run: |
           sudo apt-get update && sudo apt-get install gcc-multilib
-          pip install pyelftools
+          pip install pyelftools --break-system-packages
 
       - name: Cache Setup Xtensa Toolchain (ESP8266)
         if: env.ARCH == 'xtensa'
