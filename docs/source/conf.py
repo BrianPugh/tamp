@@ -167,10 +167,8 @@ html_logo = "../../assets/logo_300w.png"
 html_favicon = "../../assets/favicon-16x16.png"
 
 html_theme_options = {
-    # "analytics_id": "G-XXXXXXXXXX",  # Provided by Google in your dashboard
-    # "analytics_anonymize_ip": False,
     "logo_only": True,
-    "display_version": False,
+    "version_selector": True,
     "prev_next_buttons_location": "bottom",
     "style_external_links": False,
     "vcs_pageview_mode": "",
