@@ -11,7 +11,9 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # explicitly setting due to iffy GA rollout.
+    # TODO: Revert to `ubuntu-latest` at a future date.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
