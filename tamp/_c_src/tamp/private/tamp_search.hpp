@@ -104,23 +104,35 @@ namespace tamp {
              * @return common prefix length of *a and *b in bytes (0...3)
              */
             static uint32_t subword_match_len(const void* a, const void* b) noexcept {
-                if(as<uint16_t>(a) == as<uint16_t>(b)) {
-                    // First 2 bytes match
-                    if(p<uint8_t>(a)[2] == p<uint8_t>(b)[2]) {
-                        // Byte #3 also matches
-                        return 3;
-                    } else {
-                        // Mismatch in byte #3
-                        return 2;
-                    }
+                if constexpr (Arch::HW_CTZ) {
+                    // CTZ(a^b) / 8:                    
+                    const uint32_t x = as<uint32_t>(a) ^ as<uint32_t>(b);
+                    return __builtin_ctz(x) / 8;
+                } else
+                if constexpr (Arch::HW_CLZ) {
+                    // Emulate CTZ via CLZ:
+                    uint32_t x = as<uint32_t>(a) ^ as<uint32_t>(b);
+                    x = x & -x;
+                    return (uint32_t)(31-__builtin_clz(x)) / 8;
                 } else {
-                    // Mismatch in the first two bytes
-                    if(p<uint8_t>(a)[0] == p<uint8_t>(b)[0]) {
-                        // Byte #1 matches -> mismatch must be in byte #2
-                        return 1;
+                    if(as<uint16_t>(a) == as<uint16_t>(b)) {
+                        // First 2 bytes match
+                        if(p<uint8_t>(a)[2] == p<uint8_t>(b)[2]) {
+                            // Byte #3 also matches
+                            return 3;
+                        } else {
+                            // Mismatch in byte #3
+                            return 2;
+                        }
                     } else {
-                        // Mismatch in first byte
-                        return 0;
+                        // Mismatch in the first two bytes
+                        if(p<uint8_t>(a)[0] == p<uint8_t>(b)[0]) {
+                            // Byte #1 matches -> mismatch must be in byte #2
+                            return 1;
+                        } else {
+                            // Mismatch in first byte
+                            return 0;
+                        }
                     }
                 }
             }
@@ -716,12 +728,15 @@ namespace tamp {
                                 // q3[n] := last[n] == pattern[patLen-1]
                                 "EE.VCMP.EQ.S8 q3, q3, q5" "\n"
 
-                                // AND both comparison results
-                                // q6[n] := q6[n] && q3[n]
-                                "EE.ANDQ q6, q6, q3" "\n"
-
-                                // Fold:
-                                "EE.VMULAS.S8.ACCX q6, q6" "\n"
+                                /* Fold: */
+                                // ACCX += SUM( (int8_t)q6[n] * (int8_t)q3[n] ) 
+                                // The comparisons above yield either 0 (false) or 0xff (true) for every lane.
+                                // 0xff interpreted as signed 8-bit is -1.
+                                // Thus, signed multiplication of the two comparison results is equivalent to a
+                                // boolean AND, yielding either 0 or 1 (=(-1)*(-1)).
+                                // Then accumulating these 16 multiplication results into ACCX yields the number 
+                                // of 1's (0...16); ACCX := COUNT( q6[n] && q3[n] )
+                                "EE.VMULAS.S8.ACCX q6, q3" "\n"
 
                                     // Pipelining: Load next data from 'first'
                                     "EE.LD.128.USAR.IP q1, %[first], 16" "\n"
@@ -751,6 +766,10 @@ namespace tamp {
 
                                 "EE.ZERO.ACCX" "\n"
 
+                                // AND both comparison results
+                                // q6[n] := q6[n] && q3[n]
+                                "EE.ANDQ q6, q6, q3" "\n"                                
+
                                 // And position factor with comparison mask:
                                 // q6[n] := POS_U8[n] & q6[n]
                                 "EE.ANDQ q6, q7, q6" "\n"
@@ -775,8 +794,9 @@ namespace tamp {
                                 [tmp] "=r" (tmp)
                             :
                             );
-
-                            // What we want is now in bits 15...0 of tmp
+                            
+                            // What we want is now in bits 15...0 of tmp, where bit i denotes if
+                            // (first[15-i] == pattern[0] && last[15-i] == pattern[patLen-1])
 
                             tmp = tmp << 16;
                             const uint8_t* s1 = first-48;
