@@ -3,22 +3,24 @@
 
 /* Modification of the original tamp compressor.h, 2024 <https://github.com/BitsForPeople> */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
 
 #if ESP_PLATFORM
     // (External) code #including this header MUST use the SAME TAMP_ESP32 setting that is used when building this lib!
-    #include "sdkconfig.h"
+    #include <sdkconfig.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Should the ESP32-optimized variant be built? */
 #ifdef CONFIG_TAMP_ESP32 // CONFIG_... from Kconfig takes precedence
+    #ifdef TAMP_ESP32
+        #undef TAMP_ESP32
+    #endif
     #if CONFIG_TAMP_ESP32
         #define TAMP_ESP32 1
     #else
@@ -29,6 +31,12 @@ extern "C" {
 #ifndef TAMP_ESP32 // If not set via Kconfig, and not otherwise -D_efined, default TAMP_ESP32 to compatible version.
     #define TAMP_ESP32 0
 #endif
+
+#if TAMP_ESP32
+    #define TAMP_VAR_LITLEN 0 //<! Do we specially support data restricted to 5...7 bits per byte? If not, literals are always assumed to be 8 bits.
+#endif
+
+
 
 
 /* Compiler branch optimizations */

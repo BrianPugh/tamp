@@ -1,7 +1,7 @@
 #include "common.h"
 
 
-#if !TAMP_ESP32
+#if !(TAMP_ESP32)
 
 #include "compressor.h"
 #include <stdlib.h>

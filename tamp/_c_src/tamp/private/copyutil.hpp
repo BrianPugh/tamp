@@ -85,7 +85,7 @@ namespace mem {
 
         /**
          * @brief Copies a number of bytes from \p src to \p dst.
-         * The number of bytes copied is \c max( \p len \c , \p CEIL-1 \c ) , i.e.
+         * The number of bytes copied is \c min( \p len \c , \p CEIL-1 \c ) , i.e.
          * 0 to \p CEIL-1 bytes can be copied.
          * 
          * @tparam CEIL maximum number of bytes that can by copied + 1
@@ -132,7 +132,7 @@ namespace mem {
 
     /**
      * @brief Copies a number of bytes from \p src to \p dst.
-     * The number of bytes copied is \c max( \p len \c , \p CEIL-1 \c ) , i.e.
+     * The number of bytes copied is \c min( \p len \c , \p CEIL-1 \c ) , i.e.
      * 0 to \p CEIL-1 bytes can be copied.
      * 
      * @tparam CEIL maximum number of bytes that can by copied + 1
@@ -141,8 +141,20 @@ namespace mem {
      * @param len 
      */
     template<uint32_t CEIL = 16>
-    static inline void /* __attribute__((always_inline)) */ __attribute__((noinline)) cpy_short(void* dst, const void* src, const std::size_t len) noexcept {
+    /* static */ inline void /* __attribute__((always_inline)) */ /* __attribute__((noinline)) */ cpy_short(void* dst, const void* src, const std::size_t len) noexcept {
         unrolled_cpy<CEIL>(dst,src,len);
+    }
+
+    /**
+     * @brief Copies \p CNT bytes from \p src to \p dst
+     * 
+     * @tparam CNT number of bytes to copy
+     * @param dst 
+     * @param src 
+     */
+    template<uint32_t CNT>
+    static inline void cpy_short(void* const dst, const void* const src) noexcept {
+        _cpy<CNT>(dst,src);
     }
 
 }

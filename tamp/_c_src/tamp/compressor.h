@@ -9,25 +9,40 @@ extern "C" {
 
 #include "common.h"
 
+static const uint32_t TAMP_COMPRESSOR_BUF_ALIGNMENT =
+#if (TAMP_ESP32) && defined(CONFIG_IDF_TARGET_ESP32S3)
+    16;
+#else
+    1;
+#endif
+
+#ifndef TAMP_ESP32_FORCE_VAR_LIT
+    #define TAMP_ESP32_FORCE_VAR_LIT 0 //<! Don't specially support 5...7-bit literals by default.
+#endif
+
+
 /* Externally, do not directly edit ANY of these attributes */
 typedef struct TampCompressor{
     /* nicely aligned attributes */
+    unsigned char input[16] __attribute__ ((aligned (TAMP_COMPRESSOR_BUF_ALIGNMENT)));
     unsigned char *window;
-    unsigned char input[16] /* __attribute__ ((aligned (16)))*/;
+
     uint32_t bit_buffer;
 
-#if TAMP_ESP32 // Avoid bitfields for speed.
-    uint32_t window_pos;
-    uint32_t bit_buffer_pos;
+#if (TAMP_ESP32) // Avoid bitfields for speed.
+    uint16_t window_pos;
+    uint16_t window_size; // Cache for 1<<conf_window
+    
+    uint8_t bit_buffer_pos;
 
-    uint32_t input_size;
-    uint32_t input_pos;    
+    uint8_t input_size;
 
     /* Conf attributes */
     uint8_t conf_window;   // number of window bits
-    uint8_t conf_literal;  // number of literal bits
-    uint8_t conf_use_custom_dictionary;  // Use a custom initialized dictionary.
     uint8_t min_pattern_size;
+    #if TAMP_ESP32_FORCE_VAR_LIT
+    uint8_t conf_literal
+    #endif
 #else
     /* Conf attributes */
     uint32_t conf_window:4;   // number of window bits
