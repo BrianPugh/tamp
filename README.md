@@ -1,7 +1,6 @@
 # Tamp for ESP32
 
-This is a modification of the Tamp compression library created by <span
-class="title-ref">Brian Pugh \<https://github.com/BrianPugh\></span>,
+This is a modification of the Tamp compression library created by [Brian Pugh](https://github.com/BrianPugh),
 aggressively speed-optimized for use as a C/C++ library on ESP32 MCUs.
 
 The C implementation of the original Tamp library is made into a
