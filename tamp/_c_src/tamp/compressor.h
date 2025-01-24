@@ -59,6 +59,13 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 /**
  * @brief Sink data into input buffer.
  *
+ * Copies bytes from `input` to the internal input buffer until the internal
+ * input buffer is full, or the supplied input is exhausted.
+ *
+ * Somewhere between 0 and 16 bytes will be copied from the input.
+ *
+ * This is a computationally cheap/fast function.
+ *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[in] input Pointer to the input data to be sinked into compressor.
  * @param[in] input_size Size of input.
@@ -73,6 +80,8 @@ void tamp_compressor_sink(
 
 /**
  * @brief Run a single compression iteration on the internal input buffer.
+ *
+ * This is a computationally intensive function.
  *
  * The most that will ever be written to output in a single invocation is:
  *
@@ -89,7 +98,7 @@ void tamp_compressor_sink(
  *      * 7 - The internal bit buffer may have up to 7 bits from a previous invocation.
  *      * // 8 - Floor divide by 8 to get bytes; the upto remaining 7 bits remain in the internal output bit buffer.
  *
- * A reasonable 4-byte output buffer should be able to handle any compressor configuration.
+ * A reasonable 3-byte output buffer should be able to handle any compressor configuration.
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
@@ -110,11 +119,27 @@ tamp_res tamp_compressor_poll(
 /**
  * @brief Completely flush the internal bit buffer. Makes output "complete".
  *
- * At a maximum, the compressor will have 16 bytes in it's input buffer.
- * The worst-case compression scenario would use `literal + 1` bits per input byte.
- * This means that for the typical `literal=8` scenario, the output buffer size
- * should be 18 bytes long. If `write_token=true`, then the output buffer size should
- * be 20 bytes long to absolutely guarantee a complete flush.
+ * The following table contains the most number of bytes that could be flushed in a worst-case scenario:
+ *
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
+ * | Literal Size (Bits) | Window Size (Bits) | Max Output Size write_token=false (Bytes) | Max Output Size write_token=true (Bytes) |
+ * +=====================+====================+===========================================+==========================================+
+ * | 5                   | 8                  | 15                                        | 16                                       |
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
+ * | 5                   | 9-15               | 16                                        | 17                                       |
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
+ * | 6                   | 8                  | 17                                        | 18                                       |
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
+ * | 6                   | 9-15               | 18                                        | 19                                       |
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
+ * | 7                   | 8                  | 19                                        | 20                                       |
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
+ * | 7                   | 9-15               | 20                                        | 21                                       |
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
+ * | 8                   | 8                  | 21                                        | 22                                       |
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
+ * | 8                   | 9-15               | 22                                        | 23                                       |
+ * +---------------------+--------------------+-------------------------------------------+------------------------------------------+
  *
  * @param[in,out] compressor TampCompressor object to flush.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
