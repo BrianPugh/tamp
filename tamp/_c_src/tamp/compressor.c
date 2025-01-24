@@ -290,8 +290,8 @@ tamp_res tamp_compressor_flush(
         output += chunk_output_written_size;
     }
 
-    // Perform partial flush to see if we need a FLUSH token, and to subsequently
-    // make room for the FLUSH token.
+    // Perform partial flush to see if we need a FLUSH token (check if output buffer in not empty),
+    // and to subsequently make room for the FLUSH token.
     res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
     output_size -= chunk_output_written_size;
     (*output_written_size) += chunk_output_written_size;

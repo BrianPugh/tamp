@@ -73,10 +73,10 @@ There's a low-level API to accomplish this, as well as a higher-level one.
 
 The low-level workflow loop is as follows:
 
-1. ``tamp_compressor_sink`` - Sink in a few bytes of data into the compressor's internal input buffer (16 bytes).
+1. ``tamp_compressor_sink`` - Sink enough bytes to fill the compressor's internal input buffer (up to 16 bytes).
 
-2. ``tamp_compressor_poll`` - Perform a single compression cycle, compressing up to 15 bytes from the input buffer.
-   Compression is most efficient when the input buffer is full.
+2. ``tamp_compressor_poll`` - Perform a single compression cycle upon the input buffer, compressing **up to** 15 bytes from the input buffer.
+   Compression is most efficient when the input buffer is full. 0-3 bytes will be written to the output.
 
 The sinking operation is computationally cheap, while the poll compression cycle is much more computationally intensive.
 Breaking the operation up into these two functions allows ``tamp_compressor_poll`` to be called at a more opportune time in your program.
@@ -155,6 +155,69 @@ The special ``FLUSH`` token allows for the compressor to continue being used, bu
 
 ``tamp_compressor_compress_and_flush`` is just like ``tamp_compressor_compress``, with the addition that the
 internal buffers are flushed at the end of the call.
+
+Minimizing Output Buffer Size
+-----------------------------
+For the low-level API call ``tamp_compressor_poll``, up to 3 bytes may be written to the output buffer per-call.
+``tamp_compressor_flush`` calls ``tamp_compressor_poll`` until the internal input buffer is exhausted.
+When the internal input buffer is exhausted, ``tamp_compressor_flush`` can:
+
+* write up to 4 bytes to the output if ``write_token=false``. This is preferable at the end of the compression stream (most common use-case).
+
+* write up to 5 bytes to the output if ``write_token=true``.
+
+If attempting to minimize the number of bytes required for the output buffer, a custom flush function can be written
+modeled after ``tamp_compressor_flush``:
+
+.. code-block:: c
+
+    // custom flush that minimizes the output buffer size to 4 bytes (do not write FLUSH token).
+    unsigned char output[4];
+    size_t output_written_size;
+
+    while(compressor->input_size){
+        // Compress the remainder of the input buffer.
+        tamp_compressor_poll(compressor, output, sizeof(output), &output_written_size);
+        // TODO: do something here with output & output_written_size, such as writing it to a file/stream.
+        // You technically do **not** need to check the returned tamp_res here; it's impossible for
+        // tamp_compressor_poll to return a non TAMP_OK error-code in this scenario.
+    }
+    // There are **probably** some bits still in the compressor's output buffer that we still need to flush.
+    // Because the input buffer is exhausted, this will contain a maximum of 4 bytes with write_token=false.
+    tamp_compressor_flush(compressor, output, sizeof(output), &output_written_size, false);
+    // TODO: do something here with output & output_written_size, such as writing it to a file/stream.
+    // Again, no need to check the error code, it is impossible to error in this scenario.
+
+
+Without writing a custom flush routine, the maximum number of bytes (and thus, the suggested output buffer size) that can be flushed from a compressor with a full internal input buffer via ``tamp_compressor_flush`` can be calculated as:
+
+.. math::
+
+   max\_output\_size = \left\lceil\frac{16 + \text{window} + 16(1 + \text{literal})}{8}\right\rceil
+
+The following table has the output buffer size calculated for all valid configurations:
+
++---------------------+--------------------+-------------------------+
+| Literal Size (Bits) | Window Size (Bits) | Max Output Size (Bytes) |
++=====================+====================+=========================+
+| 5                   | 8                  | 15                      |
++---------------------+--------------------+-------------------------+
+| 5                   | 9-15               | 16                      |
++---------------------+--------------------+-------------------------+
+| 6                   | 8                  | 17                      |
++---------------------+--------------------+-------------------------+
+| 6                   | 9-15               | 18                      |
++---------------------+--------------------+-------------------------+
+| 7                   | 8                  | 19                      |
++---------------------+--------------------+-------------------------+
+| 7                   | 9-15               | 20                      |
++---------------------+--------------------+-------------------------+
+| 8                   | 8                  | 21                      |
++---------------------+--------------------+-------------------------+
+| 8                   | 9-15               | 22                      |
++---------------------+--------------------+-------------------------+
+
+For most applications, ``literal=8`` and ``window=10`` offers a good tradeoff, and should have an output buffer size of at least 22 bytes.
 
 Summary
 -------
