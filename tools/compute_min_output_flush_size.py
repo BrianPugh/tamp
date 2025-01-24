@@ -1,4 +1,5 @@
 """Computes what the minimum output buffer size should be to handle a worse-case tamp_compressor_flush."""
+
 from tamp import compute_min_pattern_size
 
 
@@ -24,22 +25,15 @@ for literal in [5, 6, 7, 8]:
         without_write = biggest_residual_output + input_buffer_size * (is_literal_bit + literal)
 
         # attempting to use a flush token will either add 0 bits if perfectly byte-aligned, or 9 bits if not.
-        # Aside from literals, the worst compression ratio is achieved at min_pattern_size.
-        # if without_write is perfectly byte-aligned, we have to check what would happen with a
-        # single min_pattern_size compression, which would then potentially result in a flush token.
+        # if we are byte-aligned, we can force a worse outcome by having a 1-bit smaller residual buffer.
+
+        with_write = without_write
         if without_write % 8 == 0:
-            with_write = (
-                biggest_residual_output
-                + (input_buffer_size - min_pattern_size) * (is_literal_bit + literal)
-                + (is_literal_bit + smallest_huffman + window)
-                + flush_code
-            )
-            with_write = max(with_write, without_write)
-        else:
-            with_write = without_write + flush_code
+            with_write -= 1
+        with_write += flush_code
 
         without_write_bytes = bits2bytes(without_write)
         with_write_bytes = bits2bytes(with_write)
 
-        print(f"{literal=} {window=} {without_write_bytes=} {with_write_bytes=}")
+        print(f"{literal=} {window=:>2} {without_write_bytes=} {with_write_bytes=}")
     print()
