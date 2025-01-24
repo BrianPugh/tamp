@@ -42,7 +42,7 @@ jobs:
         run: |
           find . -type f -name "*.c" -exec sed -i 's/static const uint8_t/const uint8_t/g' {} +
 
-      - name: Set up python ${{ matrix.python-version }}
+      - name: Set up python
         if: env.ARCH != 'xtensa'
         uses: actions/setup-python@v5
         with:

@@ -26,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
     env:
       OS: ${{ matrix.os }}
       PYTHON: ${{ matrix.python-version }}
@@ -46,17 +46,18 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up python ${{ matrix.python-version }}
+      - name: Set up python 3.13
+        id: setup-python-system
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.13
 
       - name: Cache Poetry Install
         uses: actions/cache@v4
         id: cached-poetry
         with:
           path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ env.PYTHON }}-${{ hashFiles('.github/workflows/tests.yaml') }}
+          key: poetry-cache-${{ runner.os }}-${{ steps.setup-python-system.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
 
       - name: Install poetry
         uses: snok/install-poetry@v1
@@ -72,12 +73,18 @@ jobs:
           poetry config virtualenvs.in-project true
           poetry config installer.parallel ${{ runner.os != 'Windows' }} # Currently there seems to be some race-condition in windows
 
+      - name: Set up python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        id: setup-python-project
+        with:
+          python-version: ${{ matrix.python-version }}
+
       - name: Cache venv
         uses: actions/cache@v4
         id: cached-venv
         with:
           path: .venv/
-          key: venv-cache-${{ runner.os }}-${{ env.PYTHON }}-${{ hashFiles('.github/workflows/tests.yaml') }}
+          key: venv-cache-${{ runner.os }}-${{ steps.setup-python-project.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
 
       - name: Install MicroPython
         uses: BrianPugh/install-micropython@v2
@@ -85,12 +92,15 @@ jobs:
           reference: v1.22.0
 
       - name: Install library
-        run: poetry install --no-interaction
+        run: |
+           poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
+           poetry install --no-interaction
 
-      - uses: actions/cache@v4
+      - name: Cache pre-commit
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit/
-          key: pre-commit-4|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
+          key: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Pre-commit run
         run: |
