@@ -120,9 +120,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-22.04]  # TODO: change back to ubuntu-latest; see https://github.com/actions/runner-images/issues/11471
         cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*", "cp312-*"]
-        cibw_archs: ["x86_64", "i686", "aarch64"]  # , "ppc64le"] # skip ppc64le; github actions struggles to build it with memory limitations.
+        cibw_archs: ["x86_64", "i686", "aarch64", "ppc64le"]
     env:
       PYTHON: 3.12
 
