@@ -40,6 +40,8 @@ jobs:
       - name: Install poetry
         if: steps.cached-poetry.outputs.cache-hit != 'true'
         uses: snok/install-poetry@v1
+        with:
+          version: 1.8.5
 
       - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
         run: |

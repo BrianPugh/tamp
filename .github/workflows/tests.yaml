@@ -62,6 +62,8 @@ jobs:
       - name: Install poetry
         uses: snok/install-poetry@v1
         if: steps.cached-poetry.outputs.cache-hit != 'true'
+        with:
+          version: 1.8.5
 
       - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
         run: |
@@ -93,8 +95,8 @@ jobs:
 
       - name: Install library
         run: |
-           poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
-           poetry install --no-interaction
+          poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
+          poetry install --no-interaction
 
       - name: Cache pre-commit
         uses: actions/cache@v4
