@@ -95,14 +95,20 @@ void tamp_compressor_sink(
  *      * 1 - is_literal bit
  *      * 8 - maximum huffman code length
  *      * WINDOW_BITS - The number of bits to represent the match index. By default, 10.
- *      * 7 - The internal bit buffer may have up to 7 bits from a previous invocation.
+ *      * 7 - The internal bit buffer may have up to 7 bits from a previous invocation. See NOTE below.
  *      * // 8 - Floor divide by 8 to get bytes; the upto remaining 7 bits remain in the internal output bit buffer.
  *
- * A reasonable 3-byte output buffer should be able to handle any compressor configuration.
+ * NOTE: Unintuitively, tamp_compressor_poll partially flushes (flushing multiples of 8-bits) the internal
+ * output bit buffer at the **beginning** of the function call (not the end). This means that a **previous**
+ * tamp_compressor_poll call may have placed up to (16 + WINDOW_BITS) bits in the internal output bit buffer.
+ * The partial flush at the beginning of tamp_compressor_poll clears as many whole-bytes as possible from this buffer.
+ * After this flush, there remains up to 7 bits, to which the current call's compressed token/literal is added to.
+ *
+ * A 3-byte output buffer should be able to handle any compressor configuration.
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
+ * @param[in] output_size Size of the pre-allocated output buffer.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  *
  * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
@@ -143,7 +149,7 @@ tamp_res tamp_compressor_poll(
  *
  * @param[in,out] compressor TampCompressor object to flush.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
+ * @param[in] output_size Size of the pre-allocated output buffer.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  * @param[in] write_token Write the FLUSH token, if appropriate. Set to true if you want to continue using the compressor. Set to false if you are done with the compressor, usually at the end of a stream.
  *
@@ -180,7 +186,7 @@ tamp_res tamp_compressor_compress_cb(
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
+ * @param[in] output_size Size of the pre-allocated output buffer.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  * @param[in] input Pointer to the input data to be compressed.
  * @param[in] input_size Number of bytes in input data.
@@ -233,7 +239,7 @@ tamp_res tamp_compressor_compress_and_flush_cb(
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
- * @param[in] output_size Size of the pre-allocated buffer. Will compress up-to this many bytes.
+ * @param[in] output_size Size of the pre-allocated output buffer.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  * @param[in] input Pointer to the input data to be compressed.
  * @param[in] input_size Number of bytes in input data.
