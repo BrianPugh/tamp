@@ -40,6 +40,8 @@ jobs:
       - name: Install poetry
         if: steps.cached-poetry.outputs.cache-hit != 'true'
         uses: snok/install-poetry@v1
+        with:
+          version: 1.8.5
 
       - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
         run: |
@@ -118,7 +120,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-22.04]  # TODO: change back to ubuntu-latest; see https://github.com/actions/runner-images/issues/11471
         cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*", "cp312-*"]
         cibw_archs: ["x86_64", "i686", "aarch64", "ppc64le"]
     env:

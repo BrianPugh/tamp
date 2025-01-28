@@ -42,7 +42,7 @@ jobs:
         run: |
           find . -type f -name "*.c" -exec sed -i 's/static const uint8_t/const uint8_t/g' {} +
 
-      - name: Set up python ${{ matrix.python-version }}
+      - name: Set up python
         if: env.ARCH != 'xtensa'
         uses: actions/setup-python@v5
         with:
@@ -137,6 +137,8 @@ jobs:
       - name: Install poetry
         uses: snok/install-poetry@v1
         if: steps.cached-poetry.outputs.cache-hit != 'true'
+        with:
+          version: 1.8.5
 
       - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
         run: |
