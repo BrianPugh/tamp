@@ -123,6 +123,17 @@ tamp_res tamp_compressor_poll(
 #define tamp_compressor_compress_poll tamp_compressor_poll
 
 /**
+ * @brief Check if the compressor's input buffer is full.
+ *
+ * @param[in] compressor TampCompressor object to check.
+ *
+ * @return true if the compressor is full, false otherwise.
+ */
+TAMP_ALWAYS_INLINE bool tamp_compressor_full(TampCompressor *compressor) {
+    return compressor->input_size == sizeof(compressor->input);
+}
+
+/**
  * @brief Completely flush the internal bit buffer. Makes output "complete".
  *
  * The following table contains the most number of bytes that could be flushed in a worst-case scenario:

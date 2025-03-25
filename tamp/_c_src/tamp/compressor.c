@@ -206,7 +206,7 @@ void tamp_compressor_sink(
         consumed_size = &consumed_size_proxy;
 
     for(size_t i=0; i < input_size; i++){
-        if(TAMP_UNLIKELY(compressor->input_size == sizeof(compressor->input)))
+        if(TAMP_UNLIKELY(tamp_compressor_full(compressor)))
             break;
         compressor->input[input_add(compressor->input_size)] = input[i];
         compressor->input_size += 1;
@@ -248,7 +248,7 @@ tamp_res tamp_compressor_compress_cb(
             input_size -= consumed;
             (*input_consumed_size) += consumed;
         }
-        if(TAMP_LIKELY(compressor->input_size == sizeof(compressor->input))){
+        if(TAMP_LIKELY(tamp_compressor_full(compressor))){
             // Input buffer is full and ready to start compressing.
             size_t chunk_output_written_size;
             res = tamp_compressor_poll(compressor, output, output_size, &chunk_output_written_size);
