@@ -42,6 +42,12 @@ typedef struct TampCompressor {
 #endif
 } TampCompressor;
 
+typedef struct {
+    TampCompressor base;
+    void *stream;
+    void (*write)(void *stream, uint8_t *data, size_t size);
+} TampCompressorStream;
+
 /**
  * @brief Initialize Tamp Compressor object.
  *
@@ -231,6 +237,41 @@ TAMP_ALWAYS_INLINE tamp_res tamp_compressor_compress_and_flush(TampCompressor *c
                                                                size_t *input_consumed_size, bool write_token) {
     return tamp_compressor_compress_and_flush_cb(compressor, output, output_size, output_written_size, input,
                                                  input_size, input_consumed_size, write_token, NULL, NULL);
+}
+
+/**
+ * Callback-variant of tamp_compressor_compress_stream.
+ *
+ * @param[in] callback User-provided function to be called every compression-cycle.
+ * @param[in,out] user_data Passed along to callback.
+ */
+tamp_res tamp_compressor_stream_compress_cb(TampCompressorStream *compressor, unsigned char *input, size_t size,
+                                            tamp_callback_t callback, void *user_data);
+
+/**
+ * @brief Compress data, writing compressed data to stream as necessary.
+ */
+TAMP_ALWAYS_INLINE tamp_res tamp_compressor_stream_compress(TampCompressorStream *compressor, unsigned char *input,
+                                                            size_t size) {
+    return tamp_compressor_stream_compress_cb(compressor, input, size, NULL, NULL);
+}
+
+tamp_res tamp_compressor_stream_flush(TampCompressorStream *compressor, bool write_token);
+
+/**
+ * Callback-variant of tamp_compressor_compress_stream.
+ *
+ * @param[in] callback User-provided function to be called every compression-cycle.
+ * @param[in,out] user_data Passed along to callback.
+ */
+tamp_res tamp_compressor_stream_compress_and_flush_cb(TampCompressorStream *compressor, unsigned char *input,
+                                                      size_t size, bool write_token, tamp_callback_t callback,
+                                                      void *user_data);
+
+TAMP_ALWAYS_INLINE tamp_res tamp_compressor_stream_compress_and_flush(TampCompressorStream *compressor,
+                                                                      unsigned char *input, size_t size,
+                                                                      bool write_token) {
+    return tamp_compressor_stream_compress_and_flush_cb(compressor, input, size, write_token, NULL, NULL);
 }
 
 #ifdef __cplusplus
