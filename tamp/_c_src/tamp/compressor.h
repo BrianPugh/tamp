@@ -45,7 +45,7 @@ typedef struct TampCompressor {
 typedef struct {
     TampCompressor base;
     void *stream;
-    void (*write)(void *stream, uint8_t *data, size_t size);
+    int (*write)(void *stream, uint8_t *data, size_t size);
 } TampCompressorStream;
 
 /**
@@ -242,6 +242,7 @@ TAMP_ALWAYS_INLINE tamp_res tamp_compressor_compress_and_flush(TampCompressor *c
 /**
  * Callback-variant of tamp_compressor_compress_stream.
  *
+ * @param[in,out] compressor TampCompressorStream object to perform compression with.
  * @param[in] callback User-provided function to be called every compression-cycle.
  * @param[in,out] user_data Passed along to callback.
  */
@@ -250,6 +251,12 @@ tamp_res tamp_compressor_stream_compress_cb(TampCompressorStream *compressor, un
 
 /**
  * @brief Compress data, writing compressed data to stream as necessary.
+ *
+ * @param[in,out] compressor TampCompressorStream object to perform compression with.
+ * @param[in] input Pointer to the input data to be compressed.
+ * @param[in] size Number of bytes in the input buffer.
+ *
+ * @return Tamp Status Code. Can return TAMP_OK or TAMP_STREAM_ERROR.
  */
 TAMP_ALWAYS_INLINE tamp_res tamp_compressor_stream_compress(TampCompressorStream *compressor, unsigned char *input,
                                                             size_t size) {
@@ -259,15 +266,27 @@ TAMP_ALWAYS_INLINE tamp_res tamp_compressor_stream_compress(TampCompressorStream
 tamp_res tamp_compressor_stream_flush(TampCompressorStream *compressor, bool write_token);
 
 /**
- * Callback-variant of tamp_compressor_compress_stream.
+ * Callback-variant of tamp_compressor_stream_compress_and_flush.
  *
  * @param[in] callback User-provided function to be called every compression-cycle.
  * @param[in,out] user_data Passed along to callback.
+ *
+ * @return Tamp Status Code. Can return TAMP_OK or TAMP_STREAM_ERROR.
  */
 tamp_res tamp_compressor_stream_compress_and_flush_cb(TampCompressorStream *compressor, unsigned char *input,
                                                       size_t size, bool write_token, tamp_callback_t callback,
                                                       void *user_data);
 
+/**
+ * @brief Compress a complete buffer of data to a file.
+ *
+ * @param[in,out] compressor TampCompressorStream object to perform compression with.
+ * @param[in] input Pointer to the input data to be compressed.
+ * @param[in] size Number of bytes in the input buffer.
+ * @param[in] write_token Write the FLUSH token, if appropriate. Set to true if you want to continue compressing.
+ *
+ * @return Tamp Status Code. Can return TAMP_OK or TAMP_STREAM_ERROR.
+ */
 TAMP_ALWAYS_INLINE tamp_res tamp_compressor_stream_compress_and_flush(TampCompressorStream *compressor,
                                                                       unsigned char *input, size_t size,
                                                                       bool write_token) {

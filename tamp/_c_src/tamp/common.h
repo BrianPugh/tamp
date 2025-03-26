@@ -56,6 +56,7 @@ enum {
     TAMP_ERROR = -1,         // Generic error
     TAMP_EXCESS_BITS = -2,   // Provided symbol has more bits than conf->literal
     TAMP_INVALID_CONF = -3,  // Invalid configuration parameters.
+    TAMP_STREAM_ERROR = -4,  // Some error occurred reading/writing to stream.
 };
 typedef int8_t tamp_res;
 
@@ -66,7 +67,7 @@ typedef struct TampConf {
 } TampConf;
 
 /**
- * User-provied callback to be invoked after each compression cycle in the higher-level API.
+ * User-provided callback to be invoked after each compression cycle in the higher-level API.
  * @param[in,out] user_data Arbitrary user-provided data.
  * @param[in] bytes_processed Number of input bytes consumed so far.
  * @param[in] total_bytes Total number of input bytes.

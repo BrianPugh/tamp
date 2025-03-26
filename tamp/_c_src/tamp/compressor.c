@@ -297,3 +297,56 @@ tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor *compressor, unsig
 
     return TAMP_OK;
 }
+
+tamp_res tamp_compressor_stream_compress_cb(TampCompressorStream *compressor, unsigned char *input, size_t size,
+                                            tamp_callback_t callback, void *user_data) {
+    size_t total_input_size = size;
+    while (size > 0) {
+        {
+            // Sink Data into input buffer.
+            size_t consumed;
+            tamp_compressor_sink(&compressor->base, input, size, &consumed);
+            input += consumed;
+            size -= consumed;
+        }
+        if (TAMP_LIKELY(tamp_compressor_full(&compressor->base))) {
+            // Input buffer is full and ready to start compressing.
+            tamp_res res;
+            int stream_written;
+            unsigned char output_buffer[4];
+            size_t output_written_size;
+            res = tamp_compressor_poll(&compressor->base, output_buffer, sizeof(output_buffer), &output_written_size);
+            if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+            stream_written = compressor->write(compressor->stream, output_buffer, output_written_size);
+            if (TAMP_UNLIKELY(stream_written != output_written_size)) return TAMP_STREAM_ERROR;
+            if (TAMP_UNLIKELY(callback && (res = callback(user_data, output_written_size, total_input_size))))
+                return (tamp_res)res;
+        }
+    }
+    return TAMP_OK;
+}
+
+tamp_res tamp_compressor_stream_flush(TampCompressorStream *compressor, bool write_token) {
+    tamp_res res;
+    unsigned char output_buffer[24];
+    size_t output_written_size;
+    int stream_written;
+
+    res = tamp_compressor_flush(&compressor->base, output_buffer, sizeof(output_buffer), &output_written_size,
+                                write_token);
+    if (res != TAMP_OK) return res;
+    stream_written = compressor->write(compressor->stream, output_buffer, output_written_size);
+    if (TAMP_UNLIKELY(stream_written != output_written_size)) return TAMP_STREAM_ERROR;
+
+    return TAMP_OK;
+}
+
+tamp_res tamp_compressor_stream_compress_and_flush_cb(TampCompressorStream *compressor, unsigned char *input,
+                                                      size_t size, bool write_token, tamp_callback_t callback,
+                                                      void *user_data) {
+    tamp_res res;
+    res = tamp_compressor_stream_compress_cb(compressor, input, size, callback, user_data);
+    if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+    res = tamp_compressor_stream_flush(compressor, write_token);
+    return res;
+}
