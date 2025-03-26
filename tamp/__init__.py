@@ -1,7 +1,11 @@
 __version__ = "0.0.0"
 
 
-class ExcessBitsError(Exception):
+class TampError(Exception):
+    """Root Tamp Error."""
+
+
+class ExcessBitsError(TampError):
     """Provided data has more bits than expected ``literal`` bits."""
 
 

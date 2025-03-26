@@ -53,5 +53,8 @@ def bit_size(value: int) -> int: ...
 def initialize_dictionary(size: int, seed: int | None = None) -> bytearray: ...
 def compute_min_pattern_size(window: int, literal: int) -> int: ...
 
-class ExcessBitsError(Exception):
+class TampError(Exception):
+    """Root Tamp Error."""
+
+class ExcessBitsError(TampError):
     """Provided data has more bits than expected ``literal`` bits."""
