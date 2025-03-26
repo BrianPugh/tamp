@@ -5,29 +5,29 @@
 extern "C" {
 #endif
 
-#include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #if ESP_PLATFORM
-    // (External) code #including this header MUST use the SAME TAMP_ESP32 setting that is used when building this lib!
-    #include "sdkconfig.h"
+// (External) code #including this header MUST use the SAME TAMP_ESP32 setting that is used when
+// building this lib!
+#include "sdkconfig.h"
 #endif
-
 
 /* Should the ESP32-optimized variant be built? */
-#ifdef CONFIG_TAMP_ESP32 // CONFIG_... from Kconfig takes precedence
-    #if CONFIG_TAMP_ESP32
-        #define TAMP_ESP32 1
-    #else
-        #define TAMP_ESP32 0
-    #endif
+#ifdef CONFIG_TAMP_ESP32  // CONFIG_... from Kconfig takes precedence
+#if CONFIG_TAMP_ESP32
+#define TAMP_ESP32 1
+#else
+#define TAMP_ESP32 0
+#endif
 #endif
 
-#ifndef TAMP_ESP32 // If not set via Kconfig, and not otherwise -D_efined, default TAMP_ESP32 to compatible version.
-    #define TAMP_ESP32 0
+#ifndef TAMP_ESP32  // If not set via Kconfig, and not otherwise -D_efined, default TAMP_ESP32 to
+                    // compatible version.
+#define TAMP_ESP32 0
 #endif
-
 
 /* Compiler branch optimizations */
 #if defined(__clang__) || (defined(__GNUC__) && (__GNUC__ > 2))
@@ -49,20 +49,20 @@ extern "C" {
 enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,
-    TAMP_OUTPUT_FULL = 1,  // Wasn't able to complete action due to full output buffer.
-    TAMP_INPUT_EXHAUSTED = 2, // Wasn't able to complete action due to exhausted input buffer.
+    TAMP_OUTPUT_FULL = 1,      // Wasn't able to complete action due to full output buffer.
+    TAMP_INPUT_EXHAUSTED = 2,  // Wasn't able to complete action due to exhausted input buffer.
 
     /* Error codes < 0 */
-    TAMP_ERROR = -1,  // Generic error
-    TAMP_EXCESS_BITS = -2,  // Provided symbol has more bits than conf->literal
+    TAMP_ERROR = -1,         // Generic error
+    TAMP_EXCESS_BITS = -2,   // Provided symbol has more bits than conf->literal
     TAMP_INVALID_CONF = -3,  // Invalid configuration parameters.
 };
 typedef int8_t tamp_res;
 
 typedef struct TampConf {
-    uint16_t window:4;   // number of window bits
-    uint16_t literal:4;  // number of literal bits
-    uint16_t use_custom_dictionary:1;  // Use a custom initialized dictionary.
+    uint16_t window : 4;                 // number of window bits
+    uint16_t literal : 4;                // number of literal bits
+    uint16_t use_custom_dictionary : 1;  // Use a custom initialized dictionary.
 } TampConf;
 
 /**
