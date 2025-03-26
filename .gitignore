@@ -35,6 +35,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+/compile_commands.json
 develop-eggs/
 dist/
 downloads/

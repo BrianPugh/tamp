@@ -151,7 +151,8 @@ TAMP_OBJS = \
 
 CTEST_OBJS = \
 	build/unity/unity.o \
-	build/ctests/test_decompressor.o
+	build/ctests/test_decompressor.o \
+	build/ctests/test_compressor.o
 
 build/%.o: tamp/_c_src/tamp/%.c mkdir-build
 	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
@@ -167,6 +168,8 @@ build/test_runner: $(TAMP_OBJS) $(CTEST_OBJS)
 
 c-test: build/test_runner
 	./build/test_runner
+
+ctest: c-test
 
 #############
 # C Library #

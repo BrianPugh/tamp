@@ -1,0 +1,5 @@
+CompileFlags:
+  Compiler: gcc
+  Add:
+    - -Ictests/Unity/src
+    - -Itamp/_c_src
