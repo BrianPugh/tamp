@@ -276,17 +276,18 @@ files = [
 
 [[package]]
 name = "belay"
-version = "0.24.3"
+version = "0.25.0"
 description = ""
 optional = false
 python-versions = ">=3.8"
 groups = ["dev"]
 files = [
-    {file = "belay-0.24.3-py3-none-any.whl", hash = "sha256:18ced10d1165713a8ab540537d7c07bb7ca8db8e9fb0849e828b939eb8f64f77"},
-    {file = "belay-0.24.3.tar.gz", hash = "sha256:5d4f9f7553b9bb2e946d2e92c1909a1c6a29a577c6775a160f5e995b891f8719"},
+    {file = "belay-0.25.0-py3-none-any.whl", hash = "sha256:90d692117c3b74a6fe0f7b494ab5399e5da308c91cfabcd972fc285efc2f303e"},
+    {file = "belay-0.25.0.tar.gz", hash = "sha256:2ee1be8e48fbb0b746473e0790d0165b39f9b1167fde07a79aab1ac7ee449aa7"},
 ]
 
 [package.dependencies]
+attrs = ">=21.0.0"
 autoregistry = ">=0.10.1"
 fsspec = {version = ">=2022.11.0", extras = ["http"]}
 gitpython = ">=3.1.30"
