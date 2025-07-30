@@ -30,19 +30,36 @@ def build_cython_extensions():
         define_macros.append(("CYTHON_TRACE", "1"))
 
     if os.name == "nt":  # Windows
-        extra_compile_args = [
-            "/O2",
-        ]
+        if profile:
+            extra_compile_args = [
+                "/O2",
+                "/Z7",  # Debug info for profiling
+            ]
+        else:
+            extra_compile_args = [
+                "/O2",
+            ]
     else:  # UNIX-based systems
-        extra_compile_args = [
-            "-O3",
-            "-Werror",
-            "-Wno-unreachable-code-fallthrough",
-            "-Wno-deprecated-declarations",
-            "-Wno-parentheses-equality",
-            "-Wno-unreachable-code",  # TODO: This should no longer be necessary with Cython>=3.0.3
-            # https://github.com/cython/cython/issues/5681
-        ]
+        if profile:
+            extra_compile_args = [
+                "-O2",  # Use O2 instead of O3 for better debug info
+                "-g",  # Include debug symbols
+                "-fno-omit-frame-pointer",  # Keep frame pointers for py-spy
+                "-Wno-unreachable-code-fallthrough",
+                "-Wno-deprecated-declarations",
+                "-Wno-parentheses-equality",
+                "-Wno-unreachable-code",
+            ]
+        else:
+            extra_compile_args = [
+                "-O3",
+                "-Werror",
+                "-Wno-unreachable-code-fallthrough",
+                "-Wno-deprecated-declarations",
+                "-Wno-parentheses-equality",
+                "-Wno-unreachable-code",  # TODO: This should no longer be necessary with Cython>=3.0.3
+                # https://github.com/cython/cython/issues/5681
+            ]
     include_dirs = ["tamp/_c_src/", "tamp/"]
 
     extensions = [
@@ -87,7 +104,19 @@ def build_cython_extensions():
         include_dirs.update(extension.include_dirs)
     include_dirs = list(include_dirs)
 
-    ext_modules = cythonize(extensions, include_path=include_dirs, language_level=3, annotate=True)
+    # Configure cythonize options for profiling
+    cythonize_kwargs = {
+        "include_path": include_dirs,
+        "language_level": 3,
+        "annotate": True,
+    }
+
+    if profile:
+        # Enable additional debugging for profiling
+        cythonize_kwargs["gdb_debug"] = True
+        cythonize_kwargs["emit_linenums"] = True
+
+    ext_modules = cythonize(extensions, **cythonize_kwargs)
     dist = Distribution({"ext_modules": ext_modules})
     cmd = build_ext(dist)
     cmd.ensure_finalized()
