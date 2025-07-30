@@ -225,7 +225,7 @@ The following table shows compression algorithm performance over a variety of in
 
   dataset               |   raw         |   tamp           |   zlib           |   heatshrink
 ----------------------- | ------------- | ---------------- | ---------------- | ------------
-  enwik8                |   100,000,000 |   **51,257,072** |   56,205,166     |   56,110,394
+  enwik8                |   100,000,000 |   **51,256,171** |   56,205,166     |   56,110,394
   build/silesia/dickens |   10,192,446  |   **5,512,282**  |   6,049,169      |   6,155,768
   build/silesia/mozilla |   51,220,480  |   **24,936,593** |   25,104,966     |   25,435,908
   build/silesia/mr      |   9,970,564   |   4,888,476  |   **4,864,734**      |   5,442,180
