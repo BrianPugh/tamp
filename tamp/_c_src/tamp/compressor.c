@@ -142,6 +142,38 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
     uint16_t match_index = 0;
     find_best_match(compressor, &match_index, &match_size);
 
+#ifdef TAMP_LAZY_MATCHING
+    // Lazy matching: if we have a good match, check if position i+1 has a better match
+    if (match_size >= compressor->min_pattern_size && compressor->input_size > 1) {
+        // Temporarily advance input position to check next position
+        compressor->input_pos = input_add(1);
+        compressor->input_size--;
+        
+        uint8_t next_match_size = 0;
+        uint16_t next_match_index = 0;
+        find_best_match(compressor, &next_match_index, &next_match_size);
+        
+        // Restore input position
+        compressor->input_pos = input_add(-1);
+        compressor->input_size++;
+        
+        // If next position has a significantly better match, emit literal and use next match
+        if (next_match_size > match_size) {
+            // Write LITERAL at current position
+            match_size = 1;
+            unsigned char c = read_input(0);
+            if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
+                return TAMP_EXCESS_BITS;
+            }
+            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+        } else {
+            // Use current match
+            uint8_t huffman_index = match_size - compressor->min_pattern_size;
+            write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+            write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+        }
+    } else
+#endif
     if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
         // Write LITERAL
         match_size = 1;
