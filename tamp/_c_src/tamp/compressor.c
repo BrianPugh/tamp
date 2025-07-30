@@ -148,15 +148,15 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
         // Temporarily advance input position to check next position
         compressor->input_pos = input_add(1);
         compressor->input_size--;
-        
+
         uint8_t next_match_size = 0;
         uint16_t next_match_index = 0;
         find_best_match(compressor, &next_match_index, &next_match_size);
-        
+
         // Restore input position
         compressor->input_pos = input_add(-1);
         compressor->input_size++;
-        
+
         // If next position has a significantly better match, emit literal and use next match
         if (next_match_size > match_size) {
             // Write LITERAL at current position
@@ -174,7 +174,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
         }
     } else
 #endif
-    if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
+        if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
         // Write LITERAL
         match_size = 1;
         unsigned char c = read_input(0);
