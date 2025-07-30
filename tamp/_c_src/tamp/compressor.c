@@ -142,7 +142,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
     uint16_t match_index = 0;
     find_best_match(compressor, &match_index, &match_size);
 
-#ifdef TAMP_LAZY_MATCHING
+#if TAMP_LAZY_MATCHING
     // Lazy matching: if we have a good match, check if position i+1 has a better match
     if (match_size >= compressor->min_pattern_size && match_size <= 8 && compressor->input_size > match_size + 2) {
         // Temporarily advance input position to check next position
