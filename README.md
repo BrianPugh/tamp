@@ -14,9 +14,9 @@
 
 ---
 
-**Documentation:** https://tamp.readthedocs.io/en/latest/
+**Documentation:** <https://tamp.readthedocs.io/en/latest/>
 
-**Source Code:** https://github.com/BrianPugh/tamp
+**Source Code:** <https://github.com/BrianPugh/tamp>
 
 ---
 
@@ -27,22 +27,22 @@ Tamp delivers the highest data compression ratios, while using the least amount 
 # Features
 
 * Various language implementations available:
-    * Pure Python reference:
-        * `tamp/__init__.py`, `tamp/compressor.py`, `tamp/decompressor.py`
-        * `pip install tamp` will use a python-bound C implementation
+  * Pure Python reference:
+    * `tamp/__init__.py`, `tamp/compressor.py`, `tamp/decompressor.py`
+    * `pip install tamp` will use a python-bound C implementation
             optimized for speed.
-    * Micropython:
-        * Native Module (suggested micropython implementation).
-            * `mpy_bindings/`
-        * Viper.
-            * `tamp/__init__.py`, `tamp/compressor_viper.py`, `tamp/decompressor_viper.py`
-    * C library:
-        * `tamp/_c_src/`
+  * Micropython:
+    * Native Module (suggested micropython implementation).
+      * `mpy_bindings/`
+    * Viper.
+      * `tamp/__init__.py`, `tamp/compressor_viper.py`, `tamp/decompressor_viper.py`
+  * C library:
+    * `tamp/_c_src/`
 * High compression ratios, low memory use, and fast.
 * Compact compression and decompression implementations.
-    * Compiled C library is <4KB (compressor + decompressor).
+  * Compiled C library is <4KB (compressor + decompressor).
 * Mid-stream flushing.
-    * Allows for submission of messages while continuing to compress subsequent data.
+  * Allows for submission of messages while continuing to compress subsequent data.
 * Customizable dictionary for greater compression of small messages.
 * Convenient CLI interface.
 
@@ -50,10 +50,10 @@ Tamp delivers the highest data compression ratios, while using the least amount 
 
 Tamp contains 4 implementations:
 
-1.  A reference desktop CPython implementation that is optimized for readability (and **not** speed).
-2.  A Micropython Native Module implementation (fast).
-3.  A Micropython Viper implementation (not recommended, please use Native Module).
-4.  A C implementation (with python bindings) for accelerated desktop
+1. A reference desktop CPython implementation that is optimized for readability (and **not** speed).
+2. A Micropython Native Module implementation (fast).
+3. A Micropython Viper implementation (not recommended, please use Native Module).
+4. A C implementation (with python bindings) for accelerated desktop
     use and to be used in C projects (very fast).
 
 This section instructs how to install each implementation.
@@ -91,9 +91,9 @@ tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.7.0/tamp-1.7.0-mp
 
 For micropython use, there are 3 main files:
 
-1.  `tamp/__init__.py` - Always required.
-2.  `tamp/decompressor_viper.py` - Required for on-device decompression.
-3.  `tamp/compressor_viper.py` - Required for on-device compression.
+1. `tamp/__init__.py` - Always required.
+2. `tamp/decompressor_viper.py` - Required for on-device decompression.
+3. `tamp/compressor_viper.py` - Required for on-device compression.
 
 For example, if on-device decompression isn't used, then do not include `decompressor_viper.py`. If manually installing, just copy these files to your microcontroller's `/lib/tamp` folder.
 
@@ -153,13 +153,13 @@ echo "hello world" | tamp compress | wc -c  # Compress a stream and print the co
 
 The following options can impact compression ratios and memory usage:
 
--   `window` - `2^window` plaintext bytes to look back to try and find a
+* `window` - `2^window` plaintext bytes to look back to try and find a
     pattern. A larger window size will increase the chance of finding a
     longer pattern match, but will use more memory, increase compression
     time, and cause each pattern-token to take up more space. Try
     smaller window values if compressing highly repetitive data, or
     short messages.
--   `literal` - Number of bits used in each plaintext byte. For example,
+* `literal` - Number of bits used in each plaintext byte. For example,
     if all input data is 7-bit ASCII, then setting this to 7 will
     improve literal compression ratios by 11.1%. The default, 8-bits,
     can encode any binary data.
@@ -214,8 +214,8 @@ with tamp.open("output.tamp", "rb") as f:
 
 In the following section, we compare Tamp against:
 
--   [zlib](https://docs.python.org/3/library/zlib.html), a python builtin gzip-compatible DEFLATE compression library.
--   [heatshrink](https://github.com/atomicobject/heatshrink), a data compression library for embedded/real-time systems. Heatshrink has similar goals as Tamp.
+* [zlib](https://docs.python.org/3/library/zlib.html), a python builtin gzip-compatible DEFLATE compression library.
+* [heatshrink](https://github.com/atomicobject/heatshrink), a data compression library for embedded/real-time systems. Heatshrink has similar goals as Tamp.
 
 All of these are LZ-based compression algorithms, and tests were performed using a 1KB (10 bit) window. Since zlib already uses significantly more memory by default, the lowest memory level (`memLevel=1`) was used in these benchmarks. It should be noted that higher zlib memory levels will having greater compression ratios than Tamp. Currently, there is no micropython-compatible zlib or heatshrink compression implementation, so these numbers are provided simply as a reference.
 
@@ -277,7 +277,6 @@ To give an idea of Tamp's speed on an embedded device, the following table shows
 | Tamp (Micropython Native Module) | 12,770                | 644,000                 |
 | Tamp (C)                         | 28,500                | 1,042,524               |
 | Deflate (micropython builtin)    | 6,715                 | 146,477                 |
-
 
 Tamp resulted in a **51637** byte archive, while Micropython's builtin `deflate` resulted in a larger, **59442** byte archive.
 
