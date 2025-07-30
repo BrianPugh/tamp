@@ -157,7 +157,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
         compressor->input_pos = input_add(-1);
         compressor->input_size++;
 
-        // If next position has a significantly better match, emit literal and use next match
+        // If next position has a better match, emit literal and use next match
         if (next_match_size > match_size) {
             // Write LITERAL at current position
             match_size = 1;
