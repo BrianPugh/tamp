@@ -104,6 +104,15 @@ jobs:
           path: ~/.cache/pre-commit/
           key: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('.pre-commit-config.yaml') }}
 
+      - name: Cache enwik8 dataset
+        uses: actions/cache@v4
+        with:
+          path: build/enwik8.zip
+          key: enwik8-dataset-${{ hashFiles('Makefile') }}
+
+      - name: Download enwik8 dataset
+        run: make download-enwik8
+
       - name: Pre-commit run
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
@@ -115,6 +124,23 @@ jobs:
           python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
           belay run micropython -X heapsize=200M -m unittest tests/*.py
           coverage report
+
+      - name: Verify CLI compression/decompression integrity
+        run: |
+          source ${{ env.ACTIVATE_PYTHON_VENV }}
+          make download-enwik8
+          original_hash=$(sha256sum build/enwik8 | cut -d' ' -f1)
+          roundtrip_hash=$(tamp compress build/enwik8 | tamp decompress | sha256sum | cut -d' ' -f1)
+          if [ "$original_hash" = "$roundtrip_hash" ]; then
+            echo "✓ Compression/decompression integrity verified"
+            echo "Original hash: $original_hash"
+            echo "Roundtrip hash: $roundtrip_hash"
+          else
+            echo "✗ Compression/decompression integrity check failed"
+            echo "Original hash: $original_hash"
+            echo "Roundtrip hash: $roundtrip_hash"
+            exit 1
+          fi
 
       - name: Upload coverage to Codecov
         if: steps.check_test_files.outputs.files_exists == 'true'
