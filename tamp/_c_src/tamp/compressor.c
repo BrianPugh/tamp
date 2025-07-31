@@ -93,6 +93,21 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
 #endif
 
+#if TAMP_LAZY_MATCHING
+/**
+ * @brief Check if writing a single byte will overlap with a future match section.
+ *
+ * @param[in] write_pos Position where the single byte will be written.
+ * @param[in] match_index Index in window where the match starts.
+ * @param[in] match_size Size of the match to validate.
+ * @return true if no overlap (match is safe), false if there's overlap.
+ */
+static inline bool validate_no_match_overlap(uint16_t write_pos, uint16_t match_index, uint8_t match_size) {
+    // Check if write position falls within the match range [match_index, match_index + match_size - 1]
+    return write_pos < match_index || write_pos >= match_index + match_size;
+}
+#endif
+
 tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window) {
     const TampConf conf_default = {
         .window = 10,
@@ -194,12 +209,10 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
             compressor->input_pos = input_add(-1);
             compressor->input_size++;
 
-            // If next position has a better match, emit literal and cache the next match
-            if (next_match_size > match_size) {
-                // Cache the better match for next iteration
-                compressor->cached_match_index = next_match_index;
-                compressor->cached_match_size = next_match_size;
-
+            // If next position has a better match, and the match doesn't overlap with the literal we are writing, emit
+            // literal and cache the next match
+            if (next_match_size > match_size &&
+                validate_no_match_overlap(compressor->window_pos, next_match_index, next_match_size)) {
                 // Write LITERAL at current position
                 match_size = 1;
                 unsigned char c = read_input(0);
