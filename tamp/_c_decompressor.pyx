@@ -71,6 +71,7 @@ cdef class Decompressor:
 
         size = len(buf)
         while size:
+            # decompress in chunks so we can skill check PyErr_CheckSignals
             output_size = min(CHUNK_SIZE, size)
 
             res = ctamp.tamp_decompressor_decompress(
@@ -93,8 +94,6 @@ cdef class Decompressor:
                 self.input_consumed = 0
                 if self.input_size == 0:
                     break;
-            elif res == ctamp.TAMP_OUTPUT_FULL:
-                break
             elif res < 0:
                 raise ERROR_LOOKUP.get(res, NotImplementedError)
 
@@ -104,26 +103,35 @@ cdef class Decompressor:
         return len(buf) - size
 
     def read(self, int size = -1) -> bytearray:
+        """
+        Parameters
+        ----------
+        size: int
+            Number of bytes to attempt to read in.
+            If negative 1, read until end of stream.
+        """
         if size == 0:
             return bytearray()
 
         chunk_size = CHUNK_SIZE
         out = []
         while True:
+            # buf holds decompressed data.
             buf = bytearray(chunk_size if size < 0 else size)
             chunk_size <<= 1  # Keep allocating larger chunks as we go on.
+            # decompression happens inside of readinto
             read_size = self.readinto(buf)
             if size > 0:
-                # Read the entire contents in one go.
+                # We one-shot the decompression
                 out.append(buf)
                 break
+            # We are decompressing in chunks
+            if read_size < len(buf):
+                if read_size:
+                    out.append(buf[:read_size])
+                break
             else:
-                if read_size < len(buf):
-                    if read_size:
-                        out.append(buf[:read_size])
-                    break
-                else:
-                    out.append(buf)
+                out.append(buf)
         return out[0] if len(out) == 1 else bytearray(b"".join(out))
 
     def close(self):
