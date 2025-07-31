@@ -53,13 +53,20 @@ clean: clean-cython
 	@rm -rf build
 	@rm -rf dist
 
-build/enwik8:
-	if [ ! -f build/enwik8 ]; then \
+build/enwik8.zip:
+	if [ ! -f build/enwik8.zip ]; then \
 		mkdir -p build; \
 		cd build; \
 		curl -O https://mattmahoney.net/dc/enwik8.zip; \
+		cd ..; \
+	fi
+
+download-enwik8-zip: build/enwik8.zip
+
+build/enwik8: build/enwik8.zip
+	if [ ! -f build/enwik8 ]; then \
+		cd build; \
 		unzip -q enwik8.zip; \
-		rm enwik8.zip; \
 		cd ..; \
 	fi
 
