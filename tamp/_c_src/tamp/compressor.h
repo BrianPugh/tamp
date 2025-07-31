@@ -22,6 +22,9 @@ typedef struct TampCompressor {
     uint8_t conf_window;                 // number of window bits
     uint8_t conf_literal;                // number of literal bits
     uint8_t conf_use_custom_dictionary;  // Use a custom initialized dictionary.
+#if TAMP_LAZY_MATCHING
+    uint8_t conf_lazy_matching;  // Use lazy matching for better compression
+#endif
     uint8_t min_pattern_size;
 
 #if TAMP_LAZY_MATCHING
@@ -34,6 +37,9 @@ typedef struct TampCompressor {
     uint32_t conf_window : 4;                 // number of window bits
     uint32_t conf_literal : 4;                // number of literal bits
     uint32_t conf_use_custom_dictionary : 1;  // Use a custom initialized dictionary.
+#if TAMP_LAZY_MATCHING
+    uint32_t conf_lazy_matching : 1;  // Use lazy matching for better compression
+#endif
 
     /* Other small attributes */
     uint32_t window_pos : 15;

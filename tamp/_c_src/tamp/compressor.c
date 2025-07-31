@@ -94,7 +94,14 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 #endif
 
 tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window) {
-    const TampConf conf_default = {.window = 10, .literal = 8, .use_custom_dictionary = false};
+    const TampConf conf_default = {
+        .window = 10,
+        .literal = 8,
+        .use_custom_dictionary = false,
+#if TAMP_LAZY_MATCHING
+        .lazy_matching = false,
+#endif
+    };
     if (!conf) conf = &conf_default;
     if (conf->window < 8 || conf->window > 15) return TAMP_INVALID_CONF;
     if (conf->literal < 5 || conf->literal > 8) return TAMP_INVALID_CONF;
@@ -105,6 +112,9 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->conf_literal = conf->literal;
     compressor->conf_window = conf->window;
     compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
+#if TAMP_LAZY_MATCHING
+    compressor->conf_lazy_matching = conf->lazy_matching;
+#endif
 
     compressor->window = window;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
@@ -152,11 +162,15 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
     uint16_t match_index = 0;
 
 #if TAMP_LAZY_MATCHING
-    // Check if we have a cached match from lazy matching
-    if (compressor->cached_match_index >= 0) {
-        match_index = compressor->cached_match_index;
-        match_size = compressor->cached_match_size;
-        compressor->cached_match_index = -1;  // Clear cache after using
+    if (compressor->conf_lazy_matching) {
+        // Check if we have a cached match from lazy matching
+        if (TAMP_UNLIKELY(compressor->cached_match_index >= 0)) {
+            match_index = compressor->cached_match_index;
+            match_size = compressor->cached_match_size;
+            compressor->cached_match_index = -1;  // Clear cache after using
+        } else {
+            find_best_match(compressor, &match_index, &match_size);
+        }
     } else {
         find_best_match(compressor, &match_index, &match_size);
     }
@@ -165,27 +179,44 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
 #endif
 
 #if TAMP_LAZY_MATCHING
-    // Lazy matching: if we have a good match, check if position i+1 has a better match
-    if (match_size >= compressor->min_pattern_size && match_size <= 8 && compressor->input_size > match_size + 2) {
-        // Temporarily advance input position to check next position
-        compressor->input_pos = input_add(1);
-        compressor->input_size--;
+    if (compressor->conf_lazy_matching) {
+        // Lazy matching: if we have a good match, check if position i+1 has a better match
+        if (match_size >= compressor->min_pattern_size && match_size <= 8 && compressor->input_size > match_size + 2) {
+            // Temporarily advance input position to check next position
+            compressor->input_pos = input_add(1);
+            compressor->input_size--;
 
-        uint8_t next_match_size = 0;
-        uint16_t next_match_index = 0;
-        find_best_match(compressor, &next_match_index, &next_match_size);
+            uint8_t next_match_size = 0;
+            uint16_t next_match_index = 0;
+            find_best_match(compressor, &next_match_index, &next_match_size);
 
-        // Restore input position
-        compressor->input_pos = input_add(-1);
-        compressor->input_size++;
+            // Restore input position
+            compressor->input_pos = input_add(-1);
+            compressor->input_size++;
 
-        // If next position has a better match, emit literal and cache the next match
-        if (next_match_size > match_size) {
-            // Cache the better match for next iteration
-            compressor->cached_match_index = next_match_index;
-            compressor->cached_match_size = next_match_size;
+            // If next position has a better match, emit literal and cache the next match
+            if (next_match_size > match_size) {
+                // Cache the better match for next iteration
+                compressor->cached_match_index = next_match_index;
+                compressor->cached_match_size = next_match_size;
 
-            // Write LITERAL at current position
+                // Write LITERAL at current position
+                match_size = 1;
+                unsigned char c = read_input(0);
+                if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
+                    return TAMP_EXCESS_BITS;
+                }
+                write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+            } else {
+                // Use current match, clear cache
+                compressor->cached_match_index = -1;
+                uint8_t huffman_index = match_size - compressor->min_pattern_size;
+                write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+            }
+        } else if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
+            // Write LITERAL
+            compressor->cached_match_index = -1;  // Clear cache
             match_size = 1;
             unsigned char c = read_input(0);
             if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
@@ -193,33 +224,30 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
             }
             write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
         } else {
-            // Use current match, clear cache
-            compressor->cached_match_index = -1;
+            // Write TOKEN
+            compressor->cached_match_index = -1;  // Clear cache
             uint8_t huffman_index = match_size - compressor->min_pattern_size;
             write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
             write_to_bit_buffer(compressor, match_index, compressor->conf_window);
         }
     } else
 #endif
+    {
+        // Non-lazy matching path
         if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
-        // Write LITERAL
-#if TAMP_LAZY_MATCHING
-        compressor->cached_match_index = -1;  // Clear cache
-#endif
-        match_size = 1;
-        unsigned char c = read_input(0);
-        if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
-            return TAMP_EXCESS_BITS;
+            // Write LITERAL
+            match_size = 1;
+            unsigned char c = read_input(0);
+            if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
+                return TAMP_EXCESS_BITS;
+            }
+            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+        } else {
+            // Write TOKEN
+            uint8_t huffman_index = match_size - compressor->min_pattern_size;
+            write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+            write_to_bit_buffer(compressor, match_index, compressor->conf_window);
         }
-        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
-    } else {
-        // Write TOKEN
-#if TAMP_LAZY_MATCHING
-        compressor->cached_match_index = -1;  // Clear cache
-#endif
-        uint8_t huffman_index = match_size - compressor->min_pattern_size;
-        write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-        write_to_bit_buffer(compressor, match_index, compressor->conf_window);
     }
     // Populate Window
     for (uint8_t i = 0; i < match_size; i++) {

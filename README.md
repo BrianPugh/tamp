@@ -252,8 +252,9 @@ The `nci` dataset contains highly compressible data with **long patterns**. For 
     0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
 ```
 
-Tamp's pattern length peaks at around 15 characters, meaning that these 49 characters has to be compressed as 4 pattern-matches.
+Tamp's maximum pattern length peaks at around 15 characters, meaning that these 49 characters has to be compressed as 4 pattern-matches.
 Zlib can handle patterns with a maximum length of 258, meaning that it can encode this highly repeating data more efficiently.
+Given Tamp's excellent performance in most of the other data compression benchmark files, this is a good tradeoff for most real-world scenarios.
 
 ## Memory Usage
 

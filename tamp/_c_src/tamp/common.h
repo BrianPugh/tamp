@@ -63,6 +63,10 @@ typedef struct TampConf {
     uint16_t window : 4;                 // number of window bits
     uint16_t literal : 4;                // number of literal bits
     uint16_t use_custom_dictionary : 1;  // Use a custom initialized dictionary.
+#if TAMP_LAZY_MATCHING
+    uint16_t lazy_matching : 1;  // use Lazy Matching (spend 50% more CPU for around 0.5-2.0% better compression.)
+                                 // only effects compression operations.
+#endif
 } TampConf;
 
 /**
