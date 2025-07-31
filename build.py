@@ -30,7 +30,7 @@ def build_cython_extensions():
         define_macros.append(("CYTHON_TRACE", "1"))
 
     if os.name == "nt":  # Windows
-        if profile:
+        if profile:  # noqa: SIM108
             extra_compile_args = [
                 "/O2",
                 "/Z7",  # Debug info for profiling
@@ -44,7 +44,7 @@ def build_cython_extensions():
             extra_compile_args = [
                 "-O2",  # Use O2 instead of O3 for better debug info
                 "-g",  # Include debug symbols
-                "-fno-omit-frame-pointer",  # Keep frame pointers for py-spy
+                "-fno-omit-frame-pointer",
                 "-Wno-unreachable-code-fallthrough",
                 "-Wno-deprecated-declarations",
                 "-Wno-parentheses-equality",
@@ -54,6 +54,7 @@ def build_cython_extensions():
             extra_compile_args = [
                 "-O3",
                 "-Werror",
+                "-fno-omit-frame-pointer",  # counterintuitively, makes things faster?
                 "-Wno-unreachable-code-fallthrough",
                 "-Wno-deprecated-declarations",
                 "-Wno-parentheses-equality",
