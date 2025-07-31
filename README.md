@@ -225,24 +225,24 @@ The following table shows compression algorithm performance over a variety of in
 
   dataset               |   raw         |   tamp           |   tamp (LazyMatching)           |   zlib           |   heatshrink
 ----------------------- | ------------- | ---------------- | ---------------- | ---------------- | ------------
-  enwik8                |   100,000,000 |   **51,635,633** |   51,250,133 |   56,205,166     |   56,110,394
-  build/silesia/dickens |   10,192,446  |   **5,546,761**  |   5,511,438  |   6,049,169      |   6,155,768
-  build/silesia/mozilla |   51,220,480  |   25,121,385     |   24,936,514 |   **25,104,966** |   25,435,908
-  build/silesia/mr      |   9,970,564   |   5,027,032      |   4,885,846      |   **4,864,734**  |   5,442,180
-  build/silesia/nci     |   33,553,445  |   8,643,610      |   8,645,412      |   **5,765,521**  |   8,247,487
-  build/silesia/ooffice |   6,152,192   |   **3,814,938**  |   3,798,313  |   4,077,277      |   3,994,589
-  build/silesia/osdb    |   10,085,684  |   **8,520,835**  |   8,518,158  |   8,625,159      |   8,747,527
-  build/silesia/reymont |   6,627,202   |   **2,847,981**  |   2,820,816  |   2,897,661      |   2,910,251
-  build/silesia/samba   |   21,606,400  |   9,102,594      |   9,060,731      |   **8,862,423**  |   9,223,827
-  build/silesia/sao     |   7,251,944   |   **6,137,755**  |   6,101,745  |   6,506,417      |   6,400,926
-  build/silesia/webster |   41,458,703  |   **18,694,172** |   18,566,483 |   20,212,235     |   19,942,817
-  build/silesia/x-ray   |   8,474,240   |   7,510,606      |   7,405,922      |   **7,351,750**  |   8,059,723
-  build/silesia/xml     |   5,345,280   |   1,681,687      |   1,672,710      |   **1,586,985**  |   1,665,179
+  enwik8                |   100,000,000 |   **51,635,633** |   51,252,113 |   56,205,166     |   56,110,394
+  build/silesia/dickens |   10,192,446  |   **5,546,761**  |   5,511,604  |   6,049,169      |   6,155,768
+  build/silesia/mozilla |   51,220,480  |   25,121,385     |   24,936,067 |   **25,104,966** |   25,435,908
+  build/silesia/mr      |   9,970,564   |   5,027,032      |   4,886,272      |   **4,864,734**  |   5,442,180
+  build/silesia/nci     |   33,553,445  |   8,643,610      |   8,645,299      |   **5,765,521**  |   8,247,487
+  build/silesia/ooffice |   6,152,192   |   **3,814,938**  |   3,798,261  |   4,077,277      |   3,994,589
+  build/silesia/osdb    |   10,085,684  |   **8,520,835**  |   8,506,443  |   8,625,159      |   8,747,527
+  build/silesia/reymont |   6,627,202   |   **2,847,981**  |   2,820,870  |   2,897,661      |   2,910,251
+  build/silesia/samba   |   21,606,400  |   9,102,594      |   9,060,692      |   **8,862,423**  |   9,223,827
+  build/silesia/sao     |   7,251,944   |   **6,137,755**  |   6,101,744  |   6,506,417      |   6,400,926
+  build/silesia/webster |   41,458,703  |   **18,694,172** |   18,567,288 |   20,212,235     |   19,942,817
+  build/silesia/x-ray   |   8,474,240   |   7,510,606      |   7,405,814      |   **7,351,750**  |   8,059,723
+  build/silesia/xml     |   5,345,280   |   1,681,687      |   1,672,660      |   **1,586,985**  |   1,665,179
 
 Tamp usually out-performs heatshrink, and is generally very competitive with zlib. While trying to be an apples-to-apples comparison, zlib still uses significantly more memory during both compression and decompression (see next section). Tamp accomplishes competitive performance while using around 10x less memory.
 
 LazyMatching is a simple technique requiring very little code that increases CPU utilization (without increasing memory usage beyond a few bytes) to generally produce slightly higher compression ratios.
-One can expect ~50% more CPU usage for modest gains (around 0.5 - 2.0%).
+One can expect 50-75% more CPU usage for modest gains (around 0.5 - 2.0%).
 Because of this poor trade-off, it is disabled by default; however, in applications where we want to compress once on a powerful machine (like a desktop/server) and decompress on an embedded device, it may be worth it to spend a bit more compute.
 
 One might wonder "Why did Tamp perform so much worse than zlib on the nci dataset?"
