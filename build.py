@@ -19,7 +19,7 @@ def build_cython_extensions():
     define_macros = []
 
     # Enable lazy matching for testing
-    define_macros.append(("TAMP_LAZY_MATCHING", os.environ.get("TAMP_LAZY_MATCHING", "1")))
+    define_macros.append(("TAMP_LAZY_MATCHING", "1"))
 
     if profile:
         print("Setting profiling configuration.")
