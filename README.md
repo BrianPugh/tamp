@@ -223,21 +223,21 @@ All of these are LZ-based compression algorithms, and tests were performed using
 
 The following table shows compression algorithm performance over a variety of input data sourced from the [Silesia Corpus](https://sun.aei.polsl.pl//~sdeor/index.php?page=silesia) and [Enwik8](https://mattmahoney.net/dc/textdata.html). This should give a general idea of how these algorithms perform over a variety of input data types.
 
-  dataset               |   raw         |   tamp           |   zlib           |   heatshrink
------------------------ | ------------- | ---------------- | ---------------- | ------------
-  enwik8                |   100,000,000 |   **51,256,171** |   56,205,166     |   56,110,394
-  build/silesia/dickens |   10,192,446  |   **5,512,282**  |   6,049,169      |   6,155,768
-  build/silesia/mozilla |   51,220,480  |   **24,936,593** |   25,104,966     |   25,435,908
-  build/silesia/mr      |   9,970,564   |   4,888,476  |   **4,864,734**      |   5,442,180
-  build/silesia/nci     |   33,553,445  |   8,656,945      |   **5,765,521**  |   8,247,487
-  build/silesia/ooffice |   6,152,192   |   **3,798,251**  |   4,077,277      |   3,994,589
-  build/silesia/osdb    |   10,085,684  |   **8,506,743**  |   8,625,159      |   8,747,527
-  build/silesia/reymont |   6,627,202   |   **2,821,651**  |   2,897,661      |   2,910,251
-  build/silesia/samba   |   21,606,400  |   9,062,443  |   **8,862,423**      |   9,223,827
-  build/silesia/sao     |   7,251,944   |   **6,101,742**  |   6,506,417      |   6,400,926
-  build/silesia/webster |   41,458,703  |   **18,573,358** |   20,212,235     |   19,942,817
-  build/silesia/x-ray   |   8,474,240   |   7,405,850      |   **7,351,750**  |   8,059,723
-  build/silesia/xml     |   5,345,280   |   1,673,536      |   **1,586,985**  |   1,665,179
+  dataset               |   raw         |   tamp           |   tamp (LazyMatching)           |   zlib           |   heatshrink
+----------------------- | ------------- | ---------------- | ---------------- | ---------------- | ------------
+  enwik8                |   100,000,000 |   **51,635,633** |   **51,256,171** |   56,205,166     |   56,110,394
+  build/silesia/dickens |   10,192,446  |   **5,546,761**  |   **5,512,282**  |   6,049,169      |   6,155,768
+  build/silesia/mozilla |   51,220,480  |   25,121,385     |   **24,936,593** |   **25,104,966** |   25,435,908
+  build/silesia/mr      |   9,970,564   |   5,027,032      |   4,888,476      |   **4,864,734**  |   5,442,180
+  build/silesia/nci     |   33,553,445  |   8,643,610      |   8,656,945      |   **5,765,521**  |   8,247,487
+  build/silesia/ooffice |   6,152,192   |   **3,814,938**  |   **3,798,251**  |   4,077,277      |   3,994,589
+  build/silesia/osdb    |   10,085,684  |   **8,520,835**  |   **8,506,743**  |   8,625,159      |   8,747,527
+  build/silesia/reymont |   6,627,202   |   **2,847,981**  |   **2,821,651**  |   2,897,661      |   2,910,251
+  build/silesia/samba   |   21,606,400  |   9,102,594      |   9,062,443      |   **8,862,423**  |   9,223,827
+  build/silesia/sao     |   7,251,944   |   **6,137,755**  |   **6,101,742**  |   6,506,417      |   6,400,926
+  build/silesia/webster |   41,458,703  |   **18,694,172** |   **18,573,358** |   20,212,235     |   19,942,817
+  build/silesia/x-ray   |   8,474,240   |   7,510,606      |   7,405,850      |   **7,351,750**  |   8,059,723
+  build/silesia/xml     |   5,345,280   |   1,681,687      |   1,673,536      |   **1,586,985**  |   1,665,179
 
 Tamp usually out-performs heatshrink, and is generally very competitive with zlib. While trying to be an apples-to-apples comparison, zlib still uses significantly more memory during both compression and decompression (see next section). Tamp accomplishes competitive performance while using around 10x less memory.
 
