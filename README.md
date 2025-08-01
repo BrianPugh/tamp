@@ -241,9 +241,10 @@ The following table shows compression algorithm performance over a variety of in
 
 Tamp usually out-performs heatshrink, and is generally very competitive with zlib. While trying to be an apples-to-apples comparison, zlib still uses significantly more memory during both compression and decompression (see next section). Tamp accomplishes competitive performance while using around 10x less memory.
 
-LazyMatching is a simple technique requiring very little code that increases CPU utilization (without increasing memory usage beyond a few bytes) to generally produce slightly higher compression ratios.
-One can expect 50-75% more CPU usage for modest gains (around 0.5 - 2.0%).
+Lazy Matching is a simple technique to improve compression ratios at the expense of CPU while requiring very little code.
+One can expect **50-75%** more CPU usage for modest compression gains (around 0.5 - 2.0%).
 Because of this poor trade-off, it is disabled by default; however, in applications where we want to compress once on a powerful machine (like a desktop/server) and decompress on an embedded device, it may be worth it to spend a bit more compute.
+Lazy matched compressed data is the exact same format; it appears no different to the tamp decoder.
 
 One might wonder "Why did Tamp perform so much worse than zlib on the nci dataset?"
 The `nci` dataset contains highly compressible data with **long patterns**. For example, the following 49-character **text** appears repeatedly in the dataset:

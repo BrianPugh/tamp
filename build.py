@@ -18,7 +18,6 @@ def build_cython_extensions():
 
     define_macros = []
 
-    # Enable lazy matching for testing
     define_macros.append(("TAMP_LAZY_MATCHING", "1"))
 
     if profile:
