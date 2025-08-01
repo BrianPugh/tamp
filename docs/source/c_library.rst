@@ -58,13 +58,36 @@ The size of the provided buffer must be the same size as described by ``conf.win
       /* To improve compression ratios for very short messages, a custom
       buffer initialization could be used.
       For most use-cases, set this to false.*/
-      .use_custom_dictionary = false
+      .use_custom_dictionary = false,
+
+      /* Enable lazy matching to slightly improve compression (0.5-2.0%) ratios
+      at the cost of 50-75% slower compression.
+
+      Most embedded systems will **not** want to use this feature and disable it.
+
+      To use, `-DTAMP_LAZY_MATCHING=1` must be set during compilation to be able to use this feature.
+      */
+      .lazy_matching = false
    };
    TampCompressor compressor;
    tamp_compressor_init(&compressor, &conf, window_buffer);
 
    // TODO: use the initialized compressor object
 
+
+Lazy Matching
+-------------
+Lazy matching is a compression optimization that can slightly improve compression ratios at the cost of slower compression speed.
+To compile the library with lazy matching support, define the ``TAMP_LAZY_MATCHING`` macro to ``1`` during compilation:
+
+.. code-block:: c
+
+   #define TAMP_LAZY_MATCHING 1
+   #include "tamp/compressor.h"
+
+Alternatively, use the compiler flag ``-DTAMP_LAZY_MATCHING=1``.
+
+When compiled with ``TAMP_LAZY_MATCHING=1``, the ``TampConf.lazy_matching`` field becomes available and can be set to enable this feature for individual compressor instances.
 
 Compression
 -----------

@@ -92,6 +92,7 @@ class Compressor:
         window: int = 10,
         literal: int = 8,
         dictionary: Optional[bytearray] = None,
+        lazy_matching: bool = False,
     ):
         """
         Parameters
@@ -116,7 +117,12 @@ class Compressor:
             ``window`` must agree with the dictionary size.
             If providing a pre-allocated buffer, but with default initialization, it must
             first be initialized with :func:`~tamp.initialize_dictionary`
+        lazy_matching: bool
+            Use roughly 50% more cpu to get 0~2% better compression.
         """
+        if lazy_matching:
+            raise NotImplementedError("lazy matching not implemented in pure python implementation.")
+
         if not hasattr(f, "write"):  # It's probably a path-like object.
             # TODO: then close it on close
             f = open(str(f), "wb")
@@ -284,6 +290,7 @@ def compress(
     window: int = 10,
     literal: int = 8,
     dictionary: Optional[bytearray] = None,
+    lazy_matching: bool = False,
 ) -> bytes:
     """Single-call to compress data.
 
@@ -308,7 +315,8 @@ def compress(
         ``window`` must agree with the dictionary size.
         If providing a pre-allocated buffer, but with default initialization, it must
         first be initialized with :func:`~tamp.initialize_dictionary`
-
+    lazy_matching: bool
+        Use roughly 50% more cpu to get 0~2% better compression.
 
     Returns
     -------
@@ -317,10 +325,22 @@ def compress(
     """
     with BytesIO() as f:
         if isinstance(data, str):
-            c = TextCompressor(f, window=window, literal=literal, dictionary=dictionary)
+            c = TextCompressor(
+                f,
+                window=window,
+                literal=literal,
+                dictionary=dictionary,
+                lazy_matching=lazy_matching,
+            )
             c.write(data)
         else:
-            c = Compressor(f, window=window, literal=literal, dictionary=dictionary)
+            c = Compressor(
+                f,
+                window=window,
+                literal=literal,
+                dictionary=dictionary,
+                lazy_matching=lazy_matching,
+            )
             c.write(data)
         c.flush(write_token=False)
         f.seek(0)

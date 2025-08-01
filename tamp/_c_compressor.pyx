@@ -34,6 +34,7 @@ cdef class Compressor:
         int window=10,
         int literal=8,
         dictionary=None,
+        bool lazy_matching=False,
     ):
         cdef ctamp.TampConf conf
 
@@ -51,6 +52,9 @@ cdef class Compressor:
         conf.window = window
         conf.literal = literal
         conf.use_custom_dictionary = builtins.bool(dictionary)
+        # Set lazy_matching - this field is conditionally compiled based on TAMP_LAZY_MATCHING
+        # The build system defines this macro, so the field should be available
+        conf.lazy_matching = lazy_matching
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer

@@ -43,6 +43,7 @@ def compress(
             validator=validators.Number(gte=5, lte=8),
         ),
     ] = 8,
+    lazy_matching: bool = False,
 ):
     """Compress an input file or stream.
 
@@ -56,12 +57,15 @@ def compress(
         Number of bits used to represent the dictionary window.
     literal: int
         Number of bits used to represent a literal.
+    lazy_matching: bool
+        Use roughly 50% more cpu to get 0~2% better compression.
     """
     input_bytes = read(input_)
     output_bytes = tamp.compress(
         input_bytes,
         window=window,
         literal=literal,
+        lazy_matching=lazy_matching,
     )
     write(output, output_bytes)
 

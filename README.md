@@ -223,23 +223,39 @@ All of these are LZ-based compression algorithms, and tests were performed using
 
 The following table shows compression algorithm performance over a variety of input data sourced from the [Silesia Corpus](https://sun.aei.polsl.pl//~sdeor/index.php?page=silesia) and [Enwik8](https://mattmahoney.net/dc/textdata.html). This should give a general idea of how these algorithms perform over a variety of input data types.
 
-  dataset               |   raw         |   tamp           |   zlib           |   heatshrink
------------------------ | ------------- | ---------------- | ---------------- | ------------
-  enwik8                |   100,000,000 |   **51,635,633** |   56,205,166     |   56,110,394
-  build/silesia/dickens |   10,192,446  |   **5,546,761**  |   6,049,169      |   6,155,768
-  build/silesia/mozilla |   51,220,480  |   25,121,385     |   **25,104,966** |   25,435,908
-  build/silesia/mr      |   9,970,564   |   5,027,032      |   **4,864,734**  |   5,442,180
-  build/silesia/nci     |   33,553,445  |   8,643,610      |   **5,765,521**  |   8,247,487
-  build/silesia/ooffice |   6,152,192   |   **3,814,938**  |   4,077,277      |   3,994,589
-  build/silesia/osdb    |   10,085,684  |   **8,520,835**  |   8,625,159      |   8,747,527
-  build/silesia/reymont |   6,627,202   |   **2,847,981**  |   2,897,661      |   2,910,251
-  build/silesia/samba   |   21,606,400  |   9,102,594      |   **8,862,423**  |   9,223,827
-  build/silesia/sao     |   7,251,944   |   **6,137,755**  |   6,506,417      |   6,400,926
-  build/silesia/webster |   41,458,703  |   **18,694,172** |   20,212,235     |   19,942,817
-  build/silesia/x-ray   |   8,474,240   |   7,510,606      |   **7,351,750**  |   8,059,723
-  build/silesia/xml     |   5,345,280   |   1,681,687      |   **1,586,985**  |   1,665,179
+  dataset               |   raw         |   tamp           |   tamp (LazyMatching) |   zlib           |   heatshrink
+----------------------- | ------------- | ---------------- | --------------------- | ---------------- | ------------
+  enwik8                |   100,000,000 |   **51,635,633** |   51,252,113          |   56,205,166     |   56,110,394
+  build/silesia/dickens |   10,192,446  |   **5,546,761**  |   5,511,604           |   6,049,169      |   6,155,768
+  build/silesia/mozilla |   51,220,480  |   25,121,385     |   24,936,067          |   **25,104,966** |   25,435,908
+  build/silesia/mr      |   9,970,564   |   5,027,032      |   4,886,272           |   **4,864,734**  |   5,442,180
+  build/silesia/nci     |   33,553,445  |   8,643,610      |   8,645,299           |   **5,765,521**  |   8,247,487
+  build/silesia/ooffice |   6,152,192   |   **3,814,938**  |   3,798,261           |   4,077,277      |   3,994,589
+  build/silesia/osdb    |   10,085,684  |   **8,520,835**  |   8,506,443           |   8,625,159      |   8,747,527
+  build/silesia/reymont |   6,627,202   |   **2,847,981**  |   2,820,870           |   2,897,661      |   2,910,251
+  build/silesia/samba   |   21,606,400  |   9,102,594      |   9,060,692           |   **8,862,423**  |   9,223,827
+  build/silesia/sao     |   7,251,944   |   **6,137,755**  |   6,101,744           |   6,506,417      |   6,400,926
+  build/silesia/webster |   41,458,703  |   **18,694,172** |   18,567,288          |   20,212,235     |   19,942,817
+  build/silesia/x-ray   |   8,474,240   |   7,510,606      |   7,405,814           |   **7,351,750**  |   8,059,723
+  build/silesia/xml     |   5,345,280   |   1,681,687      |   1,672,660           |   **1,586,985**  |   1,665,179
 
 Tamp usually out-performs heatshrink, and is generally very competitive with zlib. While trying to be an apples-to-apples comparison, zlib still uses significantly more memory during both compression and decompression (see next section). Tamp accomplishes competitive performance while using around 10x less memory.
+
+Lazy Matching is a simple technique to improve compression ratios at the expense of CPU while requiring very little code.
+One can expect **50-75%** more CPU usage for modest compression gains (around 0.5 - 2.0%).
+Because of this poor trade-off, it is disabled by default; however, in applications where we want to compress once on a powerful machine (like a desktop/server) and decompress on an embedded device, it may be worth it to spend a bit more compute.
+Lazy matched compressed data is the exact same format; it appears no different to the tamp decoder.
+
+One might wonder "Why did Tamp perform so much worse than zlib on the nci dataset?"
+The `nci` dataset contains highly compressible data with **long patterns**. For example, the following 49-character **text** appears repeatedly in the dataset:
+
+```
+    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+```
+
+Tamp's maximum pattern length peaks at around 15 characters, meaning that these 49 characters has to be compressed as 4 pattern-matches.
+Zlib can handle patterns with a maximum length of 258, meaning that it can encode this highly repeating data more efficiently.
+Given Tamp's excellent performance in most of the other data compression benchmark files, this is a good tradeoff for most real-world scenarios.
 
 ## Memory Usage
 

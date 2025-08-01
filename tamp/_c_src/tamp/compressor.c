@@ -60,8 +60,8 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
     const uint16_t first_second = (read_input(0) << 8) | read_input(1);
     const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
+
     uint16_t window_rolling_2_byte = compressor->window[0];
-    unsigned char c;
 
     for (uint16_t window_index = 0; window_index < window_size_minus_1; window_index++) {
         window_rolling_2_byte <<= 8;
@@ -70,25 +70,53 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
             continue;
         }
 
-        for (uint8_t input_offset = 2;; input_offset++) {
-            if (TAMP_UNLIKELY(input_offset > *match_size)) {
-                *match_size = input_offset;
-                *match_index = window_index;
-                if (TAMP_UNLIKELY(*match_size == max_pattern_size)) return;
-            }
+        // Found 2-byte match, now extend the match
+        uint8_t match_len = 2;
 
-            if (TAMP_UNLIKELY(window_index + input_offset > window_size_minus_1)) return;
+        // Extend match byte by byte with optimized bounds checking
+        for (uint8_t i = 2; i < max_pattern_size; i++) {
+            if (TAMP_UNLIKELY((window_index + i) > window_size_minus_1)) break;
 
-            c = read_input(input_offset);
-            if (TAMP_LIKELY(compressor->window[window_index + input_offset] != c)) break;
+            if (TAMP_LIKELY(compressor->window[window_index + i] != read_input(i))) break;
+            match_len = i + 1;
+        }
+
+        // Update best match if this is better
+        if (TAMP_UNLIKELY(match_len > *match_size)) {
+            *match_size = match_len;
+            *match_index = window_index;
+            // Early termination if we found the maximum possible match
+            if (TAMP_UNLIKELY(*match_size == max_pattern_size)) return;
         }
     }
 }
 
 #endif
 
+#if TAMP_LAZY_MATCHING
+/**
+ * @brief Check if writing a single byte will overlap with a future match section.
+ *
+ * @param[in] write_pos Position where the single byte will be written.
+ * @param[in] match_index Index in window where the match starts.
+ * @param[in] match_size Size of the match to validate.
+ * @return true if no overlap (match is safe), false if there's overlap.
+ */
+static inline bool validate_no_match_overlap(uint16_t write_pos, uint16_t match_index, uint8_t match_size) {
+    // Check if write position falls within the match range [match_index, match_index + match_size - 1]
+    return write_pos < match_index || write_pos >= match_index + match_size;
+}
+#endif
+
 tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window) {
-    const TampConf conf_default = {.window = 10, .literal = 8, .use_custom_dictionary = false};
+    const TampConf conf_default = {
+        .window = 10,
+        .literal = 8,
+        .use_custom_dictionary = false,
+#if TAMP_LAZY_MATCHING
+        .lazy_matching = false,
+#endif
+    };
     if (!conf) conf = &conf_default;
     if (conf->window < 8 || conf->window > 15) return TAMP_INVALID_CONF;
     if (conf->literal < 5 || conf->literal > 8) return TAMP_INVALID_CONF;
@@ -99,9 +127,16 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->conf_literal = conf->literal;
     compressor->conf_window = conf->window;
     compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
+#if TAMP_LAZY_MATCHING
+    compressor->conf_lazy_matching = conf->lazy_matching;
+#endif
 
     compressor->window = window;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
+
+#if TAMP_LAZY_MATCHING
+    compressor->cached_match_index = -1;  // Initialize cache as invalid
+#endif
 
     if (!compressor->conf_use_custom_dictionary) tamp_initialize_dictionary(window, (1 << conf->window));
 
@@ -140,21 +175,92 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
 
     uint8_t match_size = 0;
     uint16_t match_index = 0;
-    find_best_match(compressor, &match_index, &match_size);
 
-    if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
-        // Write LITERAL
-        match_size = 1;
-        unsigned char c = read_input(0);
-        if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
-            return TAMP_EXCESS_BITS;
+#if TAMP_LAZY_MATCHING
+    if (compressor->conf_lazy_matching) {
+        // Check if we have a cached match from lazy matching
+        if (TAMP_UNLIKELY(compressor->cached_match_index >= 0)) {
+            match_index = compressor->cached_match_index;
+            match_size = compressor->cached_match_size;
+            compressor->cached_match_index = -1;  // Clear cache after using
+        } else {
+            find_best_match(compressor, &match_index, &match_size);
         }
-        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
     } else {
-        // Write TOKEN
-        uint8_t huffman_index = match_size - compressor->min_pattern_size;
-        write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-        write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+        find_best_match(compressor, &match_index, &match_size);
+    }
+#else
+    find_best_match(compressor, &match_index, &match_size);
+#endif
+
+#if TAMP_LAZY_MATCHING
+    if (compressor->conf_lazy_matching) {
+        // Lazy matching: if we have a good match, check if position i+1 has a better match
+        if (match_size >= compressor->min_pattern_size && match_size <= 8 && compressor->input_size > match_size + 2) {
+            // Temporarily advance input position to check next position
+            compressor->input_pos = input_add(1);
+            compressor->input_size--;
+
+            uint8_t next_match_size = 0;
+            uint16_t next_match_index = 0;
+            find_best_match(compressor, &next_match_index, &next_match_size);
+
+            // Restore input position
+            compressor->input_pos = input_add(-1);
+            compressor->input_size++;
+
+            // If next position has a better match, and the match doesn't overlap with the literal we are writing, emit
+            // literal and cache the next match
+            if (next_match_size > match_size &&
+                validate_no_match_overlap(compressor->window_pos, next_match_index, next_match_size)) {
+                // Write LITERAL at current position
+                match_size = 1;
+                unsigned char c = read_input(0);
+                if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
+                    return TAMP_EXCESS_BITS;
+                }
+                write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+            } else {
+                // Use current match, clear cache
+                compressor->cached_match_index = -1;
+                uint8_t huffman_index = match_size - compressor->min_pattern_size;
+                write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+            }
+        } else if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
+            // Write LITERAL
+            compressor->cached_match_index = -1;  // Clear cache
+            match_size = 1;
+            unsigned char c = read_input(0);
+            if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
+                return TAMP_EXCESS_BITS;
+            }
+            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+        } else {
+            // Write TOKEN
+            compressor->cached_match_index = -1;  // Clear cache
+            uint8_t huffman_index = match_size - compressor->min_pattern_size;
+            write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+            write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+        }
+    } else
+#endif
+    {
+        // Non-lazy matching path
+        if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
+            // Write LITERAL
+            match_size = 1;
+            unsigned char c = read_input(0);
+            if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
+                return TAMP_EXCESS_BITS;
+            }
+            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+        } else {
+            // Write TOKEN
+            uint8_t huffman_index = match_size - compressor->min_pattern_size;
+            write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+            write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+        }
     }
     // Populate Window
     for (uint8_t i = 0; i < match_size; i++) {
