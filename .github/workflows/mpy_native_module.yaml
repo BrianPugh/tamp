@@ -173,7 +173,7 @@ jobs:
           make ARCH=$ARCH
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
-            belay run micropython -X heapsize=200M -m unittest tests/test_*.py
+            poetry run belay run micropython -X heapsize=200M -m unittest tests/test_*.py
             rm tamp_native.mpy
           fi
           mv tamp.mpy tamp-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
@@ -184,7 +184,7 @@ jobs:
           make ARCH=$ARCH TAMP_DECOMPRESSOR=0
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
-            belay run micropython -X heapsize=200M -m unittest tests/test_compressor.py
+            poetry run belay run micropython -X heapsize=200M -m unittest tests/test_compressor.py
             rm tamp_native.mpy
           fi
           mv tamp.mpy tamp[compressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
@@ -195,7 +195,7 @@ jobs:
           make ARCH=$ARCH TAMP_COMPRESSOR=0
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
-            belay run micropython -X heapsize=200M -m unittest tests/test_decompressor.py
+            poetry run belay run micropython -X heapsize=200M -m unittest tests/test_decompressor.py
             rm tamp_native.mpy
           fi
           mv tamp.mpy tamp[decompressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
