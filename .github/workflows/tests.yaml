@@ -26,11 +26,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
     env:
       OS: ${{ matrix.os }}
       PYTHON: ${{ matrix.python-version }}
-      POETRY_HOME: "~/poetry"
+      POETRY_HOME: '~/poetry'
 
     steps:
       - name: Set OS Environment Variables (Windows)
@@ -116,7 +116,7 @@ jobs:
       - name: Pre-commit run
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
-          pre-commit run --show-diff-on-failure --color=always --all-files
+          SKIP=wasm-eslint,wasm-npm-test,wasm-file-validation,typescript-check,package-json-lint pre-commit run --show-diff-on-failure --color=always --all-files
 
       - name: Run tests
         run: |

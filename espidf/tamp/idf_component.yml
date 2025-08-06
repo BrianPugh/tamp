@@ -1,5 +1,5 @@
 dependencies:
-  idf: ">=4.3"
+  idf: '>=4.3'
 description: Tamp is a low-memory, DEFLATE-inspired lossless compression library.
 documentation: https://tamp.readthedocs.io/en/latest/c_library.html
 license: Apache-2.0

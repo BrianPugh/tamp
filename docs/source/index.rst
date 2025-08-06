@@ -14,3 +14,4 @@ Tamp
    specification
    python_api
    c_library
+   javascript

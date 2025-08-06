@@ -142,9 +142,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
  *
  * @return true if the compressor is full, false otherwise.
  */
-TAMP_ALWAYS_INLINE bool tamp_compressor_full(TampCompressor *compressor) {
-    return compressor->input_size == sizeof(compressor->input);
-}
+bool tamp_compressor_full(TampCompressor *compressor);
 
 /**
  * @brief Completely flush the internal bit buffer. Makes output "complete".

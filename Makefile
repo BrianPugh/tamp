@@ -175,6 +175,23 @@ build/test_runner: $(TAMP_OBJS) $(CTEST_OBJS)
 c-test: build/test_runner
 	./build/test_runner
 
+##########
+# Website #
+##########
+
+# Build the website for deployment
+website-build:
+	cd website && npm install && npm run build
+
+# Serve website locally for development
+website-serve:
+	cd website && npm install && npm run serve
+
+# Clean website build artifacts
+website-clean:
+	rm -rf build/pages-deploy
+	rm -rf website/node_modules website/package-lock.json
+
 #############
 # C Library #
 #############

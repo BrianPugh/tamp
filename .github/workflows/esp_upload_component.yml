@@ -5,7 +5,7 @@ on:
   pull_request:
   push:
     tags:
-      - "v*.*.*"
+      - 'v*.*.*'
 
 jobs:
   upload_components:
@@ -18,7 +18,7 @@ jobs:
       - name: Set up python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install compote
         run: |
