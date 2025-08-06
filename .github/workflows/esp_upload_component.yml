@@ -41,7 +41,7 @@ jobs:
 
       - name: Publish to ESP Component Registry
         if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
-        working-directory: ./espidf
+        working-directory: ./espidf/tamp
         env:
           IDF_COMPONENT_API_TOKEN: ${{ secrets.ESP_IDF_COMPONENT_API_TOKEN }}
         run: |
