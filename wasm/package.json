@@ -1,0 +1,78 @@
+{
+  "name": "@brianpugh/tamp",
+  "version": "0.0.0",
+  "description": "Tamp compression library for JavaScript/TypeScript using WebAssembly",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./streams": {
+      "types": "./dist/streams.d.ts",
+      "import": "./dist/streams.mjs",
+      "require": "./dist/streams.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "make all && npm run build:js",
+    "build:js": "node scripts/build.js",
+    "build:minified": "make all && npm run build:js -- --minify",
+    "build:debug": "make debug && npm run build:js",
+    "clean": "make clean && rm -rf dist",
+    "test": "node --test test/*.js",
+    "test:integration": "node --test test/integration-test.js",
+    "test:basic": "node --test test/basic-test.js",
+    "test:enwik8": "node compress-enwik8.js",
+    "test:enwik8-oneshot": "node compress-enwik8-oneshot.js",
+    "test:enwik8-decompress": "node decompress-enwik8-oneshot.js",
+    "format": "prettier --write src/ test/ scripts/ *.md *.json",
+    "lint": "eslint src/ test/ --fix",
+    "format-and-lint": "npm run format && npm run lint",
+    "type-check": "tsc --noEmit --skipLibCheck src/*.d.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "compression",
+    "deflate",
+    "lossless",
+    "embedded",
+    "webassembly",
+    "wasm",
+    "tamp",
+    "javascript",
+    "typescript"
+  ],
+  "author": "Brian Pugh",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BrianPugh/tamp.git",
+    "directory": "wasm"
+  },
+  "bugs": {
+    "url": "https://github.com/BrianPugh/tamp/issues"
+  },
+  "homepage": "https://tamp.readthedocs.io/",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.57.0",
+    "html-minifier-terser": "^7.2.0",
+    "prettier": "^3.1.0",
+    "terser": "^5.24.0",
+    "typescript": "^5.0.0"
+  }
+}

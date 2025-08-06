@@ -42,6 +42,10 @@ static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *
     return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
 
+inline bool tamp_compressor_full(TampCompressor *compressor) {
+    return compressor->input_size == sizeof(compressor->input);
+}
+
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size);
 #else

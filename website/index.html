@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tamp</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icon-transparent-bg-32x32.png">
+    
+    <!-- Preload WASM resources for faster loading -->
+    <link rel="modulepreload" href="wasm/dist/index.mjs">
+    <link rel="preload" href="wasm/dist/tamp-module.wasm" as="fetch" type="application/wasm" crossorigin>
+    
+    <!-- Critical CSS to prevent FOUC -->
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #fff;
+            color: #333;
+            padding: 1.5rem;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .show {
+            display: block;
+        }
+        
+        /* Critical button styles to prevent layout shift */
+        button, .btn {
+            padding: 0.75rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            background: #333;
+            color: white;
+            width: 100%;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        /* Critical layout structure */
+        .toggle {
+            display: flex;
+            margin-bottom: 1.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .toggle-btn {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            background: #f8f9fa;
+            color: #333;
+            cursor: pointer;
+            width: auto;
+        }
+        
+        .toggle-btn.active {
+            background: #333;
+            color: white;
+        }
+        
+        /* Critical drop zone */
+        .drop-zone {
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .browse-btn {
+            background: #333;
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+    
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+        <a href="https://github.com/BrianPugh/tamp" target="_blank" rel="noopener noreferrer" style="display: inline-block;">
+            <img src="" alt="Tamp Logo" width="300" style="margin-bottom: 0.75rem; cursor: pointer;">
+        </a>
+        <p style="color: #666;">Drag & drop files to locally compress & decompress data using Tamp.</p>
+    </div>
+    
+    <div class="toggle">
+        <button class="toggle-btn active" id="compressToggle" onclick="setOperation('compress')">
+            Compress
+        </button>
+        <button class="toggle-btn" id="decompressToggle" onclick="setOperation('decompress')">
+            Decompress
+        </button>
+        <button class="toggle-btn" id="textToggle" onclick="setOperation('text')">
+            Text
+        </button>
+    </div>
+
+    <div class="options show" id="compressionOptions">
+        <h3 style="margin-bottom: 0.75rem; font-weight: 500; color: #333;">Configuration</h3>
+        <div class="option-group inline">
+            <div style="display: flex; align-items: center; gap: 2rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label class="option-label" for="windowBits" style="margin-bottom: 0;">Window Bits:</label>
+                    <div class="help-tooltip">
+                        <span class="help-icon">?</span>
+                        <div class="tooltip-content">
+                            Controls the sliding window size (2^n bytes). Larger values typically provide better compression, but use more memory during compression & decompression. Range: 8-15 bits (256B-32KB window).
+                        </div>
+                    </div>
+                    <select class="option-select narrow" id="windowBits">
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10" selected>10 (default)</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                        <option value="13">13</option>
+                        <option value="14">14</option>
+                        <option value="15">15</option>
+                    </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" class="option-checkbox" id="lazyMatching">
+                    <label class="checkbox-label" for="lazyMatching" style="margin: 0;">Lazy Matching</label>
+                    <div class="help-tooltip">
+                        <span class="help-icon">?</span>
+                        <div class="tooltip-content">
+                            Improves compression ratio by looking ahead for better matches, but uses more CPU time during compression.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-mode hidden" id="textMode">
+        <div class="options show">
+            <h3 style="margin-bottom: 0.75rem; font-weight: 500; color: #333;">Configuration</h3>
+            <div class="option-group inline">
+                <div style="display: flex; align-items: center; gap: 2rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <label class="option-label" for="textWindowBits" style="margin-bottom: 0;">Window Bits:</label>
+                        <div class="help-tooltip">
+                            <span class="help-icon">?</span>
+                            <div class="tooltip-content">
+                                Controls the sliding window size (2^n bytes). Larger values provide better compression but use more memory. Range: 8-15 bits (256B-32KB window).
+                            </div>
+                        </div>
+                        <select class="option-select narrow" id="textWindowBits">
+                            <option value="8">8</option>
+                            <option value="9">9</option>
+                            <option value="10" selected>10 (default)</option>
+                            <option value="11">11</option>
+                            <option value="12">12</option>
+                            <option value="13">13</option>
+                            <option value="14">14</option>
+                            <option value="15">15</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" class="option-checkbox" id="textLazyMatching">
+                        <label class="checkbox-label" for="textLazyMatching" style="margin: 0;">Lazy Matching</label>
+                        <div class="help-tooltip">
+                            <span class="help-icon">?</span>
+                            <div class="tooltip-content">
+                                Improves compression ratio by looking ahead for better matches, but uses more CPU time during compression.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="option-group">
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <button type="button" class="toggle-dictionary-btn" id="toggleDictionaryBtn" onclick="toggleCustomDictionary()">
+                        + Use Custom Dictionary
+                    </button>
+                    <div class="help-tooltip">
+                        <span class="help-icon">?</span>
+                        <div class="tooltip-content">
+                            Optional text dictionary to initialize the compression window. Placing common phrases here will bootstrap the compression process, improving initial compression and significantly improve compression of short messages. The dictionary will be left-padded using Tamp's window initialization algorithm to reach the window size. Dictionary must not exceed the window size. Dictionary must be externally transferred/supplied for decompression.
+                        </div>
+                    </div>
+                </div>
+                <div class="custom-dictionary-section hidden" id="customDictionarySection">
+                    <label class="option-label" for="customDictionary">Custom Dictionary:</label>
+                    <textarea class="option-textarea" id="customDictionary" placeholder="Enter custom dictionary text..." rows="3"></textarea>
+                    <div class="dictionary-error hidden" id="dictionaryError" style="color: #d32f2f; font-size: 0.875rem; margin-top: 0.25rem;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-container">
+            <label class="text-label" for="plainText">Plain Text:</label>
+            <textarea class="text-area" id="plainText" placeholder="Enter text to compress..."></textarea>
+        </div>
+
+        <div class="text-buttons">
+            <button class="btn text-btn" id="compressTextBtn" onclick="compressTextContent()">Compress ↓</button>
+            <button class="btn text-btn" id="decompressTextBtn" onclick="decompressTextContent()">Decompress ↑</button>
+        </div>
+
+        <div class="text-container">
+            <label class="text-label" for="compressedText">Compressed Data (Base64):</label>
+            <textarea class="text-area" id="compressedText" placeholder="Compressed data will appear here..."></textarea>
+        </div>
+
+        <div class="text-stats hidden" id="textStats">
+            <h4 id="textStatsTitle">Statistics</h4>
+            <div id="textStatsContent"></div>
+        </div>
+    </div>
+
+    <div class="drop-zone" id="dropZone">
+        <div class="drop-text" id="dropText">Drop files here</div>
+        <input type="file" class="file-input" id="fileInput" multiple>
+        <button class="browse-btn">Browse</button>
+    </div>
+
+    <div class="file-info hidden" id="fileInfo">
+        <div class="file-name" id="fileName"></div>
+        <div class="file-size" id="fileSize"></div>
+    </div>
+
+    <button class="btn action-btn" id="actionBtn" onclick="processFiles()" disabled>
+        Compress
+    </button>
+
+    <div class="loading hidden" id="loading">
+        <div>Processing...</div>
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">0%</div>
+        </div>
+    </div>
+
+    <div class="results hidden" id="results">
+        <div class="result-title" id="resultTitle">Results</div>
+        <div class="result-stats" id="resultStats"></div>
+        <button class="btn" id="downloadBtn" onclick="downloadResult()">
+            Download
+        </button>
+    </div>
+
+    <footer class="footer">
+        <a href="https://github.com/BrianPugh/tamp" class="github-link" target="_blank" rel="noopener noreferrer">
+            <svg class="github-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            View on GitHub
+        </a>
+    </footer>
+
+</body>
+</html>

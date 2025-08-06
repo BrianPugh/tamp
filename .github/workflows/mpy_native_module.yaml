@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "v*.*.*"
+      - 'v*.*.*'
     branches:
       - main
   pull_request:
@@ -17,19 +17,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        micropython_version: ["1.21.0", "1.22.2", "1.23.0", "1.24.1", "1.25.0"]
+        micropython_version: ['1.21.0', '1.22.2', '1.23.0', '1.24.1', '1.25.0']
         ARCH:
-          - "x86"
-          - "x64"
-          - "armv6m"
-          - "armv7m"
-          - "armv7emsp"
-          - "armv7emdp"
-          - "xtensa"
-          - "xtensawin"
+          - 'x86'
+          - 'x64'
+          - 'armv6m'
+          - 'armv7m'
+          - 'armv7emsp'
+          - 'armv7emdp'
+          - 'xtensa'
+          - 'xtensawin'
     env:
       ARCH: ${{ matrix.ARCH }}
-      POETRY_HOME: "~/poetry"
+      POETRY_HOME: '~/poetry'
 
     steps:
       - name: Check out repository
@@ -46,7 +46,7 @@ jobs:
         if: env.ARCH != 'xtensa'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install Xtensa dependencies
         if: env.ARCH == 'xtensa'
@@ -147,8 +147,8 @@ jobs:
       - name: Configure Poetry # Needs to be separate from install-poetry because cache.
         run: |
           poetry self add "poetry-dynamic-versioning[plugin]"
-          poetry config virtualenvs.create false
-          poetry config virtualenvs.in-project false
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
 
       - name: Get Tag or Commit Hash
         run: |
@@ -205,7 +205,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mpy-native-module-tamp-${{ env.VERSION }}-mpy${{ env.MICROPYTHON_VERSION_MAJOR_MINOR }}-${{ env.ARCH }}
-          path: "*.mpy"
+          path: '*.mpy'
 
   release_upload:
     runs-on: ubuntu-latest
@@ -226,7 +226,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mpy-native-module-all
-          path: "mpy-native-modules/*.mpy"
+          path: 'mpy-native-modules/*.mpy'
 
       - name: Release
         uses: softprops/action-gh-release@v2

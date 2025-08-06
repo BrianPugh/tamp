@@ -5,11 +5,11 @@ on:
   pull_request:
   push:
     tags:
-      - "v*.*.*"
+      - 'v*.*.*'
 
 jobs:
   build_sdist:
-    name: "sdist"
+    name: 'sdist'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -17,7 +17,7 @@ jobs:
         os: [ubuntu-latest]
     env:
       PYTHON: 3.12
-      POETRY_HOME: "~/poetry"
+      POETRY_HOME: '~/poetry'
 
     steps:
       - name: Check out repository
@@ -64,23 +64,23 @@ jobs:
           path: dist/*.tar.gz
 
   build_wheels_windows:
-    name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
+    name: '${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest]
-        cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*", "cp312-*"]
-        cibw_archs: ["AMD64", "x86", "ARM64"]
+        cibw_build: ['cp38-*', 'cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
+        cibw_archs: ['AMD64', 'x86', 'ARM64']
         exclude:
           - os: windows-latest
-            cibw_build: "cp38-*"
-            cibw_archs: "ARM64"
+            cibw_build: 'cp38-*'
+            cibw_archs: 'ARM64'
     env:
       PYTHON: 3.12
 
     steps:
-      - name: "Set environment variables (Windows)"
+      - name: 'Set environment variables (Windows)'
         shell: pwsh
         run: |
           (Get-ItemProperty "HKLM:System\CurrentControlSet\Control\FileSystem").LongPathsEnabled
@@ -105,7 +105,7 @@ jobs:
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_SKIP: "*-win_arm64"
+          CIBW_TEST_SKIP: '*-win_arm64'
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest {package}/tests
 
@@ -115,14 +115,14 @@ jobs:
           path: wheelhouse/*.whl
 
   build_wheels_linux:
-    name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
+    name: '${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04]  # TODO: change back to ubuntu-latest; see https://github.com/actions/runner-images/issues/11471
-        cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*", "cp312-*"]
-        cibw_archs: ["x86_64", "i686", "aarch64", "ppc64le"]
+        os: [ubuntu-22.04] # TODO: change back to ubuntu-latest; see https://github.com/actions/runner-images/issues/11471
+        cibw_build: ['cp38-*', 'cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
+        cibw_archs: ['x86_64', 'i686', 'aarch64', 'ppc64le']
     env:
       PYTHON: 3.12
 
@@ -162,14 +162,14 @@ jobs:
           path: wheelhouse/*.whl
 
   build_wheels_macos:
-    name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
+    name: '${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-13] # x86_64 runner
-        cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*", "cp312-*"]
-        cibw_archs: ["x86_64"]
+        cibw_build: ['cp38-*', 'cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
+        cibw_archs: ['x86_64']
     env:
       PYTHON: 3.12
       SYSTEM_VERSION_COMPAT: 0 # https://github.com/actions/setup-python/issues/469#issuecomment-1192522949
@@ -204,13 +204,13 @@ jobs:
           path: wheelhouse/*.whl
 
   build_wheels_macos_arm64:
-    name: "${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}"
+    name: '${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [macos-14] # ARM runner
-        cibw_build: ["cp38-*", "cp39-*", "cp310-*", "cp311-*", "cp312-*"]
-        cibw_archs: ["arm64"]
+        cibw_build: ['cp38-*', 'cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
+        cibw_archs: ['arm64']
     env:
       PYTHON: 3.12
 
@@ -235,7 +235,7 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
-          CIBW_TEST_SKIP: "*-macosx_arm64"
+          CIBW_TEST_SKIP: '*-macosx_arm64'
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest {package}/tests
           CIBW_REPAIR_WHEEL_COMMAND: |
@@ -269,13 +269,7 @@ jobs:
   upload_to_pypi:
     if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     needs:
-      [
-        "build_sdist",
-        "build_wheels_windows",
-        "build_wheels_linux",
-        "build_wheels_macos",
-        "build_wheels_macos_arm64",
-      ]
+      ['build_sdist', 'build_wheels_windows', 'build_wheels_linux', 'build_wheels_macos', 'build_wheels_macos_arm64']
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

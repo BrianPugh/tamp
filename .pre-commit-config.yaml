@@ -1,7 +1,7 @@
-exclude: ^(poetry.lock|.idea/|.belay/)
+exclude: ^(poetry.lock|package-lock.json|.idea/|.belay/)
 repos:
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.0.292"
+    rev: 'v0.0.292'
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -11,11 +11,11 @@ repos:
     hooks:
       - id: black
         args:
-          - "--line-length=120"
-          - "--target-version=py38"
-          - "--target-version=py39"
-          - "--target-version=py310"
-          - "--target-version=py311"
+          - '--line-length=120'
+          - '--target-version=py38'
+          - '--target-version=py39'
+          - '--target-version=py310'
+          - '--target-version=py311'
         types: [python]
 
   - repo: https://github.com/adamchainz/blacken-docs
@@ -41,8 +41,6 @@ repos:
       - id: detect-private-key
       - id: end-of-file-fixer
         exclude: ^LICENSE|\.(html|csv|txt|svg|py)$
-      - id: pretty-format-json
-        args: ["--autofix", "--no-ensure-ascii", "--no-sort-keys"]
       - id: requirements-txt-fixer
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
@@ -59,11 +57,68 @@ repos:
       - id: codespell
         additional_dependencies:
           - tomli
-        exclude: ^(tests/test_decompressor.py)
+        exclude: ^(tests/test_decompressor.py|.*package-lock\.json)
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v17.0.6 # Use the version you prefer
     hooks:
       - id: clang-format
         types_or: [c, c++]
-        args: ["-style=file", "-i"]
+        args: ['-style=file', '-i']
+
+  # JavaScript/TypeScript/Node.js tools
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.0
+    hooks:
+      - id: prettier
+        files: \.(js|ts|mjs|json|md|yaml|yml)$
+        exclude: ^(dist/|node_modules/|\.git/)
+        args: [--write]
+
+  # Node.js and WASM specific checks
+  - repo: local
+    hooks:
+      - id: wasm-eslint
+        name: WASM ESLint
+        entry: bash
+        args: ['-c', 'cd wasm && npm run lint']
+        language: system
+        files: ^wasm/(src|test)/.*\.(js|mjs)$
+        pass_filenames: false
+
+      - id: wasm-npm-test
+        name: WASM npm test
+        entry: bash
+        args: ['-c', 'cd wasm && npm test']
+        language: system
+        files: ^wasm/(src/.*\.(js|ts|mjs)|test/.*\.js|package\.json)$
+        pass_filenames: false
+
+      - id: wasm-file-validation
+        name: WebAssembly file validation
+        entry: bash
+        args:
+          [
+            '-c',
+            'for f in "$@"; do file "$f" | grep -q "WebAssembly" || (echo "Invalid WASM file: $f" && exit 1); done',
+          ]
+        language: system
+        files: \.wasm$
+        types: [binary]
+
+      - id: typescript-check
+        name: TypeScript definitions check
+        entry: bash
+        args: ['-c', 'cd wasm && npx tsc --noEmit --skipLibCheck src/*.d.ts']
+        language: system
+        files: ^wasm/src/.*\.d\.ts$
+        pass_filenames: false
+
+      - id: package-json-lint
+        name: package.json validation
+        entry: bash
+        args: ['-c', 'cd wasm && npm pkg fix']
+        language: system
+        files: ^wasm/package\.json$
+        pass_filenames: false
