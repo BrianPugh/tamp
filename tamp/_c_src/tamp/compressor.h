@@ -54,11 +54,11 @@ typedef struct TampCompressor {
     int16_t cached_match_index;
     uint8_t cached_match_size;
 #endif
+#endif  // TAMP_ESP32
     unsigned char input[16] /* __attribute__ ((aligned (16)))*/;
     uint32_t bit_buffer;
 
     unsigned char *window;
-#endif
 } TampCompressor;
 
 /**

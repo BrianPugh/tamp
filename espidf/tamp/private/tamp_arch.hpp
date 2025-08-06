@@ -4,11 +4,15 @@
 #include <xtensa/config/core-isa.h>
 #endif
 
+#ifdef ESP_PLATFORM
+#include <sdkconfig.h>
+#endif
+
 namespace tamp {
 
 /**
  * @brief Provides feature flags of the architecture we're building for.
- * (Only for Xtensa because the RISC-V's don't have any useful features for our use case.)
+ * (Mostly for Xtensa because the RISC-V's don't have many useful features for our use case.)
  *
  */
 struct Arch {
@@ -50,7 +54,18 @@ struct Arch {
      *
      */
     static constexpr bool HW_CLZ =
-#if XCHAL_HAVE_NSA
+#if XCHAL_HAVE_NSA || defined(__riscv_zbb)
+        true;
+#else
+        false;
+#endif
+
+    /**
+     * @brief Does __builtin_ctz() map to a hardware instruction?
+     *
+     */
+    static constexpr bool HW_CTZ =
+#ifdef __riscv_zbb
         true;
 #else
         false;
