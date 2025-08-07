@@ -12,6 +12,7 @@ Tamp
    self
    Installation
    specification
+   custom_dictionary
    python_api
    c_library
    javascript
