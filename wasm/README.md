@@ -1,9 +1,30 @@
-# Tamp WebAssembly
+# @brianpugh/tamp
 
-High-performance JavaScript/TypeScript compression library using Tamp compiled
-to WebAssembly with modern, ergonomic callback support.
+---
 
-See [the docs] for usage. This README is tamp-developer-centric
+**Documentation:** <https://tamp.readthedocs.io/en/latest/>
+
+**Source Code:** <https://github.com/BrianPugh/tamp>
+
+**Online Demo:** <https://brianpugh.github.io/tamp>
+
+---
+
+Tamp is a low-memory, DEFLATE-inspired lossless compression library optimized
+for embedded and resource-constrained environments.
+
+Tamp delivers the highest data compression ratios, while using the least amount
+of RAM and firmware storage.
+
+## Features
+
+- High compression ratios, low memory use, and fast.
+- Various language implementations available:
+  - Python
+  - Micropython
+  - C
+  - Javascript
+- Support for both streaming and one-shot compression
 
 ## Installation
 
@@ -13,49 +34,111 @@ npm install @brianpugh/tamp
 
 ## Quick Start
 
+### Text Compression
+
 ```javascript
-import {
-  compress,
-  decompress,
-  compressText,
-  decompressText,
-} from '@brianpugh/tamp';
+import { compressText, decompressText } from '@brianpugh/tamp';
 
-// Text compression
-const compressed = await compressText('Hello, 世界! 🎉');
+// Compress text (handles UTF-8 encoding automatically)
+const compressed = await compressText(
+  'Hello, World! This is some text to compress.'
+);
+console.log(`Original: ${compressed.length} bytes compressed`);
+
+// Decompress back to original text
 const original = await decompressText(compressed);
+console.log(original); // "Hello, World! This is some text to compress."
+```
 
-// Binary data
+### Binary Data Compression
+
+```javascript
+import { compress, decompress } from '@brianpugh/tamp';
+
+// Compress binary data
 const data = new TextEncoder().encode('Hello, World!');
 const compressedData = await compress(data);
+
+// Decompress
 const decompressed = await decompress(compressedData);
+console.log(new TextDecoder().decode(decompressed)); // "Hello, World!"
 ```
 
-## Building from Source
+### Streaming Compression
 
-Requirements:
+```javascript
+import { TampCompressor, TampDecompressor } from '@brianpugh/tamp';
 
-- [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html)
-- Node.js 14+
+// Create streaming compressor
+const compressor = new TampCompressor({ window: 10 });
 
-```bash
-# Install Emscripten
-git clone https://github.com/emscripten-core/emsdk.git
-cd emsdk
-./emsdk install latest
-./emsdk activate latest
-source ./emsdk_env.sh
+// Compress data in chunks
+const chunk1 = await compressor.compress(new TextEncoder().encode('Hello '));
+const chunk2 = await compressor.compress(new TextEncoder().encode('World!'));
+const finalChunk = await compressor.flush();
 
-# Build
-cd tamp/wasm
-make all
-npm run build
+// Clean up
+compressor.destroy();
+
+// Create streaming decompressor
+const decompressor = new TampDecompressor();
+
+// Decompress the chunks we created above
+const decompressed1 = await decompressor.decompress(chunk1);
+const decompressed2 = await decompressor.decompress(chunk2);
+const decompressed3 = await decompressor.decompress(finalChunk);
+
+// Combine all decompressed chunks
+const totalLength =
+  decompressed1.length + decompressed2.length + decompressed3.length;
+const result = new Uint8Array(totalLength);
+result.set(decompressed1, 0);
+result.set(decompressed2, decompressed1.length);
+result.set(decompressed3, decompressed1.length + decompressed2.length);
+
+// Convert back to text
+const originalText = new TextDecoder().decode(result);
+console.log(originalText); // "Hello World!"
+
+// Clean up
+decompressor.destroy();
 ```
 
-## Testing
+## API Reference
 
-Run the test suite using Node.js built-in test runner:
+See [the docs](https://tamp.readthedocs.io/en/latest/javascript.html) for more
+details.
 
-```bash
-npm test
+### Basic Interface
+
+- `compress(data: Uint8Array): Promise<Uint8Array>` - Compress binary data
+- `decompress(data: Uint8Array): Promise<Uint8Array>` - Decompress binary data
+- `compressText(text: string): Promise<Uint8Array>` - Compress UTF-8 text
+- `decompressText(data: Uint8Array): Promise<string>` - Decompress to UTF-8 text
+
+### Streaming Classes
+
+#### TampCompressor
+
+```typescript
+class TampCompressor {
+  constructor(options?: { window?: number; literal?: number });
+  compress(data: Uint8Array): Promise<Uint8Array>;
+  flush(): Promise<Uint8Array>;
+  destroy(): void;
+}
 ```
+
+#### TampDecompressor
+
+```typescript
+class TampDecompressor {
+  decompress(data: Uint8Array): Promise<Uint8Array>;
+  destroy(): void;
+}
+```
+
+## License
+
+This project is licensed under the Apache 2.0 License - see the
+[LICENSE](https://github.com/BrianPugh/tamp/blob/main/LICENSE) file for details.

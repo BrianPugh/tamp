@@ -20,8 +20,8 @@
 
 **Online Demo:** <https://brianpugh.github.io/tamp>
 
-Tamp is a low-memory, DEFLATE-inspired lossless compression library intended for
-embedded targets.
+Tamp is a low-memory, DEFLATE-inspired lossless compression library optimized
+for embedded and resource-constrained environments.
 
 Tamp delivers the highest data compression ratios, while using the least amount
 of RAM and firmware storage.
