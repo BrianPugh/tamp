@@ -74,13 +74,26 @@ This is easier to implement and has the potential to execute quicker.
 Similarly, attempts to include the ``is_literal`` flag in the huffman coding did not
 increase compression. An explicit ``is_literal`` flag made the code faster and simpler.
 
+.. _dictionary-initialization:
+
 Dictionary Initialization
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 For short messages, having a better initial dictionary can help improve compression ratios.
 The amount of improvement would be dependent on the type of data being compressed.
 Given that the contents of raw-binary data could be anything, we chose to focus on improving
 typical english text. In order to save device space, a whole dictionary is not saved to disk.
-Instead, we take 16 common characters " \x000ei>to<ans\nr/." and pseudo-randomly fill up
+Instead, we take 16 common characters:
+
+.. code-block:: text
+
+     \x000ei>to<ans\nr/.
+    ^there is a "space" there.
+
+    (or as explicit hex values)
+    0X20 0X00 0X30 0X65 0X69 0X3E 0X74 0X6F 0X3C 0X61 0X6E 0X73 0X0A 0X72 0X2F 0X2E
+
+
+and pseudo-randomly fill up
 the dictionary with these characters. We use the XorShift32 pseudo-random number generator
 due to it's good randomness characteristics, and simple implementation.
 
