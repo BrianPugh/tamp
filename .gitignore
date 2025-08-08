@@ -445,3 +445,4 @@ tramp
 # Temporary files
 *.tmp
 *.temp
+*.events

@@ -13,7 +13,7 @@ Tamp
    Installation
    specification
    custom_dictionary
+   research
    python_api
    c_library
    javascript
-   rle
