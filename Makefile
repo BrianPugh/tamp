@@ -70,6 +70,10 @@ build/enwik8: build/enwik8.zip
 		cd ..; \
 	fi
 
+download-micropython:
+	mkdir -p build
+	cd build && curl -O https://micropython.org/resources/firmware/RPI_PICO-20250415-v1.25.0.uf2
+
 download-enwik8: build/enwik8
 
 build/silesia:
@@ -95,11 +99,6 @@ test: venv
 	@poetry run python build.py build_ext --inplace && python -m pytest
 	@poetry run belay run micropython -m unittest tests/*.py
 	@echo "All Tests Passed!"
-
-collect-data: venv download-enwik8
-	@python tools/collect-data.py 8
-	@python tools/collect-data.py 9
-	@python tools/collect-data.py 10
 
 on-device-compression-benchmark: venv build/enwik8-100kb build/enwik8-100kb.tamp
 	@port=$$(python -c "import os, belay; print(belay.UsbSpecifier.parse_raw(os.environ['BELAY_DEVICE']).to_port())"); \
