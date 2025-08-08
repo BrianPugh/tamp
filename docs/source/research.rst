@@ -10,8 +10,8 @@ Run Length Encoding
 A limitation of tamp's encoding system is that it can only handle relatively short patterns.
 Under most configurations, tamp maxes out at 15 bytes.
 
-For the typical configuration (`window=10`, `literal=8`), a 15-byte pattern takes ``1 + 6 + 10 = 17`` bits.
-15 bytes is 120 bits, so ``120 / 17 = 7.0588`` should be the theoretical maximum compression ratio of data with Tamp.
+For the typical configuration (``window=10``, ``literal=8``), a 15-byte pattern takes :math:`1 + 6 + 10 = 17` bits.
+15 bytes is 120 bits, so :math:`\frac{120}{17} = 7.0588` should be the theoretical maximum compression ratio of data with Tamp.
 
 Let's confirm this:
 
@@ -35,11 +35,11 @@ Possible encoding schemes
 Let's imagine our initial dictionary is all ``0x00``, and we wish to encode 1,000 bytes of `0xFF`.
 How many writes do we need before we can take advantage of Tamp's full 15-bit pattern?
 
-#. Write the ``0xFF`` literal (1 + 8 = 9 bits).
-#. Write another ``0xFF`` literal (1 + 8 = 9 bits).
-#. Write a 2-byte pattern match (1 + 1 + 10 = 12 bits).
-#. Write a 4-byte pattern match (1 + 4 + 10 = 15 bits).
-#. Write a 8-byte pattern match (1 + 6 + 10 = 17 bits).
+#. Write the ``0xFF`` literal (:math:`1 + 8 = 9` bits).
+#. Write another ``0xFF`` literal (:math:`1 + 8 = 9` bits).
+#. Write a 2-byte pattern match (:math:`1 + 1 + 10 = 12` bits).
+#. Write a 4-byte pattern match (:math:`1 + 4 + 10 = 15` bits).
+#. Write a 8-byte pattern match (:math:`1 + 6 + 10 = 17` bits).
 
 This results in a total of 62 bits (7.75 bytes) until Tamp can be most efficient.
 That means that the worst case (efficiency-wise) is attempting to encode 16 bytes.
@@ -73,11 +73,11 @@ A possibility is that we could add a huffman code that states "the following win
 Design considerations:
 
 * There is currently 15 symbols in the huffman table; this is nice because it fits in 4 bits.
-* The number of bits of each huffman code ranges from 1 to 8 bits. This range (``[0, 7]``) can be represented by 3 bits.
+* The number of bits of each huffman code ranges from 1 to 8 bits. This range (:math:`[0, 7]`) can be represented by 3 bits.
 * The packed symbol value + bit-length is 7 bits; this allows them to neatly fit in a uint8 array.
 * When compressing data, we like to use a ``uint32_t`` bit buffer because it can efficiently handle bit-shifts.
   There may be up to 7 bits of data from a previous compression cycle in the bit buffer, resulting in only 25 bits free for the current compression cycle.
-  With the maximum 15-bit window, a pattern match could be 1 + 8 + 15 = 24 bits.
+  With the maximum 15-bit window, a pattern match could be :math:`1 + 8 + 15 = 24` bits.
   This leaves 1 bit left free to play around with.
 * Decompressing data has the same design constraints with regards to its ``uint32_t`` input buffer.
 
