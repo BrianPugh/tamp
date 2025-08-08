@@ -60,7 +60,7 @@ Modifications are made to make the implementation simpler/faster.
       and points at the offset from the beginning of the dictionary buffer to the pattern.
       The shortest pattern-length is either going to be 2 or 3 bytes, depending on ``window``
       and ``literal`` parameters. The shortest pattern-length encoding must be shorter than
-      an equivalent stream of literals. The longest pattern-length will the minimum
+      an equivalent stream of literals. The longest pattern-length is the minimum
       pattern-length plus 13.
 
 Classically, the ``offset`` is from the current position in the buffer. Doing so results
