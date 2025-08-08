@@ -64,6 +64,8 @@ def collect(
 @app.command
 def analyze(
     src: Path = Path("out.events"),
+    *,
+    plot: bool = False,
 ):
     data = src.read_bytes()
 
@@ -87,10 +89,16 @@ def analyze(
         histogram_data = dict(sorted(histogram.items()))
     else:
         histogram_data = {}
-    plot_histogram(histogram_data, "Literal Run Lengths.")
+
+    if plot:
+        plot_histogram(
+            histogram_data,
+            x_label="Literal Run Lengths",
+            title=f"{src.stem} Literal Run Lengths",
+        )
 
 
-def plot_histogram(histogram_data, x_label: str):
+def plot_histogram(histogram_data, *, x_label: str, title: str):
     if not histogram_data:
         print("No False runs found in data")
         return
@@ -110,29 +118,19 @@ def plot_histogram(histogram_data, x_label: str):
             str(freq),
             ha="center",
             va="bottom",
-            fontsize=8,
+            fontsize=12,
+            rotation=45,
         )
 
     plt.xlabel(x_label, fontsize=12)
     plt.ylabel("Frequency", fontsize=12)
-    plt.title(x_label, fontsize=14, fontweight="bold")
+    plt.title(title, fontsize=14, fontweight="bold")
     plt.grid(True, alpha=0.3, axis="y")
 
-    # Add statistics text
-    total_runs = sum(frequencies)
-    mean_length = np.average(run_lengths, weights=frequencies)
-    max_length = max(run_lengths)
-
-    stats_text = f"Total False Runs: {total_runs}\nMean Length: {mean_length:.2f}\nMax Length: {max_length}"
-    plt.text(
-        0.02,
-        0.98,
-        stats_text,
-        transform=plt.gca().transAxes,
-        verticalalignment="top",
-        horizontalalignment="right",
-        bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.8},
-    )
+    # Add minor ticks to x-axis
+    ax = plt.gca()
+    ax.set_xticks(run_lengths, minor=False)
+    ax.set_xticks(np.arange(min(run_lengths), max(run_lengths) + 1, 0.5), minor=True)
 
     plt.tight_layout()
     plt.show()
