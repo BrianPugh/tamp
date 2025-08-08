@@ -1,3 +1,4 @@
+import pickle
 from collections import Counter
 from io import BytesIO
 from pathlib import Path
@@ -11,9 +12,64 @@ from tamp.compressor import Compressor  # Explicitly the python implementation
 
 app = App()
 
+app.command(collect_app := App("collect"))
+app.command(analyze_app := App("analyze"))
 
-@app.command
-def collect(
+
+@collect_app.command(name="rle-opportunities")
+def collect_rle_opportunities(
+    src: Path,
+    dst: Path = Path("out.events"),
+    *,
+    include_single_length: bool = True,
+):
+    plaintext = src.read_bytes()
+
+    if not plaintext:
+        print("Empty file")
+        return
+
+    data = np.frombuffer(plaintext, dtype=np.uint8)
+
+    # Find run boundaries using diff - transitions occur where consecutive bytes differ
+    # Pad with a different value to ensure first and last runs are captured
+    padded = np.concatenate(([data[0] - 1], data, [data[-1] - 1]))
+    transitions = np.diff(padded) != 0
+
+    # Get indices where runs start and end
+    run_boundaries = np.where(transitions)[0]
+
+    # Calculate run lengths
+    run_lengths = np.diff(run_boundaries)
+
+    # Filter for runs > 1 (actual repetitions)
+    rle_runs = run_lengths[run_lengths > int(not include_single_length)]
+
+    # Create histogram using numpy
+    if len(rle_runs) > 0:
+        unique_lengths, counts = np.unique(rle_runs, return_counts=True)
+        sorted_histogram = dict(zip(unique_lengths.tolist(), counts.tolist()))
+    else:
+        sorted_histogram = {}
+
+    # Save histogram as pickled data for later analysis
+    with dst.open("wb") as f:
+        pickle.dump(sorted_histogram, f)
+
+
+@analyze_app.command(name="rle-opportunities")
+def analyze_rle_opportunities(
+    src: Path,
+):
+    with src.open("rb") as f:
+        histogram_data = pickle.load(f)  # noqa: S301
+    plot_histogram(
+        histogram_data, x_label="Run Lengths", title=f"{src.stem} Same-Character Run Lengths", log_scale=True
+    )
+
+
+@collect_app.command(name="literal-streaks")
+def collect_literal_streaks(
     src: Path,
     dst: Path = Path("out.events"),
     window: int = 10,
@@ -61,8 +117,8 @@ def collect(
     dst.write_bytes(events)
 
 
-@app.command
-def analyze(
+@analyze_app.command(name="literal-streaks")
+def analyze_literal_streaks(
     src: Path = Path("out.events"),
     *,
     plot: bool = False,
@@ -98,7 +154,25 @@ def analyze(
         )
 
 
-def plot_histogram(histogram_data, *, x_label: str, title: str):
+def plot_histogram(histogram_data, *, x_label: str, title: str, log_scale: bool = False):
+    """Plot a histogram of run length data using matplotlib.
+
+    Parameters
+    ----------
+    histogram_data : dict
+        Dictionary mapping run lengths (keys) to their frequencies (values)
+    x_label : str
+        Label for the x-axis
+    title : str
+        Title for the plot
+    log_scale : bool, optional
+        If True, use logarithmic scale for y-axis, by default False
+
+    Returns
+    -------
+    None
+        Displays the plot using matplotlib.show()
+    """
     if not histogram_data:
         print("No False runs found in data")
         return
@@ -112,9 +186,16 @@ def plot_histogram(histogram_data, *, x_label: str, title: str):
     bars = plt.bar(run_lengths, frequencies, alpha=0.7, edgecolor="black", color="steelblue", linewidth=0.5)
 
     for bar, freq in zip(bars, frequencies):
+        if log_scale:  # noqa: SIM108
+            # For log scale, position text slightly above the bar height
+            y_pos = bar.get_height() * 1.1
+        else:
+            # For linear scale, use offset based on max frequency
+            y_pos = bar.get_height() + 0.01 * max(frequencies)
+
         plt.text(
             bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 0.01 * max(frequencies),
+            y_pos,
             str(freq),
             ha="center",
             va="bottom",
@@ -126,6 +207,9 @@ def plot_histogram(histogram_data, *, x_label: str, title: str):
     plt.ylabel("Frequency", fontsize=12)
     plt.title(title, fontsize=14, fontweight="bold")
     plt.grid(True, alpha=0.3, axis="y")
+
+    if log_scale:
+        plt.yscale("log")
 
     # Add minor ticks to x-axis
     ax = plt.gca()
