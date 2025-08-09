@@ -181,7 +181,7 @@ Incompressible data will result in frequent streaks of literals. For each litera
 
 Let's take a look at the histograms of how many literal tokens are emitted in a row with Tamp.
 
-.. image:: ../../assets/enwik8-RLE-v1.10.0.png
+.. image:: ../../assets/enwik8-literal-run-lengths.png
    :alt: enwik8 analysis showing how many "literal" tokens are emitted in a row.
    :align: center
 
