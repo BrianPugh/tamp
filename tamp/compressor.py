@@ -13,12 +13,15 @@ _huffman_codes = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
 # These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
 _huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07"
 _FLUSH_CODE = 0xAB  # 8 bits
+_RLE_SYMBOL = 12
+_RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
+_RLE_MAX = (1 << _RLE_BITS) - 1
 
 
 class _BitWriter:
     """Writes bits to a stream."""
 
-    def __init__(self, f, close_f_on_close=False):
+    def __init__(self, f, *, close_f_on_close: bool = False):
         self.close_f_on_close = close_f_on_close
         self.f = f
         self.buffer = 0  # Basically a uint24
@@ -81,6 +84,13 @@ class _RingBuffer:
     def index(self, pattern, start):
         return self.buffer.index(pattern, start)
 
+    @property
+    def last_written_byte(self) -> int:
+        pos = self.pos - 1
+        if pos < 0:
+            pos = self.size - 1
+        return self.buffer[pos]  # TODO: unit-test this thoroughly on initial start!
+
 
 class Compressor:
     """Compresses data to a file or stream."""
@@ -93,6 +103,7 @@ class Compressor:
         literal: int = 8,
         dictionary: Optional[bytearray] = None,
         lazy_matching: bool = False,
+        rle: bool = True,  # TODO: should default to False
     ):
         """
         Parameters
@@ -120,6 +131,9 @@ class Compressor:
         lazy_matching: bool
             Use roughly 50% more cpu to get 0~2% better compression.
         """
+        self.rle = rle
+        self._rle_count = 0
+
         if lazy_matching:
             raise NotImplementedError("lazy matching not implemented in pure python implementation.")
 
@@ -152,6 +166,7 @@ class Compressor:
         self.token_cb = None
         self.literal_cb = None
         self.flush_cb = None
+        self.rle_cb = None
 
         # Write header
         self._bit_writer.write(window - 8, 3, flush=False)
@@ -162,9 +177,42 @@ class Compressor:
 
     def _compress_input_buffer_single(self) -> int:
         target = bytes(self._input_buffer)
+
+        if not target:
+            return 0
+
         bytes_written = 0
         search_i = 0
         match_size = 1
+
+        if self.rle:
+            while target and target[0] == self._window_buffer.last_written_byte and self._rle_count < _RLE_MAX:
+                self._rle_count += 1
+                self._input_buffer.popleft()
+                target = bytes(self._input_buffer)
+            if not target and self._rle_count != _RLE_MAX:
+                # Need more input to see if the RLE continues
+                return 0
+            if self._rle_count == 1:
+                # This is not RLE; attempt to pattern-match or just write literals.
+                self._input_buffer.appendleft(self._window_buffer.last_written_byte)
+                target = bytes(self._input_buffer)
+                self._rle_count = 0
+            elif self._rle_count:
+                last_written_byte = self._window_buffer.last_written_byte
+                # We hit a character that breaks the RLE (or reached _RLE_MAX).
+                # We need to write the RLE token and exit.
+                if self.rle_cb:
+                    self.rle_cb(self.rle_cb(self._rle_count, last_written_byte))
+                bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
+                bytes_written += self._bit_writer.write(self._rle_count, _RLE_BITS)
+                self._window_buffer.write_bytes(bytes([last_written_byte]) * self._rle_count)
+                self._rle_count = 0
+                return bytes_written
+            # Not a RLE
+
+        # Perform normal pattern-matching
+        self._rle_count = 0
         for match_size in range(self.min_pattern_size, len(target) + 1):
             match = target[:match_size]
             try:
@@ -176,6 +224,11 @@ class Compressor:
         match = target[:match_size]
 
         if match_size >= self.min_pattern_size:
+            if self.rle and (match_size - self.min_pattern_size) == _RLE_SYMBOL:
+                # We reserve the "12" symbol for RLE
+                match_size -= 1
+                match = match[:-1]
+
             if self.token_cb:
                 self.token_cb(
                     search_i,
@@ -246,6 +299,19 @@ class Compressor:
             self.flush_cb()
         while self._input_buffer:
             bytes_written += self._compress_input_buffer_single()
+        if self.rle and self._rle_count:
+            last_written_byte = self._window_buffer.last_written_byte
+            if self._rle_count == 1:
+                # Just write a literal
+                bytes_written += self._bit_writer.write(last_written_byte | self.literal_flag, self.literal_bits + 1)
+                self._window_buffer.write_byte(last_written_byte)
+            else:
+                if self.rle_cb:
+                    self.rle_cb(self.rle_cb(self._rle_count, last_written_byte))
+                bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
+                bytes_written += self._bit_writer.write(self._rle_count, _RLE_BITS)
+                self._window_buffer.write_bytes(bytes([last_written_byte]) * self._rle_count)
+                self._rle_count = 0
         bytes_written += self._bit_writer.flush(write_token=write_token)
         return bytes_written
 
