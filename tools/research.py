@@ -211,10 +211,53 @@ def plot_histogram(histogram_data, *, x_label: str, title: str, log_scale: bool 
     if log_scale:
         plt.yscale("log")
 
-    # Add minor ticks to x-axis
+    # Smart x-axis tick spacing to prevent overlapping
     ax = plt.gca()
-    ax.set_xticks(run_lengths, minor=False)
-    ax.set_xticks(np.arange(min(run_lengths), max(run_lengths) + 1, 0.5), minor=True)
+    n_bars = len(run_lengths)
+    data_range = max(run_lengths) - min(run_lengths)
+
+    if n_bars <= 20:
+        # Show all ticks for small number of bars
+        ax.set_xticks(run_lengths)
+    else:
+        # For many bars, calculate appropriate tick density based on range
+        # Use more ticks for larger ranges to maintain good resolution
+        if data_range <= 50:
+            max_ticks = 15
+        elif data_range <= 200:
+            max_ticks = 20
+        elif data_range <= 500:
+            max_ticks = 25
+        else:
+            max_ticks = 30
+
+        # Calculate step size
+        tick_step = max(1, data_range / max_ticks)
+
+        # Round to nice numbers (1, 2, 5, 10, 20, 50, 100, 200, 500, etc.)
+        magnitude = 10 ** int(np.log10(tick_step))
+        normalized_step = tick_step / magnitude
+
+        if normalized_step <= 1:
+            nice_step = magnitude
+        elif normalized_step <= 2:
+            nice_step = 2 * magnitude
+        elif normalized_step <= 5:
+            nice_step = 5 * magnitude
+        else:
+            nice_step = 10 * magnitude
+
+        nice_step = max(1, int(nice_step))  # Ensure step is at least 1
+
+        # Generate tick positions
+        start_tick = int(min(run_lengths) // nice_step) * nice_step
+        tick_positions = np.arange(start_tick, max(run_lengths) + nice_step, nice_step)
+
+        ax.set_xticks(tick_positions)
+
+    # Rotate labels for better readability when there are many ticks
+    if n_bars > 10:
+        plt.xticks(rotation=45)
 
     plt.tight_layout()
     plt.show()

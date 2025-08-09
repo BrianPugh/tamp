@@ -2,6 +2,8 @@
 Research
 ========
 
+This page is a collection of ideas on how to improve Tamp.
+
 Run Length Encoding
 ===================
 .. note::
@@ -27,12 +29,40 @@ Let's confirm this:
 If we need to encode patterns longer than 15 bytes, then we need to produce another pattern token.
 
 How common are long repeating runs?
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TODO
+-----------------------------------
+
+To get an idea of how often repeating characters are in the wild, we'll look at two examples:
+
+* ``enwik8`` - 100MB of wikipedia data.
+* ``RPI_PICO-20250415-v1.25.0.uf2`` - A popular firmware for the raspberry pi pico microcontroller.
+
+enwik8
+^^^^^^
+The enwik8 dataset is used as a proxy of "human knowledge" from the `Hutter Prize <http://prize.hutter1.net/>`_ competition site.
+It is used as a good balance of different types of data a typical compression algorithm might run into.
+
+.. image:: ../../assets/enwik8-RLE-v1.10.0.png
+   :alt: enwik8 RLE analysis showing run length distribution
+   :align: center
+
+A majority of the run-lengths are in the 2-50 range.
+
+MicroPython Firmware
+^^^^^^^^^^^^^^^^^^^^^
+The MicroPython firmware (v1.25.0) for the raspberry pi pico (rp2040) represents a typical compiled binary that a microcontroller might run into.
+For example, OTA firmware updates might be compressed to be efficiently transferred between devices.
+Compiled programs are much different than the text-heavy enwik8 dataset.
+It also has a lot of zero-padding which lends itself well to compression algorithms that can perform RLE or generally handle large patterns.
+
+.. image:: ../../assets/RPI_PICO-20250415-v1.25.0-RLE-v1.10.0.png
+   :alt: RPI PICO RLE analysis showing run length distribution
+   :align: center
+
+Due to the UF2 encoding, there are many long streams of ``0x00``. In fact, there's around 1300 occurrences of this ~220 in length. This offers a huge opportunity for RLE to significantly compress the data.
 
 Possible encoding schemes
-^^^^^^^^^^^^^^^^^^^^^^^^^
-Let's imagine our initial dictionary is all ``0x00``, and we wish to encode 1,000 bytes of `0xFF`.
+-------------------------
+Let's imagine our initial dictionary is all ``0x00``, and we wish to encode 1,000 bytes of ``0xFF``.
 How many writes do we need before we can take advantage of Tamp's full 15-bit pattern?
 
 #. Write the ``0xFF`` literal (:math:`1 + 8 = 9` bits).
@@ -43,9 +73,10 @@ How many writes do we need before we can take advantage of Tamp's full 15-bit pa
 
 This results in a total of 62 bits (7.75 bytes) until Tamp can be most efficient.
 That means that the worst case (efficiency-wise) is attempting to encode 16 bytes.
+A proposed schema needs to significantly improve this situation.
 
 Completely Rewrite the Huffman Table
-""""""""""""""""""""""""""""""""""""
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Currently, the huffman table looks like this:
 
 .. code-block:: python
@@ -68,7 +99,7 @@ Currently, the huffman table looks like this:
        "FLUSH": 0b10101011,
    }
 
-A possibility is that we could add a huffman code that states "the following window bits indicate how many times we should repeat the last-written-character to the window buffer."
+A possibility is that we could add a huffman code that states "the following N bits indicate how many times we should repeat the last-written-character to the window buffer."
 
 Design considerations:
 
@@ -80,6 +111,7 @@ Design considerations:
   With the maximum 15-bit window, a pattern match could be :math:`1 + 8 + 15 = 24` bits.
   This leaves 1 bit left free to play around with.
 * Decompressing data has the same design constraints with regards to its ``uint32_t`` input buffer.
+* A fixed 8-bits indicating size seems sufficient; this would be able to represent lengths in range ``[2, 257]``. We can tweak this range by doing a similar computation that we do for ``min_pattern_size``.
 
 All of this is to say is that we could potentially add 1 bit of data to our maximum token writing while still maintaining a lot of our existing optimizations.
 This could be used to extend the huffman codes by 1 bit (9 bits total) while still maintaining a lot of our optimizations.
@@ -92,15 +124,37 @@ This could be used to extend the huffman codes by 1 bit (9 bits total) while sti
 **Cons:**
 
 * Requires a completely different huffman lookup for decoding, potentially bloating the decoder by an additional ~150 bytes or so.
-* Potentially introduces branching logic into the hot path for decoding.
 
 Tweaking the Huffman Table
-""""""""""""""""""""""""""
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 Instead of completely rewriting the Huffman table, what if we just tweak it a little bit.
+What if we remap the meaning of "12" to "do some RLE stuff"?
+This would change the meaning of "13" to "12", but that can be done easily with non-branching logic:
 
+.. code-block:: c
+
+   if(TAMP_UNLIKELY(huffman_code == 12)){
+       // This is the branching path; do RLE stuff here.
+   }
+   else{
+       // Where use_rle is a bool
+       huffman_code -= (conf->use_rle && huffman_code == 13)
+   }
+
+Here we can see that the code-cost is tiny, and it should have negligible performance impact on decoding.
+
+
+**Pros:**
+
+* Compact, efficient.
+* **Very** compatible with current code base.
+
+**Cons:**
+
+* Reduces maximum pattern-match length from (typ.) 15 down to 14.
 
 Use an invalid offset to represent RLE
-""""""""""""""""""""""""""""""""""""""
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Because Tamp's window doesn't wrap, the final offset position isn't valid because a 2-byte match would overflow.
 That means that we can give this offset value special meaning.
 
@@ -121,12 +175,20 @@ For the previous 16-byte scenario (62 bits), we would now be able to do this in 
 
 * Inefficient use of ``window`` bits.
 
-Chaining RLE
-^^^^^^^^^^^^
-
-(TODO: Add content for this section)
-
 Literal Streaks
-^^^^^^^^^^^^^^^
+---------------
 Incompressible data will result in frequent streaks of literals. For each literal, we lose 1 bit of storage compared to the original uncompressed data.
-Using the previous mentioned encoding scheme, we would need 13 or so literals in a row before we see some savings.
+
+Let's take a look at the histograms of how many literal tokens are emitted in a row with Tamp.
+
+.. image:: ../../assets/enwik8-RLE-v1.10.0.png
+   :alt: enwik8 analysis showing how many "literal" tokens are emitted in a row.
+   :align: center
+
+.. image:: ../../assets/RPI_PICO-20250415-v1.25.0-literal-run-lengths-v1.10.0.png
+   :alt: Micropython firmware analysis showing how many "literal" tokens are emitted in a row.
+   :align: center
+
+If we had some sort of signal that says "the next X bytes are literals", we could potentially save some overhead in emitting a bunch of literals in a row. However, in our typical schema where we might assign an 8-bit huffman code to such an occurrence, we already immediately have a 9-bit overhead. If we want to be able to specify 5 bits to length, this would result in being able to represent sizes in range [15, 46].
+
+On one end of the spectrum, 15, we only save 1 bit. On the other end of spectrum, 46, we save 32 bits (4 bytes). Consecutive literals in this length range are not that frequent, making this optimization not very attractive. Additionally, we would have to store an additional 46 bytes or so of memory to support this feature, since we would have to buffer literal output writes (and it would also make the output writes more complicated!).
