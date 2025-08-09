@@ -167,6 +167,27 @@ By the same logic of minimum-pattern-length for pattern matching, the minimum ru
 With this schema, we would be able to immediately ramp up to a 15-byte match.
 For the previous 16-byte scenario (62 bits), we would now be able to do this in 26 bits, a significant improvement.
 
+However, this limits us to a 15-byte RLE. We can trade off precision for greater range. We could fine tune a non-linear mapping like the following:
+
+.. code-block:: python
+
+   mapping = {
+       0: 2,
+       1: 4,
+       2: 6,
+       3: 8,
+       4: 10,
+       5: 14,  # The previous literal plus this can now have a follow-up 15-pattern match.
+       6: 30,
+       7: 40,
+       8: 60,
+       9: 80,
+       10: 100,
+       11: 130,
+       12: 160,
+       13: 200,
+   }
+
 **Pros:**
 
 * Is a strict enhancement on the current compression protocol, meaning that there are not any real tradeoffs with the current protocol.
