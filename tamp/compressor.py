@@ -1,3 +1,11 @@
+"""Pure Python Tamp Compressor Reference Implementation.
+
+The goal of this module is for clarity and to be able to easily test new ideas.
+Do not optimize this file for speed, unless it still maintains clarity.
+
+Some speed architectural optimizations might be tested here before implementing in other languages.
+"""
+
 from collections import deque
 from io import BytesIO
 

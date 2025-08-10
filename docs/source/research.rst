@@ -341,3 +341,7 @@ However, since we don't want to confound longer-pattern-matching wins with match
 +-------------------------------------+-------------+--------------------------------+------------------------+------------------------+---------------------+
 | build/RPI_PICO-20250415-v1.25.0.uf2 | 667,648     | 331,310 (**2.015**)            | 331,397 (**2.015**)    | 297,561 (**2.244**)    | :good:`+10.187%`    |
 +-------------------------------------+-------------+--------------------------------+------------------------+------------------------+---------------------+
+
+As expected, the RLE encoding significantly improved the ``RPI_PICO-20250415-v1.25.0.uf2`` compression.
+If we weigh each of these files equally, then RLE offers a 1.128% average improvement over the base Tamp algorithm.
+Any situations where it performed worse than (no 14) is more of a luck/probability distribution where a greedy-matcher sometimes performed better/worse.
