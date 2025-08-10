@@ -207,16 +207,7 @@ class Compressor:
                 target = bytes(self._input_buffer)
                 self._rle_count = 0
             elif self._rle_count:
-                last_written_byte = self._window_buffer.last_written_byte
-                # We hit a character that breaks the RLE (or reached _RLE_MAX).
-                # We need to write the RLE token and exit.
-                if self.rle_cb:
-                    self.rle_cb(self.rle_cb(self._rle_count, last_written_byte))
-                bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
-                bytes_written += self._bit_writer.write(self._rle_count, _RLE_BITS)
-                self._window_buffer.write_bytes(bytes([last_written_byte]) * self._rle_count)
-                self._rle_count = 0
-                return bytes_written
+                return self._write_rle()
             # Not a RLE
 
         # Perform normal pattern-matching
@@ -259,6 +250,25 @@ class Compressor:
             bytes_written += self._bit_writer.write(char | self.literal_flag, self.literal_bits + 1)
             self._window_buffer.write_byte(char)
 
+        return bytes_written
+
+    def _write_rle(self) -> int:
+        bytes_written = 0
+        last_written_byte = self._window_buffer.last_written_byte
+
+        if self._rle_count == 0:
+            pass  # do nothing
+        elif self._rle_count == 1:
+            # Just write a literal
+            bytes_written += self._bit_writer.write(last_written_byte | self.literal_flag, self.literal_bits + 1)
+        else:
+            if self.rle_cb:
+                self.rle_cb(self.rle_cb(self._rle_count, last_written_byte))
+            bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
+            bytes_written += self._bit_writer.write(self._rle_count, _RLE_BITS)
+
+        self._window_buffer.write_bytes(bytes([last_written_byte]) * self._rle_count)
+        self._rle_count = 0
         return bytes_written
 
     def write(self, data: Union[bytes, bytearray]) -> int:
@@ -308,18 +318,7 @@ class Compressor:
         while self._input_buffer:
             bytes_written += self._compress_input_buffer_single()
         if self.rle and self._rle_count:
-            last_written_byte = self._window_buffer.last_written_byte
-            if self._rle_count == 1:
-                # Just write a literal
-                bytes_written += self._bit_writer.write(last_written_byte | self.literal_flag, self.literal_bits + 1)
-                self._window_buffer.write_byte(last_written_byte)
-            else:
-                if self.rle_cb:
-                    self.rle_cb(self.rle_cb(self._rle_count, last_written_byte))
-                bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
-                bytes_written += self._bit_writer.write(self._rle_count, _RLE_BITS)
-                self._window_buffer.write_bytes(bytes([last_written_byte]) * self._rle_count)
-                self._rle_count = 0
+            bytes_written += self._write_rle()
         bytes_written += self._bit_writer.flush(write_token=write_token)
         return bytes_written
 
