@@ -81,7 +81,7 @@ class _RingBuffer:
         self.size = len(buffer)
         self.pos = 0  # Always pointing to the byte-to-be-overwritten
 
-    def write_byte(self, byte):  # ~10% of time
+    def write_byte(self, byte):
         self.buffer[self.pos] = byte
         self.pos = (self.pos + 1) % self.size
 
@@ -141,6 +141,7 @@ class Compressor:
         """
         self.rle = rle
         self._rle_count = 0
+        self._rle_last_written = False  # The previous write was an RLE token
 
         if lazy_matching:
             raise NotImplementedError("lazy matching not implemented in pure python implementation.")
@@ -248,15 +249,21 @@ class Compressor:
             for _ in range(match_size):
                 self._input_buffer.popleft()
         else:
-            char = self._input_buffer.popleft()
-            if self.literal_cb:
-                self.literal_cb(char)
-            if char >> self.literal_bits:
-                raise ExcessBitsError
+            literal = self._input_buffer.popleft()
+            bytes_written += self._write_literal(literal)
 
-            bytes_written += self._bit_writer.write(char | self.literal_flag, self.literal_bits + 1)
-            self._window_buffer.write_byte(char)
+        return bytes_written
 
+    def _write_literal(self, literal) -> int:
+        bytes_written = 0
+        if self.literal_cb:
+            self.literal_cb(literal)
+        if literal >> self.literal_bits:
+            raise ExcessBitsError
+
+        bytes_written += self._bit_writer.write(literal | self.literal_flag, self.literal_bits + 1)
+        self._window_buffer.write_byte(literal)
+        self._rle_last_written = False
         return bytes_written
 
     def _write_pattern(self, search_i, match) -> int:
@@ -273,6 +280,7 @@ class Compressor:
         bytes_written += self._bit_writer.write_huffman(match_size - self.min_pattern_size)
         bytes_written += self._bit_writer.write(search_i, self.window_bits)
         self._window_buffer.write_bytes(match)
+        self._rle_last_written = False
         return bytes_written
 
     def _write_rle(self) -> int:
@@ -280,7 +288,7 @@ class Compressor:
         last_written_byte = self._window_buffer.last_written_byte
 
         if self._rle_count == 0:
-            pass  # do nothing
+            raise ValueError("No RLE to write.")
         elif self._rle_count == 1:
             # Just write a literal
             bytes_written += self._bit_writer.write(last_written_byte | self.literal_flag, self.literal_bits + 1)
@@ -290,7 +298,11 @@ class Compressor:
             bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
             bytes_written += self._bit_writer.write(self._rle_count, _RLE_BITS)
 
-        self._window_buffer.write_bytes(bytes([last_written_byte]) * self._rle_count)
+            if not self._rle_last_written:
+                self._window_buffer.write_bytes(bytes([last_written_byte]) * min(self._rle_count, 8))
+
+            self._rle_last_written = True
+
         self._rle_count = 0
         return bytes_written
 
@@ -342,7 +354,10 @@ class Compressor:
             bytes_written += self._compress_input_buffer_single()
         if self.rle and self._rle_count:
             bytes_written += self._write_rle()
-        bytes_written += self._bit_writer.flush(write_token=write_token)
+        bytes_written_flush = self._bit_writer.flush(write_token=write_token)
+        bytes_written += bytes_written_flush
+        if bytes_written_flush:
+            self._rle_last_written = False
         return bytes_written
 
     def close(self) -> int:
