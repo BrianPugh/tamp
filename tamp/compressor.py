@@ -207,11 +207,14 @@ class Compressor:
                 target = bytes(self._input_buffer)
                 self._rle_count = 0
             elif self._rle_count:
-                return self._write_rle()
-            # Not a RLE
+                if self._rle_count > (self.min_pattern_size + 7):  # TODO: double check this math for all configurations
+                    # It's certainly better to do a RLE write than searching for a pattern.
+                    return self._write_rle()
+                else:
+                    # We'll see if pattern-matching offers a better encoding.
+                    target = bytes([self._window_buffer.last_written_byte]) * self._rle_count
 
         # Perform normal pattern-matching
-        self._rle_count = 0
         for match_size in range(self.min_pattern_size, len(target) + 1):
             match = target[:match_size]
             try:
@@ -222,21 +225,25 @@ class Compressor:
                 break
         match = target[:match_size]
 
+        if self._rle_count:
+            assert self._rle_count >= 2  # noqa: S101
+            if match_size == self._rle_count:
+                # Pattern is better than RLE
+                bytes_written += self._write_pattern(search_i, match)
+                self._rle_count = 0
+                return bytes_written
+            else:
+                # RLE is better than pattern
+                return self._write_rle()
+
+        self._rle_count = 0
         if match_size >= self.min_pattern_size:
             if self.rle and (match_size - self.min_pattern_size) == _RLE_SYMBOL:
                 # We reserve the "12" symbol for RLE
                 match_size -= 1
                 match = match[:-1]
 
-            if self.token_cb:
-                self.token_cb(
-                    search_i,
-                    match_size,
-                    match,
-                )
-            bytes_written += self._bit_writer.write_huffman(match_size - self.min_pattern_size)
-            bytes_written += self._bit_writer.write(search_i, self.window_bits)
-            self._window_buffer.write_bytes(match)
+            bytes_written += self._write_pattern(search_i, match)
 
             for _ in range(match_size):
                 self._input_buffer.popleft()
@@ -250,6 +257,22 @@ class Compressor:
             bytes_written += self._bit_writer.write(char | self.literal_flag, self.literal_bits + 1)
             self._window_buffer.write_byte(char)
 
+        return bytes_written
+
+    def _write_pattern(self, search_i, match) -> int:
+        match_size = len(match)
+
+        if self.token_cb:
+            self.token_cb(
+                search_i,
+                match_size,
+                match,
+            )
+
+        bytes_written = 0
+        bytes_written += self._bit_writer.write_huffman(match_size - self.min_pattern_size)
+        bytes_written += self._bit_writer.write(search_i, self.window_bits)
+        self._window_buffer.write_bytes(match)
         return bytes_written
 
     def _write_rle(self) -> int:
