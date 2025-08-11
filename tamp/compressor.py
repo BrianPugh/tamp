@@ -237,7 +237,6 @@ class Compressor:
                 # RLE is better than pattern
                 return self._write_rle()
 
-        self._rle_count = 0
         if match_size >= self.min_pattern_size:
             if self.rle and (match_size - self.min_pattern_size) == _RLE_SYMBOL:
                 # We reserve the "12" symbol for RLE
@@ -299,6 +298,8 @@ class Compressor:
             bytes_written += self._bit_writer.write(self._rle_count, _RLE_BITS)
 
             if not self._rle_last_written:
+                # Only write up to 8 bytes, and only if we didn't already do this.
+                # This prevents filling up the window buffer with unhelpful data.
                 self._window_buffer.write_bytes(bytes([last_written_byte]) * min(self._rle_count, 8))
 
             self._rle_last_written = True
