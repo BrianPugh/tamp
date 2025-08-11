@@ -39,6 +39,7 @@ class _BitWriter:
         return self.write(_huffman_codes[pattern_size], _huffman_bits[pattern_size])
 
     def write(self, bits, num_bits, flush=True):
+        bits = int(bits)
         bits &= (1 << num_bits) - 1
         self.bit_pos += num_bits
         self.buffer |= bits << (32 - self.bit_pos)
@@ -139,7 +140,7 @@ class Compressor:
         lazy_matching: bool
             Use roughly 50% more cpu to get 0~2% better compression.
         """
-        self.rle = rle
+        self.rle: bool = rle
         self._rle_count = 0
         self._rle_last_written = False  # The previous write was an RLE token
 
@@ -181,7 +182,7 @@ class Compressor:
         self._bit_writer.write(window - 8, 3, flush=False)
         self._bit_writer.write(literal - 5, 2, flush=False)
         self._bit_writer.write(bool(dictionary), 1, flush=False)
-        self._bit_writer.write(0, 1, flush=False)  # Reserved
+        self._bit_writer.write(self.rle, 1, flush=False)
         self._bit_writer.write(0, 1, flush=False)  # No other header bytes
 
     def _compress_input_buffer_single(self) -> int:

@@ -26,7 +26,8 @@ The bit-location 0 is equivalent to typical MSb position 7 of the first byte.
 | [2]     | custom_dictionary | A custom dictionary initialization method was used                  |
 |         |                   | and must be provided at decompression.                              |
 +---------+-------------------+---------------------------------------------------------------------+
-| [1]     | reserved          | Reserved for future use. Must be 0.                                 |
+| [1]     | rle               | Enable the RLE feature. Generally improves compression, but the     |
+|         |                   | decompressor needs to support it (introduced in tamp v1.11.0).      |
 +---------+-------------------+---------------------------------------------------------------------+
 | [0]     | more_header       | If ``True``, then the next byte in the stream is more header data.  |
 |         |                   | Currently always ``False``, but allows for future expandability.    |
