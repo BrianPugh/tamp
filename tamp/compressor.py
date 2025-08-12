@@ -126,7 +126,7 @@ class Compressor:
         literal: int = 8,
         dictionary: Optional[bytearray] = None,
         lazy_matching: bool = False,
-        rle: bool = True,  # TODO: should default to False
+        v2: bool = True,
     ):
         """
         Parameters
@@ -154,7 +154,7 @@ class Compressor:
         lazy_matching: bool
             Use roughly 50% more cpu to get 0~2% better compression.
         """
-        self.rle: bool = rle
+        self.v2: bool = v2
         self._rle_count = 0
         self._rle_last_written = False  # The previous write was an RLE token
 
@@ -180,7 +180,7 @@ class Compressor:
         self.literal_bits = literal
 
         self.min_pattern_size = compute_min_pattern_size(window, literal)
-        if self.rle:
+        if self.v2:
             self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
         else:
             self.max_pattern_size = self.min_pattern_size + 13
@@ -203,7 +203,7 @@ class Compressor:
         self._bit_writer.write(window - 8, 3, flush=False)
         self._bit_writer.write(literal - 5, 2, flush=False)
         self._bit_writer.write(bool(dictionary), 1, flush=False)
-        self._bit_writer.write(self.rle, 1, flush=False)
+        self._bit_writer.write(self.v2, 1, flush=False)
         self._bit_writer.write(0, 1, flush=False)  # No other header bytes
 
     def _compress_input_buffer_single(self) -> int:
@@ -256,7 +256,7 @@ class Compressor:
         search_i = 0
         match_size = 1
 
-        if self.rle:
+        if self.v2:
             # RLE same-character-counting logic
             while target and target[0] == self._window_buffer.last_written_byte and self._rle_count < _RLE_MAX:
                 self._rle_count += 1
@@ -295,7 +295,7 @@ class Compressor:
                 return self._write_rle()
 
         if match_size >= self.min_pattern_size:
-            if self.rle and match_size > (self.min_pattern_size + 11):
+            if self.v2 and match_size > (self.min_pattern_size + 11):
                 # Protects +12 to be RLE symbol, and +13 to be extended match symbol
                 # Write the "extended" match symbol
                 bytes_written += self._bit_writer.write_huffman(13)
@@ -451,7 +451,7 @@ class Compressor:
             self.flush_cb()
         while self._input_buffer:
             bytes_written += self._compress_input_buffer_single()
-        if self.rle and self._rle_count:
+        if self.v2 and self._rle_count:
             bytes_written += self._write_rle()
         bytes_written_flush = self._bit_writer.flush(write_token=write_token)
         bytes_written += bytes_written_flush
