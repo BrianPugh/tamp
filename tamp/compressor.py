@@ -95,10 +95,17 @@ class _RingBuffer:
     def index(self, pattern, start):
         return self.buffer.index(pattern, start)
 
-    def copy(self, position, size):
+    def write_from_self(self, position, size):
         data = [self.buffer[(position + i) % self.size] for i in range(size)]
         for x in data:
             self.write_byte(x)
+
+    def get(self, index, size):
+        out = bytearray(size)
+        for i in range(size):
+            pos = (index + i) % self.size
+            out[i] = self.buffer[pos]
+        return bytes(out)
 
     @property
     def last_written_byte(self) -> int:
@@ -206,40 +213,59 @@ class Compressor:
             return bytes_written
 
         if self._extended_pattern_match_count:
-            try:
-                while (
-                    self._window_buffer.buffer[
-                        (self._extended_pattern_match_position + self._extended_pattern_match_count)
-                        % self._window_buffer.size
-                    ]
-                    == self._input_buffer[0]
-                ) and self._extended_pattern_match_count < self.max_pattern_size:
+            target = self._window_buffer.get(self._extended_pattern_match_position, self._extended_pattern_match_count)
+            while self._input_buffer:
+                target += bytes([self._input_buffer[0]])
+                search_i, match = self._search(target, start=self._extended_pattern_match_position)
+                match_size = len(match)
+                if match_size > self._extended_pattern_match_count:
                     self._input_buffer.popleft()
-                    self._extended_pattern_match_count += 1
-            except IndexError:
-                # We  reached the end of the input_buffer and need more data.
+                    self._extended_pattern_match_count = match_size
+                    self._extended_pattern_match_position = search_i
+                    continue
+                elif search_i + match_size >= self._window_buffer.size:
+                    # wrap-around search: it's fine to check for the wrap now because it's super cheap here.
+                    while self._input_buffer:
+                        pos = (search_i + match_size) % self._window_buffer.size
+                        if self._window_buffer.buffer[pos] == self._input_buffer[0]:
+                            self._input_buffer.popleft()
+                            self._extended_pattern_match_count += 1
+                            continue
+                        # We've found the end of the match
+                        break
+                    else:
+                        # We ran out of input_buffer, return so caller can re-populate the input_buffer
+                        return bytes_written
+
+                # We've found the end of the match
+
+                # Write the extended pattern match bits
+                # print(self._extended_pattern_match_count)
+                # breakpoint()
+                bytes_written += self._bit_writer.write(
+                    # +11 is the longest addition that gets mapped to a huffman code.
+                    # so +12 gets represented as writing all zeros to the extension bits.
+                    self._extended_pattern_match_count - 11 - 1 - self.min_pattern_size,
+                    _MATCH_EXTENSION_BITS,
+                )
+
+                # update window buffer
+                # TODO: maybe not if it's relatively close to current position?
+                # TODO: should we let this write wrap? We'd also have to update the search/check above.
+                self._window_buffer.write_from_self(
+                    self._extended_pattern_match_position, self._extended_pattern_match_count
+                )
+
+                # Reset state
+                self._extended_pattern_match_count = 0
+                self._extended_pattern_match_position = 0
+
+                return bytes_written
+            else:
+                # We ran out of input_buffer, return so caller can re-populate the input_buffer
                 return bytes_written
 
-            # Write the extended pattern match bits
-            # print(self._extended_pattern_match_count)
-            # breakpoint()
-            bytes_written += self._bit_writer.write(
-                # +11 is the longest addition that gets mapped to a huffman code.
-                # so +12 gets represented as writing all zeros to the extension bits.
-                self._extended_pattern_match_count - 11 - 1 - self.min_pattern_size,
-                _MATCH_EXTENSION_BITS,
-            )
-
-            # update window buffer
-            # TODO: maybe not if it's relatively close to current position?
-            # TODO: should we let this write wrap? We'd also have to update the search/check above.
-            self._window_buffer.copy(self._extended_pattern_match_position, self._extended_pattern_match_count)
-
-            # Reset state
-            self._extended_pattern_match_count = 0
-            self._extended_pattern_match_position = 0
-
-            return bytes_written
+            raise NotImplementedError("Unreachable")
 
         target = bytes(self._input_buffer)
         search_i = 0
@@ -305,6 +331,7 @@ class Compressor:
         return bytes_written
 
     def _search(self, target: bytes, start=0):
+        match_size = 0
         search_i = start
         for match_size in range(self.min_pattern_size, len(target) + 1):
             match = target[:match_size]
