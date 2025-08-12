@@ -268,15 +268,8 @@ class Compressor:
                     target = bytes([self._window_buffer.last_written_byte]) * self._rle_count
 
         # Perform normal pattern-matching
-        for match_size in range(self.min_pattern_size, len(target) + 1):
-            match = target[:match_size]
-            try:
-                search_i = self._window_buffer.index(match, search_i)
-            except ValueError:
-                # Not Found
-                match_size -= 1
-                break
-        match = target[:match_size]
+        search_i, match = self._search(target, start=0)
+        match_size = len(match)
 
         if self._rle_count:
             # Check to see if the found pattern-match is more efficient than the RLE encoding.
@@ -310,6 +303,19 @@ class Compressor:
             bytes_written += self._write_literal(literal)
 
         return bytes_written
+
+    def _search(self, target: bytes, start=0):
+        search_i = start
+        for match_size in range(self.min_pattern_size, len(target) + 1):
+            match = target[:match_size]
+            try:
+                search_i = self._window_buffer.index(match, search_i)
+            except ValueError:
+                # Not Found
+                match_size -= 1
+                break
+        match = target[:match_size]
+        return search_i, match
 
     def _write_literal(self, literal) -> int:
         bytes_written = 0
