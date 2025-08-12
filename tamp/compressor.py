@@ -34,7 +34,7 @@ class _BitWriter:
     def __init__(self, f, *, close_f_on_close: bool = False):
         self.close_f_on_close = close_f_on_close
         self.f = f
-        self.buffer = 0  # Basically a uint24
+        self.buffer = 0  # Basically a uint32
         self.bit_pos = 0
 
     def write_huffman(self, pattern_size):
@@ -222,6 +222,9 @@ class Compressor:
                     self._input_buffer.popleft()
                     self._extended_pattern_match_count = match_size
                     self._extended_pattern_match_position = search_i
+                    if self._extended_pattern_match_count == self.max_pattern_size:
+                        bytes_written += self._write_pattern_extended_bits()
+                        return bytes_written
                     continue
                 elif search_i + match_size >= self._window_buffer.size:
                     # wrap-around search: it's fine to check for the wrap now because it's super cheap here.
@@ -230,6 +233,9 @@ class Compressor:
                         if self._window_buffer.buffer[pos] == self._input_buffer[0]:
                             self._input_buffer.popleft()
                             self._extended_pattern_match_count += 1
+                            if self._extended_pattern_match_count == self.max_pattern_size:
+                                bytes_written += self._write_pattern_extended_bits()
+                                return bytes_written
                             continue
                         # We've found the end of the match
                         break
@@ -238,25 +244,7 @@ class Compressor:
                         return bytes_written
 
                 # We've found the end of the match
-
-                # Write the extended pattern match bits
-                # print(self._extended_pattern_match_count)
-                # breakpoint()
-                bytes_written += self._bit_writer.write(
-                    # +11 is the longest addition that gets mapped to a huffman code.
-                    # so +12 gets represented as writing all zeros to the extension bits.
-                    self._extended_pattern_match_count - 11 - 1 - self.min_pattern_size,
-                    _MATCH_EXTENSION_BITS,
-                )
-
-                self._window_buffer.write_from_self(
-                    self._extended_pattern_match_position, self._extended_pattern_match_count
-                )
-
-                # Reset state
-                self._extended_pattern_match_count = 0
-                self._extended_pattern_match_position = 0  # Technically not necessary.
-
+                bytes_written += self._write_pattern_extended_bits()
                 return bytes_written
             else:
                 # We ran out of input_buffer, return so caller can re-populate the input_buffer
@@ -340,6 +328,25 @@ class Compressor:
                 break
         match = target[:match_size]
         return search_i, match
+
+    def _write_pattern_extended_bits(self):
+        bytes_written = 0
+        # print(self._extended_pattern_match_count)
+        # breakpoint()
+        bytes_written += self._bit_writer.write(
+            # +11 is the longest addition that gets mapped to a huffman code.
+            # so +12 gets represented as writing all zeros to the extension bits.
+            self._extended_pattern_match_count - 11 - 1 - self.min_pattern_size,
+            _MATCH_EXTENSION_BITS,
+        )
+
+        self._window_buffer.write_from_self(self._extended_pattern_match_position, self._extended_pattern_match_count)
+
+        # Reset state
+        self._extended_pattern_match_count = 0
+        self._extended_pattern_match_position = 0  # Technically not necessary.
+
+        return bytes_written
 
     def _write_literal(self, literal) -> int:
         bytes_written = 0
