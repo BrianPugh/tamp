@@ -249,16 +249,13 @@ class Compressor:
                     _MATCH_EXTENSION_BITS,
                 )
 
-                # update window buffer
-                # TODO: maybe not if it's relatively close to current position?
-                # TODO: should we let this write wrap? We'd also have to update the search/check above.
                 self._window_buffer.write_from_self(
                     self._extended_pattern_match_position, self._extended_pattern_match_count
                 )
 
                 # Reset state
                 self._extended_pattern_match_count = 0
-                self._extended_pattern_match_position = 0
+                self._extended_pattern_match_position = 0  # Technically not necessary.
 
                 return bytes_written
             else:
