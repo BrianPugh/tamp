@@ -44,6 +44,7 @@ def compress(
         ),
     ] = 8,
     lazy_matching: bool = False,
+    v1: bool = False,
 ):
     """Compress an input file or stream.
 
@@ -59,6 +60,8 @@ def compress(
         Number of bits used to represent a literal.
     lazy_matching: bool
         Use roughly 50% more cpu to get 0~2% better compression.
+    v1: bool
+        Use v1 compression format instead of v2.
     """
     input_bytes = read(input_)
     output_bytes = tamp.compress(
@@ -66,6 +69,7 @@ def compress(
         window=window,
         literal=literal,
         lazy_matching=lazy_matching,
+        v2=not v1,
     )
     write(output, output_bytes)
 

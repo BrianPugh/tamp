@@ -611,6 +611,7 @@ def compress(
     literal: int = 8,
     dictionary: Optional[bytearray] = None,
     lazy_matching: bool = False,
+    v2: bool = True,
 ) -> bytes:
     """Single-call to compress data.
 
@@ -637,6 +638,8 @@ def compress(
         first be initialized with :func:`~tamp.initialize_dictionary`
     lazy_matching: bool
         Use roughly 50% more cpu to get 0~2% better compression.
+    v2: bool
+        Use v2 compression format. Defaults to True.
 
     Returns
     -------
@@ -651,6 +654,7 @@ def compress(
                 literal=literal,
                 dictionary=dictionary,
                 lazy_matching=lazy_matching,
+                v2=v2,
             )
             c.write(data)
         else:
@@ -660,6 +664,7 @@ def compress(
                 literal=literal,
                 dictionary=dictionary,
                 lazy_matching=lazy_matching,
+                v2=v2,
             )
             c.write(data)
         c.flush(write_token=False)
