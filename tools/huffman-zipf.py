@@ -195,6 +195,7 @@ def generate_codes(
 
     # Create the output content
     output_lines = []
+    output_lines.append(f"# Huffman codes generated with Zipf parameter s={skew}")
     output_lines.append("_EXTENDED_HUFFMAN_TABLE = {")
     for i in range(values):
         if i in result:

@@ -25,7 +25,73 @@ _RLE_SYMBOL = 12
 _RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
 _RLE_MAX = (1 << _RLE_BITS) - 1
 
-_MATCH_EXTENSION_BITS = 6
+# Huffman codes generated with Zipf parameter s=1.059
+_EXTENDED_HUFFMAN_TABLE = {
+    0: (0b01, 2),
+    1: (0b100, 3),
+    2: (0b1101, 4),
+    3: (0b0010, 4),
+    4: (0b11110, 5),
+    5: (0b11000, 5),
+    6: (0b10100, 5),
+    7: (0b00010, 5),
+    8: (0b111110, 6),
+    9: (0b111001, 6),
+    10: (0b110011, 6),
+    11: (0b101110, 6),
+    12: (0b101011, 6),
+    13: (0b001110, 6),
+    14: (0b000111, 6),
+    15: (0b000010, 6),
+    16: (0b1111111, 7),
+    17: (0b1110111, 7),
+    18: (0b1110101, 7),
+    19: (0b1110001, 7),
+    20: (0b1100101, 7),
+    21: (0b1011111, 7),
+    22: (0b1011011, 7),
+    23: (0b1011001, 7),
+    24: (0b1010101, 7),
+    25: (0b0011111, 7),
+    26: (0b0011011, 7),
+    27: (0b0011001, 7),
+    28: (0b0001101, 7),
+    29: (0b0000111, 7),
+    30: (0b0000011, 7),
+    31: (0b0000001, 7),
+    32: (0b11111101, 8),
+    33: (0b11111100, 8),
+    34: (0b11101101, 8),
+    35: (0b11101100, 8),
+    36: (0b11101001, 8),
+    37: (0b11101000, 8),
+    38: (0b11100001, 8),
+    39: (0b11100000, 8),
+    40: (0b11001001, 8),
+    41: (0b11001000, 8),
+    42: (0b10111101, 8),
+    43: (0b10111100, 8),
+    44: (0b10110101, 8),
+    45: (0b10110100, 8),
+    46: (0b10110001, 8),
+    47: (0b10110000, 8),
+    48: (0b10101001, 8),
+    49: (0b10101000, 8),
+    50: (0b00111101, 8),
+    51: (0b00111100, 8),
+    52: (0b00110101, 8),
+    53: (0b00110100, 8),
+    54: (0b00110001, 8),
+    55: (0b00110000, 8),
+    56: (0b00011001, 8),
+    57: (0b00011000, 8),
+    58: (0b00001101, 8),
+    59: (0b00001100, 8),
+    60: (0b00000101, 8),
+    61: (0b00000100, 8),
+    62: (0b00000001, 8),
+    63: (0b00000000, 8),
+}
 
 
 class _BitWriter:
@@ -39,6 +105,9 @@ class _BitWriter:
 
     def write_huffman(self, pattern_size):
         return self.write(_huffman_codes[pattern_size], _huffman_bits[pattern_size])
+
+    def write_extended_huffman(self, size):
+        return self.write(*_EXTENDED_HUFFMAN_TABLE[size])
 
     def write(self, bits, num_bits, flush=True):
         bits = int(bits)
@@ -181,7 +250,7 @@ class Compressor:
 
         self.min_pattern_size = compute_min_pattern_size(window, literal)
         if self.v2:
-            self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
+            self.max_pattern_size = self.min_pattern_size + 11 + 1 + max(_EXTENDED_HUFFMAN_TABLE)
         else:
             self.max_pattern_size = self.min_pattern_size + 13
 
@@ -333,11 +402,13 @@ class Compressor:
         bytes_written = 0
         # print(self._extended_pattern_match_count)
         # breakpoint()
-        bytes_written += self._bit_writer.write(
+        bytes_written += self._bit_writer.write_extended_huffman(
             # +11 is the longest addition that gets mapped to a huffman code.
             # so +12 gets represented as writing all zeros to the extension bits.
-            self._extended_pattern_match_count - 11 - 1 - self.min_pattern_size,
-            _MATCH_EXTENSION_BITS,
+            self._extended_pattern_match_count
+            - 11
+            - 1
+            - self.min_pattern_size,
         )
 
         self._window_buffer.write_from_self(self._extended_pattern_match_position, self._extended_pattern_match_count)
@@ -376,9 +447,6 @@ class Compressor:
         self._window_buffer.write_bytes(match)
         self._rle_last_written = False
         return bytes_written
-
-    def _write_pattern_extended(self, size):
-        return self._bit_writer.write(size, _MATCH_EXTENSION_BITS)
 
     def _write_rle(self) -> int:
         bytes_written = 0
