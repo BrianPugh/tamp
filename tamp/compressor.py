@@ -231,11 +231,11 @@ class Compressor:
         self._extended_pattern_match_position = 0
         # We could write the first 1 + 6 + 15 bits while waiting for the final 6 bits, making it safe!
 
-        if lazy_matching:
-            raise NotImplementedError("lazy matching not implemented in pure python implementation.")
+        self.lazy_matching = lazy_matching
+        self._cached_match_index = -1
+        self._cached_match_size = 0
 
         if not hasattr(f, "write"):  # It's probably a path-like object.
-            # TODO: then close it on close
             f = open(str(f), "wb")
             close_f_on_close = True
         else:
@@ -274,6 +274,10 @@ class Compressor:
         self._bit_writer.write(bool(dictionary), 1, flush=False)
         self._bit_writer.write(self.v2, 1, flush=False)
         self._bit_writer.write(0, 1, flush=False)  # No other header bytes
+
+    def _validate_no_match_overlap(self, write_pos, match_index, match_size):
+        """Check if writing a single byte will overlap with a future match section."""
+        return write_pos < match_index or write_pos >= match_index + match_size
 
     def _compress_input_buffer_single(self) -> int:
         bytes_written = 0
@@ -347,9 +351,16 @@ class Compressor:
                     # We'll see if pattern-matching offers a better encoding.
                     target = bytes([self._window_buffer.last_written_byte]) * self._rle_count
 
-        # Perform normal pattern-matching
-        search_i, match = self._search(target, start=0)
-        match_size = len(match)
+        # Check if we have a cached match from lazy matching
+        if self.lazy_matching and self._cached_match_index >= 0:
+            search_i = self._cached_match_index
+            match_size = self._cached_match_size
+            match = self._window_buffer.get(search_i, match_size)
+            self._cached_match_index = -1  # Clear cache after using
+        else:
+            # Perform normal pattern-matching
+            search_i, match = self._search(target, start=0)
+            match_size = len(match)
 
         if self._rle_count:
             # Check to see if the found pattern-match is more efficient than the RLE encoding.
@@ -363,6 +374,29 @@ class Compressor:
                 # RLE is better than pattern
                 return self._write_rle()
 
+        # Lazy matching logic
+        if (
+            self.lazy_matching
+            and match_size >= self.min_pattern_size
+            and match_size <= 8
+            and len(self._input_buffer) > match_size + 2
+        ):
+            # Check if next position has a better match
+            next_target = bytes(list(self._input_buffer)[1:])  # Skip first byte
+            next_search_i, next_match = self._search(next_target, start=0)
+            next_match_size = len(next_match)
+
+            # If next position has a better match, and the match doesn't overlap with the literal we are writing
+            if next_match_size > match_size and self._validate_no_match_overlap(
+                self._window_buffer.pos, next_search_i, next_match_size
+            ):
+                # Write literal at current position and cache the next match
+                literal = self._input_buffer.popleft()
+                bytes_written += self._write_literal(literal)
+                self._cached_match_index = next_search_i
+                self._cached_match_size = next_match_size
+                return bytes_written
+
         if match_size >= self.min_pattern_size:
             if self.v2 and match_size > (self.min_pattern_size + 11):
                 # Protects +12 to be RLE symbol, and +13 to be extended match symbol
@@ -375,7 +409,6 @@ class Compressor:
                 bytes_written += self._write_pattern(search_i, match)
 
             self._rle_last_written = False
-            self._last_input_buffer = self._input_buffer.copy()
             for _ in range(match_size):
                 self._input_buffer.popleft()
         else:
@@ -387,7 +420,10 @@ class Compressor:
     def _search(self, target: bytes, start=0):
         match_size = 0
         search_i = start
-        for match_size in range(self.min_pattern_size, len(target) + 1):
+        for match_size in range(
+            self.min_pattern_size,
+            min(len(target), self.max_pattern_size) + 1,
+        ):
             match = target[:match_size]
             try:
                 search_i = self._window_buffer.index(match, search_i)
@@ -521,6 +557,12 @@ class Compressor:
             bytes_written += self._compress_input_buffer_single()
         if self.v2 and self._rle_count:
             bytes_written += self._write_rle()
+
+        # Clear any cached lazy matching state
+        if self.lazy_matching:
+            self._cached_match_index = -1
+            self._cached_match_size = 0
+
         bytes_written_flush = self._bit_writer.flush(write_token=write_token)
         bytes_written += bytes_written_flush
         if bytes_written_flush:
