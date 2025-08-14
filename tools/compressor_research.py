@@ -23,14 +23,41 @@ _huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07\x09"
 _FLUSH_CODE = 0xAB  # 8 bits
 _RLE_SYMBOL = 12
 _RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
-_MATCH_EXTENSION_BITS = 6
+
+_USE_RLE_EXTENDED_HUFFMAN = False
+_RLE_EXTENDED_HUFFMAN_BITS = 4
+_RLE_EXTENDED_HUFFMAN_TRUNCATE_BITS = 0
+if _RLE_EXTENDED_HUFFMAN_TRUNCATE_BITS not in (0, 1, 2):
+    raise ValueError
+if not _USE_RLE_EXTENDED_HUFFMAN and _RLE_EXTENDED_HUFFMAN_TRUNCATE_BITS:
+    raise ValueError
+
+_USE_MATCH_EXTENSION_HUFFMAN = False
+_MATCH_EXTENSION_TRUNCATE_BITS = 0
+if _MATCH_EXTENSION_TRUNCATE_BITS not in (0, 1, 2):
+    raise ValueError
+
+_MATCH_EXTENSION_BITS = 2
+"""
+if _USE_MATCH_EXTENSION_HUFFMAN
+    _MATCH_EXTENSION_BITS represents the fixed number of MSb bits tacked on to huffman code.
+else:
+    _MATCH_EXTENSION_BITS represents the fixed number of bits.
+"""
+
+if not _USE_MATCH_EXTENSION_HUFFMAN and _MATCH_EXTENSION_TRUNCATE_BITS:
+    raise ValueError
 
 
 def _determine_rle_breakeven_point(min_pattern_size, window_bits):
     # See how many bits this encoding would be with RLE
     rle_length_bits = {}
     for i in range(min_pattern_size, min_pattern_size + 11 + 1):
-        rle_length_bits[i] = 8 + 8
+        if _USE_RLE_EXTENDED_HUFFMAN:
+            huffman_index = i >> _RLE_EXTENDED_HUFFMAN_BITS
+            rle_length_bits[i] = 8 + _RLE_EXTENDED_HUFFMAN_BITS + _huffman_bits[huffman_index]
+        else:
+            rle_length_bits[i] = 8 + 8
 
     breakeven_point = 0
     for pattern_size in range(min_pattern_size, min_pattern_size + 11 + 1):
@@ -50,9 +77,35 @@ class _BitWriter:
         self.buffer = 0  # Basically a uint32
         self.bit_pos = 0
 
-    def write_huffman(self, pattern_size):
+    def write_huffman(self, pattern_size, truncate=0):
         # pattern_size in range [0, 14]
         return self.write(_huffman_codes[pattern_size], _huffman_bits[pattern_size])
+
+    def write_extended_huffman(self, value, extended_bits, truncate_bits=0):
+        if value >= ((15 - truncate_bits) * (1 << extended_bits)):
+            raise ValueError
+
+        bytes_written = 0
+        huffman_value = value >> extended_bits
+
+        huffman_value += truncate_bits
+
+        # Swap 13 and 14 because 13 has a shorter huffman code.
+        if huffman_value == 13:
+            huffman_value = 14
+        elif huffman_value == 14:
+            huffman_value = 13
+
+        if truncate_bits:
+            code = _huffman_codes[huffman_value]
+            code_length_bits = _huffman_bits[huffman_value] - truncate_bits
+            self.write(code, code_length_bits)
+        else:
+            bytes_written += self.write_huffman(huffman_value)
+
+        # TODO: should we write the 2 bits first or last? Does it matter?
+        bytes_written += self.write(value & ((1 << extended_bits) - 1), 2)
+        return bytes_written
 
     def write(self, bits, num_bits, flush=True):
         bits = int(bits)
@@ -172,17 +225,18 @@ class Compressor:
         self.literal_bits = literal
         self.min_pattern_size = compute_min_pattern_size(window, literal)
         self.v2: bool = v2
-
         self._rle_count = 0
         self._rle_last_written = False  # The previous write was an RLE token
 
-        self._rle_max_size = 1 << _RLE_BITS
+        if _USE_RLE_EXTENDED_HUFFMAN:
+            self._rle_max_size = (15 - _RLE_EXTENDED_HUFFMAN_TRUNCATE_BITS) * (1 << _RLE_EXTENDED_HUFFMAN_BITS)
+        else:
+            self._rle_max_size = 1 << _RLE_BITS
         self._rle_breakeven = _determine_rle_breakeven_point(self.min_pattern_size, self.window_bits)
 
         self._extended_pattern_match_count = 0
         self._extended_pattern_match_position = 0
         # We could write the first 1 + 6 + 15 bits while waiting for the final 6 bits, making it safe!
-        # However, decoding will have to be broken up into 2 steps...
 
         self.lazy_matching = lazy_matching
         self._cached_match_index = -1
@@ -199,7 +253,12 @@ class Compressor:
             raise ValueError("Dictionary-window size mismatch.")
 
         if self.v2:
-            self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
+            if _USE_MATCH_EXTENSION_HUFFMAN:
+                self.max_pattern_size = (
+                    self.min_pattern_size + 11 + (15 - _MATCH_EXTENSION_TRUNCATE_BITS) * (1 << _MATCH_EXTENSION_BITS)
+                )
+            else:
+                self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
         else:
             self.max_pattern_size = self.min_pattern_size + 13
 
@@ -389,10 +448,17 @@ class Compressor:
         bytes_written = 0
         # print(self._extended_pattern_match_count)
         # breakpoint()
-        bytes_written += self._bit_writer.write(
-            self._extended_pattern_match_count - self.min_pattern_size - 11 - 1,
-            _MATCH_EXTENSION_BITS,
-        )
+        if _USE_MATCH_EXTENSION_HUFFMAN:
+            bytes_written += self._bit_writer.write_extended_huffman(
+                self._extended_pattern_match_count - self.min_pattern_size - 11 - 1,
+                _MATCH_EXTENSION_BITS,
+                truncate_bits=_MATCH_EXTENSION_TRUNCATE_BITS,
+            )
+        else:
+            bytes_written += self._bit_writer.write(
+                self._extended_pattern_match_count - self.min_pattern_size - 11 - 1,
+                _MATCH_EXTENSION_BITS,
+            )
 
         self._window_buffer.write_from_self(self._extended_pattern_match_position, self._extended_pattern_match_count)
 
@@ -444,7 +510,14 @@ class Compressor:
             if self.rle_cb:
                 self.rle_cb(self.rle_cb(self._rle_count, last_written_byte))
             bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
-            bytes_written += self._bit_writer.write(self._rle_count - 1, _RLE_BITS)
+            if _USE_RLE_EXTENDED_HUFFMAN:
+                bytes_written += self._bit_writer.write_extended_huffman(
+                    self._rle_count - 1,
+                    _RLE_EXTENDED_HUFFMAN_BITS,
+                    truncate_bits=_RLE_EXTENDED_HUFFMAN_TRUNCATE_BITS,
+                )
+            else:
+                bytes_written += self._bit_writer.write(self._rle_count - 1, _RLE_BITS)
 
             if not self._rle_last_written:
                 # Only write up to 8 bytes, and only if we didn't already do this.
