@@ -544,7 +544,75 @@ Also, from this limited test, it generally seems like a good value. Testing this
 
 The huffman encoding approach achieves an average improvement of 5.225% over the baseline Tamp algorithm across all datasets.
 
-It's slightly inefficient to breakup the huffman encoding into 2 stages like this, but has some pros in our system:
-1. Allows for efficient encoding/decoding.
-2. Allows for efficient bitshift of input/output data.
-3. Re-uses a lot of the code while maintaining backwards compatibility.
+The more general question is "is the additional compression ratios worth it for another huffman code?"
+1. Compressor would need to store a ~120 byte lookup table (exact size depending on if we tweak the zipf parameters further).
+2. Decompressor would need a 256 byte lookup table.
+
+We're looking at probably ~600 bytes of firmware overhead to add huffman encoding for the extended bits over just using normal binary encoding.
+If we could reuse our existing huffman tables, then all of a sudden this compression looks more attractive.
+
+What if we do the encoding as follows:
+1. The first 2 bits represent the 2 LSb of the decoded value.
+2. The following huffman code represents The next 4 bits.
+3. Finally, we add :math:`min_pattern_size + 12`.
+
+This would give us a poetential encoding range of ``[12, 73]``, which is pretty good!
+The slight quirk here is that we want to use the FLUSH symbol (14).
+The symbol for (13) is shorter because it was intended to be the max pattern length, so all longer patterns get downmapped to it, making it more frequent.
+
+We would want to do swap; here are a few potential C implementations that would need to be benchmarked for size and performance:
+
+.. code-block:: c
+
+    uint8_t swap_13_and_14(uint8_t val) {
+        return (val > 12) ? (27 - val) : val;
+    }
+
+    inline uint8_t swap_13_14_xor(uint8_t value) {
+        // value is in range [0, 14]
+        uint8_t is_target = (value >=13);  # value MUST be 13 or 14; 15 does not exist.
+        return value ^ (is_target | (is_target << 1));  // XOR with 0b11 to swap
+    }
+
+    inline uint8_t swap_13_14_lut(uint8_t value) {
+        static const uint8_t lut[15] = {
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 13
+        };
+        return lut[val];
+    }
+
+Using this technique:
+
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| dataset                       | raw         | tamp (max-pattern=15)  | tamp (rle + 6bit extension) | tamp (repurposed-huffman)  | Improvement (6bit to repurposed) |
++===============================+=============+========================+=============================+============================+==================================+
+| enwik8                        | 100,000,000 | 51,635,633 (**1.937**) | 51,139,758 (**1.955**)      | 51,109,328 (**1.957**)     | **+0.060%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/dickens               | 10,192,446  | 5,546,761 (**1.838**)  | 5,539,912 (**1.840**)       | 5,537,587 (**1.841**)      | **+0.042%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/mozilla               | 51,220,480  | 25,121,385 (**2.039**) | 24,257,350 (**2.112**)      | 24,191,760 (**2.117**)     | **+0.270%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/mr                    | 9,970,564   | 5,027,032 (**1.983**)  | 4,514,858 (**2.208**)       | 4,514,291 (**2.209**)      | **+0.013%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/nci                   | 33,553,445  | 8,643,610 (**3.882**)  | 6,907,163 (**4.858**)       | 7,028,528 (**4.774**)      | :bad:`-1.757%`                   |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/ooffice               | 6,152,192   | 3,814,938 (**1.613**)  | 3,777,687 (**1.629**)       | 3,775,261 (**1.630**)      | **+0.064%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/osdb                  | 10,085,684  | 8,520,835 (**1.184**)  | 8,475,184 (**1.190**)       | 8,473,277 (**1.190**)      | **+0.023%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/reymont               | 6,627,202   | 2,847,981 (**2.327**)  | 2,827,386 (**2.344**)       | 2,823,859 (**2.347**)      | **+0.125%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/samba                 | 21,606,400  | 9,102,594 (**2.374**)  | 8,437,537 (**2.561**)       | 8,456,685 (**2.555**)      | :neutral:`-0.227%`               |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/sao                   | 7,251,944   | 6,137,755 (**1.182**)  | 6,137,330 (**1.182**)       | 6,137,329 (**1.182**)      | **+0.000%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/webster               | 41,458,703  | 18,694,172 (**2.218**) | 18,224,796 (**2.275**)      | 18,212,452 (**2.276**)     | **+0.068%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/x-ray                 | 8,474,240   | 7,510,606 (**1.128**)  | 7,510,986 (**1.128**)       | 7,510,986 (**1.128**)      | **+0.000%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| silesia/xml                   | 5,345,280   | 1,681,687 (**3.179**)  | 1,496,263 (**3.572**)       | 1,502,674 (**3.557**)      | :neutral:`-0.428%`               |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+| RPI_PICO-20250415-v1.25.0.uf2 | 667,648     | 331,310 (**2.015**)    | 288,649 (**2.313**)         | 288,542 (**2.314**)        | **+0.037%**                      |
++-------------------------------+-------------+------------------------+-----------------------------+----------------------------+----------------------------------+
+
+Unfortunately, it does not appear that this technique does not improve the results to justify the additional code/complexity.
