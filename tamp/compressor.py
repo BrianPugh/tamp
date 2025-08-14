@@ -23,12 +23,25 @@ _huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07\x09"
 _FLUSH_CODE = 0xAB  # 8 bits
 _RLE_SYMBOL = 12
 _RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
-_MATCH_EXTENSION_BITS = 6
 
 _USE_RLE_EXTENDED_HUFFMAN = True
 _RLE_EXTENDED_HUFFMAN_BITS = 4
 
 _USE_MATCH_EXTENSION_HUFFMAN = False
+_MATCH_EXTENSION_TRUNCATE_BITS = 0
+if _MATCH_EXTENSION_TRUNCATE_BITS not in (0, 1, 2):
+    raise ValueError
+
+_MATCH_EXTENSION_BITS = 6
+"""
+if _USE_MATCH_EXTENSION_HUFFMAN
+    _MATCH_EXTENSION_BITS represents the fixed number of MSb bits tacked on to huffman code.
+else:
+    _MATCH_EXTENSION_BITS represents the fixed number of bits.
+"""
+
+if not _USE_MATCH_EXTENSION_HUFFMAN and _MATCH_EXTENSION_TRUNCATE_BITS:
+    raise ValueError
 
 
 def _determine_rle_breakeven_point(min_pattern_size, window_bits):
@@ -59,24 +72,34 @@ class _BitWriter:
         self.buffer = 0  # Basically a uint32
         self.bit_pos = 0
 
-    def write_huffman(self, pattern_size):
+    def write_huffman(self, pattern_size, truncate=0):
         # pattern_size in range [0, 14]
         return self.write(_huffman_codes[pattern_size], _huffman_bits[pattern_size])
 
-    def write_extended_huffman(self, size, extended_bits):
-        if size >= (15 * (1 << extended_bits)):
-            # size is in range [0, 60)
+    def write_extended_huffman(self, value, extended_bits, truncate_bits=0):
+        if value >= ((15 - truncate_bits) * (1 << extended_bits)):
             raise ValueError
+
         bytes_written = 0
-        huffman_value = size >> extended_bits
+        huffman_value = value >> extended_bits
+
+        huffman_value += truncate_bits
+
         # Swap 13 and 14 because 13 has a shorter huffman code.
         if huffman_value == 13:
             huffman_value = 14
         elif huffman_value == 14:
             huffman_value = 13
-        bytes_written += self.write_huffman(huffman_value)
+
+        if truncate_bits:
+            code = _huffman_codes[huffman_value]
+            code_length_bits = _huffman_bits[huffman_value] - truncate_bits
+            self.write(code, code_length_bits)
+        else:
+            bytes_written += self.write_huffman(huffman_value)
+
         # TODO: should we write the 2 bits first or last? Does it matter?
-        bytes_written += self.write(size & ((1 << extended_bits) - 1), 2)
+        bytes_written += self.write(value & ((1 << extended_bits) - 1), 2)
         return bytes_written
 
     def write(self, bits, num_bits, flush=True):
@@ -226,7 +249,9 @@ class Compressor:
 
         if self.v2:
             if _USE_MATCH_EXTENSION_HUFFMAN:
-                self.max_pattern_size = self.min_pattern_size + 11 + 15 * (1 << _MATCH_EXTENSION_BITS)
+                self.max_pattern_size = (
+                    self.min_pattern_size + 11 + (15 - _MATCH_EXTENSION_TRUNCATE_BITS) * (1 << _MATCH_EXTENSION_BITS)
+                )
             else:
                 self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
         else:
@@ -420,7 +445,9 @@ class Compressor:
         # breakpoint()
         if _USE_MATCH_EXTENSION_HUFFMAN:
             bytes_written += self._bit_writer.write_extended_huffman(
-                self._extended_pattern_match_count - self.min_pattern_size - 11 - 1, _MATCH_EXTENSION_BITS
+                self._extended_pattern_match_count - self.min_pattern_size - 11 - 1,
+                _MATCH_EXTENSION_BITS,
+                truncate_bits=_MATCH_EXTENSION_TRUNCATE_BITS,
             )
         else:
             bytes_written += self._bit_writer.write(
