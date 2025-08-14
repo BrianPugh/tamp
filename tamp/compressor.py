@@ -28,6 +28,8 @@ _MATCH_EXTENSION_BITS = 6
 _USE_RLE_EXTENDED_HUFFMAN = True
 _RLE_EXTENDED_HUFFMAN_BITS = 4
 
+_USE_MATCH_EXTENSION_HUFFMAN = False
+
 
 def _determine_rle_breakeven_point(min_pattern_size, window_bits):
     # See how many bits this encoding would be with RLE
@@ -200,22 +202,8 @@ class Compressor:
 
         if _USE_RLE_EXTENDED_HUFFMAN:
             self._rle_max_size = 15 * (1 << _RLE_EXTENDED_HUFFMAN_BITS)
-
-            """
-            minimum_rle_size = 8 + _RLE_EXTENDED_HUFFMAN_BITS + 1
-            breakeven_huffman_bits = minimum_rle_size - self.window_bits - 1
-            best_pattern_size = 0
-            for i, n_bits in enumerate(_huffman_bits):
-                if n_bits == breakeven_huffman_bits:
-                    best_pattern_size = i
-            if best_pattern_size == 0:
-                breakpoint()
-                raise ValueError
-            self._rle_breakeven = best_pattern_size
-            """
         else:
             self._rle_max_size = 1 << _RLE_BITS
-            self._rle_breakeven = self.min_pattern_size + 7  # TODO: double check this math for all configurations
         self._rle_breakeven = _determine_rle_breakeven_point(self.min_pattern_size, self.window_bits)
 
         self._extended_pattern_match_count = 0
@@ -237,7 +225,10 @@ class Compressor:
             raise ValueError("Dictionary-window size mismatch.")
 
         if self.v2:
-            self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
+            if _USE_MATCH_EXTENSION_HUFFMAN:
+                self.max_pattern_size = self.min_pattern_size + 11 + 15 * (1 << _MATCH_EXTENSION_BITS)
+            else:
+                self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
         else:
             self.max_pattern_size = self.min_pattern_size + 13
 
@@ -427,10 +418,15 @@ class Compressor:
         bytes_written = 0
         # print(self._extended_pattern_match_count)
         # breakpoint()
-        bytes_written += self._bit_writer.write(
-            self._extended_pattern_match_count - self.min_pattern_size - 11 - 1,
-            _MATCH_EXTENSION_BITS,
-        )
+        if _USE_MATCH_EXTENSION_HUFFMAN:
+            bytes_written += self._bit_writer.write_extended_huffman(
+                self._extended_pattern_match_count - self.min_pattern_size - 11 - 1, _MATCH_EXTENSION_BITS
+            )
+        else:
+            bytes_written += self._bit_writer.write(
+                self._extended_pattern_match_count - self.min_pattern_size - 11 - 1,
+                _MATCH_EXTENSION_BITS,
+            )
 
         self._window_buffer.write_from_self(self._extended_pattern_match_position, self._extended_pattern_match_count)
 
