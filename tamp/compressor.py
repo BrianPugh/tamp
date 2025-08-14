@@ -25,7 +25,27 @@ _RLE_SYMBOL = 12
 _RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
 _MATCH_EXTENSION_BITS = 6
 
-_USE_RLE_EXTENDED_HUFFMAN = False
+_USE_RLE_EXTENDED_HUFFMAN = True
+_RLE_EXTENDED_HUFFMAN_BITS = 4
+
+
+def _determine_rle_breakeven_point(min_pattern_size, window_bits):
+    # See how many bits this encoding would be with RLE
+    rle_length_bits = {}
+    for i in range(min_pattern_size, min_pattern_size + 11 + 1):
+        if _USE_RLE_EXTENDED_HUFFMAN:
+            huffman_index = i >> _RLE_EXTENDED_HUFFMAN_BITS
+            rle_length_bits[i] = 8 + _RLE_EXTENDED_HUFFMAN_BITS + _huffman_bits[huffman_index]
+        else:
+            rle_length_bits[i] = 8 + 8
+
+    breakeven_point = 0
+    for pattern_size in range(min_pattern_size, min_pattern_size + 11 + 1):
+        huffman_index = pattern_size - min_pattern_size
+        pattern_length_bits = _huffman_bits[huffman_index] + window_bits
+        if pattern_length_bits < rle_length_bits[pattern_size]:
+            breakeven_point = pattern_size
+    return breakeven_point
 
 
 class _BitWriter:
@@ -171,13 +191,32 @@ class Compressor:
         lazy_matching: bool
             Use roughly 50% more cpu to get 0~2% better compression.
         """
+        self.window_bits = window
+        self.literal_bits = literal
+        self.min_pattern_size = compute_min_pattern_size(window, literal)
         self.v2: bool = v2
         self._rle_count = 0
         self._rle_last_written = False  # The previous write was an RLE token
+
         if _USE_RLE_EXTENDED_HUFFMAN:
-            self._rle_max_size = 60
+            self._rle_max_size = 15 * (1 << _RLE_EXTENDED_HUFFMAN_BITS)
+
+            """
+            minimum_rle_size = 8 + _RLE_EXTENDED_HUFFMAN_BITS + 1
+            breakeven_huffman_bits = minimum_rle_size - self.window_bits - 1
+            best_pattern_size = 0
+            for i, n_bits in enumerate(_huffman_bits):
+                if n_bits == breakeven_huffman_bits:
+                    best_pattern_size = i
+            if best_pattern_size == 0:
+                breakpoint()
+                raise ValueError
+            self._rle_breakeven = best_pattern_size
+            """
         else:
             self._rle_max_size = 1 << _RLE_BITS
+            self._rle_breakeven = self.min_pattern_size + 7  # TODO: double check this math for all configurations
+        self._rle_breakeven = _determine_rle_breakeven_point(self.min_pattern_size, self.window_bits)
 
         self._extended_pattern_match_count = 0
         self._extended_pattern_match_position = 0
@@ -197,10 +236,6 @@ class Compressor:
         if dictionary and bit_size(len(dictionary) - 1) != window:
             raise ValueError("Dictionary-window size mismatch.")
 
-        self.window_bits = window
-        self.literal_bits = literal
-
-        self.min_pattern_size = compute_min_pattern_size(window, literal)
         if self.v2:
             self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
         else:
@@ -298,7 +333,7 @@ class Compressor:
                 target = bytes(self._input_buffer)
                 self._rle_count = 0
             elif self._rle_count:
-                if self._rle_count > (self.min_pattern_size + 7):  # TODO: double check this math for all configurations
+                if self._rle_count > self._rle_breakeven:
                     # It's certainly better to do a RLE write than searching for a pattern.
                     return self._write_rle()
                 else:
@@ -448,7 +483,9 @@ class Compressor:
                 self.rle_cb(self.rle_cb(self._rle_count, last_written_byte))
             bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
             if _USE_RLE_EXTENDED_HUFFMAN:
-                bytes_written += self._bit_writer.write_extended_huffman(self._rle_count - 1, 2)
+                bytes_written += self._bit_writer.write_extended_huffman(
+                    self._rle_count - 1, _RLE_EXTENDED_HUFFMAN_BITS
+                )
             else:
                 bytes_written += self._bit_writer.write(self._rle_count - 1, _RLE_BITS)
 
