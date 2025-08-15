@@ -22,9 +22,10 @@ _huffman_codes = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'\xab"
 _huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07\x09"
 _FLUSH_CODE = 0xAB  # 8 bits
 _RLE_SYMBOL = 12
+_RLE_MAX_WINDOW = 8  # Maximum number of RLE bytes to write to the window.
 _EXTENDED_MATCH_SYMBOL = 13
 _RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
-_MATCH_EXTENDED_BITS = 6
+_EXTENDED_MATCH_BITS = 6
 
 
 def _determine_rle_breakeven_point(min_pattern_size, window_bits):
@@ -177,11 +178,12 @@ class Compressor:
         self._rle_count = 0
         self._rle_last_written = False  # The previous write was an RLE token
 
-        self._rle_max_size = 1 << _RLE_BITS
+        # "+1" Because a RLE of 1 is not valid.
+        self._rle_max_size = (1 << _RLE_BITS) + 1
         self._rle_breakeven = _determine_rle_breakeven_point(self.min_pattern_size, self.window_bits)
 
-        self._extended_pattern_match_count = 0
-        self._extended_pattern_match_position = 0
+        self._extended_match_count = 0
+        self._extended_pattern_position = 0
         # We could write the first 1 + 6 + 15 bits while waiting for the final 6 bits, making it safe!
         # However, decoding will have to be broken up into 2 steps...
 
@@ -200,7 +202,7 @@ class Compressor:
             raise ValueError("Dictionary-window size mismatch.")
 
         if self.v2:
-            self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENDED_BITS)
+            self.max_pattern_size = self.min_pattern_size + 11 + (1 << _EXTENDED_MATCH_BITS)
         else:
             self.max_pattern_size = self.min_pattern_size + 13
 
@@ -217,6 +219,9 @@ class Compressor:
         self.literal_cb = None
         self.flush_cb = None
         self.rle_cb = None
+
+        # For debugging: how many uncompressed bytes have we consumed so far.
+        self.input_index = 0
 
         # Write header
         self._bit_writer.write(window - 8, 3, flush=False)
@@ -235,40 +240,39 @@ class Compressor:
         if not self._input_buffer:
             return bytes_written
 
-        if self._extended_pattern_match_count:
-            target = self._window_buffer.get(self._extended_pattern_match_position, self._extended_pattern_match_count)
+        if self._extended_match_count:
             while self._input_buffer:
-                target += bytes([self._input_buffer[0]])
-                search_i, match = self._search(target, start=self._extended_pattern_match_position)
-                match_size = len(match)
-                if match_size > self._extended_pattern_match_count:
-                    self._input_buffer.popleft()
-                    self._extended_pattern_match_count = match_size
-                    self._extended_pattern_match_position = search_i
-                    if self._extended_pattern_match_count == self.max_pattern_size:
-                        bytes_written += self._write_pattern_extended_bits()
-                        return bytes_written
-                    continue
-                elif search_i + match_size >= self._window_buffer.size:
+                if (self._extended_pattern_position + self._extended_match_count) >= self._window_buffer.size:
                     # wrap-around search: it's fine to check for the wrap now because it's super cheap here.
-                    while self._input_buffer:
-                        pos = (search_i + match_size) % self._window_buffer.size
-                        if self._window_buffer.buffer[pos] == self._input_buffer[0]:
-                            self._input_buffer.popleft()
-                            self._extended_pattern_match_count += 1
-                            if self._extended_pattern_match_count == self.max_pattern_size:
-                                bytes_written += self._write_pattern_extended_bits()
-                                return bytes_written
-                            continue
-                        # We've found the end of the match
-                        break
+                    pos = (self._extended_pattern_position + self._extended_match_count) % self._window_buffer.size
+                    if self._window_buffer.buffer[pos] == self._input_buffer[0]:
+                        self._input_buffer.popleft()
+                        self._extended_match_count += 1
+                        if self._extended_match_count == self.max_pattern_size:
+                            bytes_written += self._write_extended_match_position_and_size()
+                            return bytes_written
+                        continue
+                    # We've found the end of the match
+                    bytes_written += self._write_extended_match_position_and_size()
+                    return bytes_written
+                else:
+                    # Search the remainder of the window buffer.
+                    target = self._window_buffer.get(self._extended_pattern_position, self._extended_match_count)
+                    target += bytes([self._input_buffer[0]])
+                    search_i, match = self._search(target, start=self._extended_pattern_position)
+                    match_size = len(match)
+                    if match_size > self._extended_match_count:
+                        self._input_buffer.popleft()
+                        self._extended_match_count = match_size
+                        self._extended_pattern_position = search_i
+                        if self._extended_match_count == self.max_pattern_size:
+                            bytes_written += self._write_extended_match_position_and_size()
+                            return bytes_written
+                        continue
                     else:
-                        # We ran out of input_buffer, return so caller can re-populate the input_buffer
+                        # We've found the end of the match
+                        bytes_written += self._write_extended_match_position_and_size()
                         return bytes_written
-
-                # We've found the end of the match
-                bytes_written += self._write_pattern_extended_bits()
-                return bytes_written
             else:
                 # We ran out of input_buffer, return so caller can re-populate the input_buffer
                 return bytes_written
@@ -281,6 +285,8 @@ class Compressor:
 
         if self.v2:
             # RLE same-character-counting logic
+            # TODO: look for >self._rle_breakeven streaks in the input_buffer.
+            # If so, limit the search.
             while (
                 target and target[0] == self._window_buffer.last_written_byte and self._rle_count < self._rle_max_size
             ):
@@ -298,7 +304,8 @@ class Compressor:
             elif self._rle_count:
                 if self._rle_count > self._rle_breakeven:
                     # It's certainly better to do a RLE write than searching for a pattern.
-                    return self._write_rle()
+                    bytes_written += self._write_rle()
+                    return bytes_written
                 else:
                     # We'll see if pattern-matching offers a better encoding.
                     target = bytes([self._window_buffer.last_written_byte]) * self._rle_count
@@ -354,9 +361,8 @@ class Compressor:
                 # Protects +12 to be RLE symbol, and +13 to be extended match symbol
                 # Write the "extended" match symbol
                 bytes_written += self._bit_writer.write_huffman(_EXTENDED_MATCH_SYMBOL)
-                bytes_written += self._bit_writer.write(search_i, self.window_bits)
-                self._extended_pattern_match_position = search_i
-                self._extended_pattern_match_count = match_size
+                self._extended_pattern_position = search_i
+                self._extended_match_count = match_size
             else:
                 bytes_written += self._write_pattern(search_i, match)
 
@@ -386,20 +392,19 @@ class Compressor:
         match = target[:match_size]
         return search_i, match
 
-    def _write_pattern_extended_bits(self):
+    def _write_extended_match_position_and_size(self):
         bytes_written = 0
-        # print(self._extended_pattern_match_count)
-        # breakpoint()
+        bytes_written += self._bit_writer.write(self._extended_pattern_position, self.window_bits)
         bytes_written += self._bit_writer.write(
-            self._extended_pattern_match_count - self.min_pattern_size - 11 - 1,
-            _MATCH_EXTENDED_BITS,
+            self._extended_match_count - self.min_pattern_size - 11 - 1,
+            _EXTENDED_MATCH_BITS,
         )
 
-        self._window_buffer.write_from_self(self._extended_pattern_match_position, self._extended_pattern_match_count)
+        self._window_buffer.write_from_self(self._extended_pattern_position, self._extended_match_count)
 
         # Reset state
-        self._extended_pattern_match_count = 0
-        self._extended_pattern_match_position = 0  # Technically not necessary.
+        self._extended_match_count = 0
+        self._extended_pattern_position = 0  # Technically not necessary.
 
         return bytes_written
 
@@ -440,17 +445,17 @@ class Compressor:
             raise ValueError("No RLE to write.")
         elif self._rle_count == 1:
             # Just write a literal
-            bytes_written += self._bit_writer.write(last_written_byte | self.literal_flag, self.literal_bits + 1)
+            bytes_written += self._write_literal(last_written_byte)
         else:
             if self.rle_cb:
                 self.rle_cb(self.rle_cb(self._rle_count, last_written_byte))
             bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
-            bytes_written += self._bit_writer.write(self._rle_count - 1, _RLE_BITS)
+            bytes_written += self._bit_writer.write(self._rle_count - 2, _RLE_BITS)
 
             if not self._rle_last_written:
                 # Only write up to 8 bytes, and only if we didn't already do this.
                 # This prevents filling up the window buffer with unhelpful data.
-                self._window_buffer.write_bytes(bytes([last_written_byte]) * min(self._rle_count, 8))
+                self._window_buffer.write_bytes(bytes([last_written_byte]) * min(self._rle_count, _RLE_MAX_WINDOW))
 
             self._rle_last_written = True
 
@@ -473,8 +478,12 @@ class Compressor:
         """
         bytes_written = 0
 
-        for char in data:
-            self._input_buffer.append(char)
+        self.input_index = 0
+        while self.input_index < len(data):
+            if len(self._input_buffer) != self._input_buffer.maxlen:
+                self._input_buffer.append(data[self.input_index])
+                self.input_index += 1
+
             if len(self._input_buffer) == self._input_buffer.maxlen:
                 bytes_written += self._compress_input_buffer_single()
 
