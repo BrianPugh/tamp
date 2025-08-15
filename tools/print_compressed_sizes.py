@@ -33,7 +33,7 @@ def main():
         ratios.append(ratio)
 
         # Print with thousands separators
-        print(f"{file_path.name}: {compressed_size:,} bytes ({ratio})")
+        print(f"{file_path.name}: {compressed_size:,} (**{ratio:.3f}**)")
 
     avg = sum(ratios) / len(ratios)
     print(f"Average Ratio: {avg}")
