@@ -16,6 +16,7 @@ def main():
     test_files = [build_dir / "enwik8", build_dir / "RPI_PICO-20250415-v1.25.0.uf2", *(build_dir / "silesia").iterdir()]
     test_files.sort()
 
+    ratios = []
     for file_path in test_files:
         # Read and compress the file
         data = file_path.read_bytes()
@@ -24,10 +25,18 @@ def main():
             continue
 
         compressed_data = tamp.compressor.compress(data)
+
+        original_size = len(data)
         compressed_size = len(compressed_data)
 
+        ratio = original_size / compressed_size
+        ratios.append(ratio)
+
         # Print with thousands separators
-        print(f"{file_path.name}: {compressed_size:,} bytes")
+        print(f"{file_path.name}: {compressed_size:,} bytes ({ratio})")
+
+    avg = sum(ratios) / len(ratios)
+    print(f"Average Ratio: {avg}")
 
 
 if __name__ == "__main__":

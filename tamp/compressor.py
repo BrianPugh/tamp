@@ -22,8 +22,9 @@ _huffman_codes = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'\xab"
 _huffman_bits = b"\x02\x03\x05\x05\x06\x07\x07\x07\x08\x08\x09\x09\x09\x07\x09"
 _FLUSH_CODE = 0xAB  # 8 bits
 _RLE_SYMBOL = 12
+_EXTENDED_MATCH_SYMBOL = 13
 _RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
-_MATCH_EXTENSION_BITS = 6
+_MATCH_EXTENDED_BITS = 6
 
 
 def _determine_rle_breakeven_point(min_pattern_size, window_bits):
@@ -199,7 +200,7 @@ class Compressor:
             raise ValueError("Dictionary-window size mismatch.")
 
         if self.v2:
-            self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENSION_BITS)
+            self.max_pattern_size = self.min_pattern_size + 11 + (1 << _MATCH_EXTENDED_BITS)
         else:
             self.max_pattern_size = self.min_pattern_size + 13
 
@@ -352,7 +353,7 @@ class Compressor:
             if self.v2 and match_size > (self.min_pattern_size + 11):
                 # Protects +12 to be RLE symbol, and +13 to be extended match symbol
                 # Write the "extended" match symbol
-                bytes_written += self._bit_writer.write_huffman(13)
+                bytes_written += self._bit_writer.write_huffman(_EXTENDED_MATCH_SYMBOL)
                 bytes_written += self._bit_writer.write(search_i, self.window_bits)
                 self._extended_pattern_match_position = search_i
                 self._extended_pattern_match_count = match_size
@@ -391,7 +392,7 @@ class Compressor:
         # breakpoint()
         bytes_written += self._bit_writer.write(
             self._extended_pattern_match_count - self.min_pattern_size - 11 - 1,
-            _MATCH_EXTENSION_BITS,
+            _MATCH_EXTENDED_BITS,
         )
 
         self._window_buffer.write_from_self(self._extended_pattern_match_position, self._extended_pattern_match_count)
