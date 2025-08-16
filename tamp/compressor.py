@@ -27,6 +27,8 @@ _EXTENDED_MATCH_SYMBOL = 13
 _RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
 _EXTENDED_MATCH_BITS = 6
 
+_LEADING_BITS = 1
+
 
 def _determine_rle_breakeven_point(min_pattern_size, window_bits):
     # See how many bits this encoding would be with RLE
@@ -52,7 +54,7 @@ class _BitWriter:
         self.buffer = 0  # Basically a uint32
         self.bit_pos = 0
 
-    def write_huffman(self, pattern_size):
+    def write_huffman_and_literal_flag(self, pattern_size, write_literal_flag=True):
         # pattern_size in range [0, 14]
         return self.write(_huffman_codes[pattern_size], _huffman_bits[pattern_size])
 
@@ -202,7 +204,7 @@ class Compressor:
             raise ValueError("Dictionary-window size mismatch.")
 
         if self.v2:
-            self.max_pattern_size = self.min_pattern_size + 11 + (1 << _EXTENDED_MATCH_BITS)
+            self.max_pattern_size = self.min_pattern_size + 11 + (13 << _LEADING_BITS) + (1 << _LEADING_BITS)
         else:
             self.max_pattern_size = self.min_pattern_size + 13
 
@@ -387,16 +389,28 @@ class Compressor:
         match = target[:match_size]
         return search_i, match
 
+    def _write_extended_huffman(self, value, leading_bits):
+        bytes_written = 0
+        # the upper bits can have values [0, 13]
+        mask = (1 << leading_bits) - 1
+        if value > ((13 << leading_bits) + mask) or value < 0:
+            raise ValueError
+        code_index = value >> leading_bits
+        # Don't use write_huffman_and_literal_flag since we don't want to write a flag.
+        bytes_written += self._bit_writer.write(_huffman_codes[code_index], _huffman_bits[code_index] - 1)
+        bytes_written += self._bit_writer.write(value & mask, leading_bits)
+        return bytes_written
+
     def _write_extended_match(self):
         bytes_written = 0
         if self.extended_match_cb:
             string = self._window_buffer.get(self._extended_match_position, self._extended_match_count)
             self.extended_match_cb(self._extended_match_position, self._extended_match_count, string)
-        bytes_written += self._bit_writer.write_huffman(_EXTENDED_MATCH_SYMBOL)
+        bytes_written += self._bit_writer.write_huffman_and_literal_flag(_EXTENDED_MATCH_SYMBOL)
         bytes_written += self._bit_writer.write(self._extended_match_position, self.window_bits)
-        bytes_written += self._bit_writer.write(
+        bytes_written += self._write_extended_huffman(
             self._extended_match_count - self.min_pattern_size - 11 - 1,
-            _EXTENDED_MATCH_BITS,
+            _LEADING_BITS,
         )
 
         self._window_buffer.write_from_self(self._extended_match_position, self._extended_match_count)
@@ -430,7 +444,7 @@ class Compressor:
             )
 
         bytes_written = 0
-        bytes_written += self._bit_writer.write_huffman(match_size - self.min_pattern_size)
+        bytes_written += self._bit_writer.write_huffman_and_literal_flag(match_size - self.min_pattern_size)
         bytes_written += self._bit_writer.write(search_i, self.window_bits)
         self._window_buffer.write_bytes(match)
         self._rle_last_written = False
@@ -448,7 +462,7 @@ class Compressor:
         else:
             if self.rle_cb:
                 self.rle_cb(self._rle_count, last_written_byte)
-            bytes_written += self._bit_writer.write_huffman(_RLE_SYMBOL)
+            bytes_written += self._bit_writer.write_huffman_and_literal_flag(_RLE_SYMBOL)
             bytes_written += self._bit_writer.write(self._rle_count - 2, _RLE_BITS)
 
             if not self._rle_last_written:
