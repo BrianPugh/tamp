@@ -25,9 +25,7 @@ _RLE_SYMBOL = 12
 _RLE_MAX_WINDOW = 8  # Maximum number of RLE bytes to write to the window.
 _EXTENDED_MATCH_SYMBOL = 13
 _RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
-_EXTENDED_MATCH_BITS = 6
-
-_LEADING_BITS = 1
+_LEADING_EXTENDED_MATCH_HUFFMAN_BITS = 3
 
 
 def _determine_rle_breakeven_point(min_pattern_size, window_bits):
@@ -204,7 +202,12 @@ class Compressor:
             raise ValueError("Dictionary-window size mismatch.")
 
         if self.v2:
-            self.max_pattern_size = self.min_pattern_size + 11 + (13 << _LEADING_BITS) + (1 << _LEADING_BITS)
+            self.max_pattern_size = (
+                self.min_pattern_size
+                + 11
+                + (13 << _LEADING_EXTENDED_MATCH_HUFFMAN_BITS)
+                + (1 << _LEADING_EXTENDED_MATCH_HUFFMAN_BITS)
+            )
         else:
             self.max_pattern_size = self.min_pattern_size + 13
 
@@ -410,7 +413,7 @@ class Compressor:
         bytes_written += self._bit_writer.write(self._extended_match_position, self.window_bits)
         bytes_written += self._write_extended_huffman(
             self._extended_match_count - self.min_pattern_size - 11 - 1,
-            _LEADING_BITS,
+            _LEADING_EXTENDED_MATCH_HUFFMAN_BITS,
         )
 
         self._window_buffer.write_from_self(self._extended_match_position, self._extended_match_count)

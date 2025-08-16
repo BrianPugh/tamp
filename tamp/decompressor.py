@@ -16,7 +16,7 @@ _EXTENDED_MATCH_SYMBOL = 13
 _RLE_BITS = 8
 _RLE_MAX_WINDOW = 8  # Maximum number of RLE bytes to write to the window.
 _EXTENDED_MATCH_BITS = 6
-_LEADING_BITS = 1
+_LEADING_EXTENDED_MATCH_HUFFMAN_BITS = 3
 
 # Each key here are the huffman codes or'd with 0x80
 # This is so that each lookup is easy/quick.
@@ -260,8 +260,8 @@ class Decompressor:
                             elif match_size == _EXTENDED_MATCH_SYMBOL:
                                 index = self._bit_reader.read(self.window_bits)
                                 match_size = self._bit_reader.read_huffman()
-                                match_size <<= _LEADING_BITS
-                                match_size += self._bit_reader.read(_LEADING_BITS)
+                                match_size <<= _LEADING_EXTENDED_MATCH_HUFFMAN_BITS
+                                match_size += self._bit_reader.read(_LEADING_EXTENDED_MATCH_HUFFMAN_BITS)
                                 match_size += self.min_pattern_size + 11 + 1
 
                                 string = self._window_buffer.get(index, match_size)
