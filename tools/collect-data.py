@@ -55,7 +55,7 @@ def main():
             compressed_out,
             window=args.window_bits,
         )
-        compressor.token_cb = token_cb
+        compressor.match_cb = token_cb
         compressor.literal_cb = literal_cb
         compressor.flush_cb = flush_cb
 

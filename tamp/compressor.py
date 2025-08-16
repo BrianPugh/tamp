@@ -24,22 +24,26 @@ _FLUSH_CODE = 0xAB  # 8 bits
 _RLE_SYMBOL = 12
 _RLE_MAX_WINDOW = 8  # Maximum number of RLE bytes to write to the window.
 _EXTENDED_MATCH_SYMBOL = 13
-_RLE_BITS = 8  # MUST be 8 or less; there are design consequences otherwise.
 _LEADING_EXTENDED_MATCH_HUFFMAN_BITS = 3
+_LEADING_RLE_HUFFMAN_BITS = 4
 
 
 def _determine_rle_breakeven_point(min_pattern_size, window_bits):
+    # Determines if a pattern-match would be shorter than a RLE match.
     # See how many bits this encoding would be with RLE
     rle_length_bits = {}
     for i in range(min_pattern_size, min_pattern_size + 11 + 1):
-        rle_length_bits[i] = 8 + 8
+        rle_length_bits[i] = 8 + _LEADING_RLE_HUFFMAN_BITS + _huffman_bits[(i - 1) >> _LEADING_RLE_HUFFMAN_BITS]
+
+    pattern_length_bits = {}
+    for i in range(min_pattern_size, min_pattern_size + 11 + 1):
+        pattern_length_bits[i] = _huffman_bits[i - min_pattern_size] + window_bits
 
     breakeven_point = 0
-    for pattern_size in range(min_pattern_size, min_pattern_size + 11 + 1):
-        huffman_index = pattern_size - min_pattern_size
-        pattern_length_bits = _huffman_bits[huffman_index] + window_bits
-        if pattern_length_bits < rle_length_bits[pattern_size]:
+    for pattern_size in sorted(pattern_length_bits):
+        if pattern_length_bits[pattern_size] < rle_length_bits[pattern_size]:
             breakeven_point = pattern_size
+
     return breakeven_point
 
 
@@ -179,7 +183,7 @@ class Compressor:
         self._rle_last_written = False  # The previous write was an RLE token
 
         # "+1" Because a RLE of 1 is not valid.
-        self._rle_max_size = (1 << _RLE_BITS) + 1
+        self._rle_max_size = (13 << _LEADING_RLE_HUFFMAN_BITS) + (1 << _LEADING_RLE_HUFFMAN_BITS) + 1
         self._rle_breakeven = _determine_rle_breakeven_point(self.min_pattern_size, self.window_bits)
 
         self._extended_match_count = 0
@@ -326,7 +330,7 @@ class Compressor:
         if self._rle_count:
             # Check to see if the found pattern-match is more efficient than the RLE encoding.
             assert self._rle_count >= 2  # noqa: S101
-            if match_size == self._rle_count:
+            if match_size >= self._rle_count:
                 # Pattern is better than RLE
                 bytes_written += self._write_match(search_i, match)
                 self._rle_count = 0
@@ -466,7 +470,7 @@ class Compressor:
             if self.rle_cb:
                 self.rle_cb(self._rle_count, last_written_byte)
             bytes_written += self._bit_writer.write_huffman_and_literal_flag(_RLE_SYMBOL)
-            bytes_written += self._bit_writer.write(self._rle_count - 2, _RLE_BITS)
+            bytes_written += self._write_extended_huffman(self._rle_count - 2, _LEADING_RLE_HUFFMAN_BITS)
 
             if not self._rle_last_written:
                 # Only write up to 8 bytes, and only if we didn't already do this.

@@ -189,6 +189,8 @@ def collect_events(
 @analyze_app.command(name="events")
 def analyze_events(
     src: Path = Path("out.events"),
+    *,
+    shift: bool = True,
 ):
     with src.open("rb") as f:
         results = pickle.load(f)  # noqa: S301
@@ -226,8 +228,18 @@ def analyze_events(
     if results["match"]:
         plot_data.append(("Match Size Distribution", "Match Size", results["match"]))
     if results["extended_match"]:
+        if shift:
+            updated = {}
+            for k, v in results["extended_match"].items():
+                updated[(k - 11 - 2 - 1) >> 3] = v
+            results["extended_match"] = updated
         plot_data.append(("Extended Match Size Distribution", "Extended Match Size", results["extended_match"]))
     if results["rle"]:
+        if shift:
+            updated = {}
+            for k, v in results["rle"].items():
+                updated[(k - 2) >> 4] = v
+            results["rle"] = updated
         plot_data.append(("RLE Size Distribution", "RLE Size", results["rle"]))
 
     if plot_data:

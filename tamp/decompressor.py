@@ -13,10 +13,9 @@ _FLUSH = object()
 # These variables must match compressor.py
 _RLE_SYMBOL = 12
 _EXTENDED_MATCH_SYMBOL = 13
-_RLE_BITS = 8
 _RLE_MAX_WINDOW = 8  # Maximum number of RLE bytes to write to the window.
-_EXTENDED_MATCH_BITS = 6
 _LEADING_EXTENDED_MATCH_HUFFMAN_BITS = 3
+_LEADING_RLE_HUFFMAN_BITS = 4
 
 # Each key here are the huffman codes or'd with 0x80
 # This is so that each lookup is easy/quick.
@@ -251,7 +250,10 @@ class Decompressor:
                             continue
                         if self.v2 and match_size > 11:
                             if match_size == _RLE_SYMBOL:
-                                rle_count = self._bit_reader.read(_RLE_BITS) + 1 + 1
+                                rle_count = self._bit_reader.read_huffman()
+                                rle_count <<= _LEADING_RLE_HUFFMAN_BITS
+                                rle_count += self._bit_reader.read(_LEADING_RLE_HUFFMAN_BITS)
+                                rle_count += 1 + 1
                                 symbol = self._window_buffer.last_written_byte
                                 string = bytes([symbol]) * rle_count
                                 if not self._rle_last_written:
