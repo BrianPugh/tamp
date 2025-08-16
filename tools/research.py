@@ -83,7 +83,7 @@ def collect_literal_streaks(
     events = bytearray(len(plaintext))
     n_events = 0
 
-    def token_cb(offset, match_size, pattern):
+    def match_cb(offset, match_size, pattern):
         nonlocal n_events
         events[n_events] = 0x80 | match_size
         n_events += 1
@@ -98,7 +98,7 @@ def collect_literal_streaks(
     with BytesIO() as compressed_out:
         compressor = Compressor(compressed_out, window=window)
 
-        compressor.token_cb = token_cb
+        compressor.match_cb = match_cb
         compressor.literal_cb = literal_cb
         compressor.flush_cb = flush_cb
 
@@ -115,6 +115,123 @@ def collect_literal_streaks(
     print(f"{t_elapsed=}")
 
     dst.write_bytes(events)
+
+
+@collect_app.command(name="events")
+def collect_events(
+    src: Path,
+    dst: Path | None = None,
+    window: int = 10,
+):
+    if dst is None:
+        dst = Path(src.stem + ".events")
+    plaintext = src.read_bytes()
+
+    """
+    MSb - (1) if token, (0) if literal
+    lower 7 bits - match size
+    """
+    literal_count = 0
+    match = {}
+    extended_match = {}
+    rle = {}
+
+    def match_cb(offset, match_size, pattern):
+        match[match_size] = match.get(match_size, 0) + 1
+
+    def extended_match_cb(offset, match_size, pattern):
+        extended_match[match_size] = extended_match.get(match_size, 0) + 1
+
+    def literal_cb(char):
+        nonlocal literal_count
+        literal_count += 1
+
+    def rle_cb(match_size, char):
+        rle[match_size] = rle.get(match_size, 0) + 1
+
+    def flush_cb():
+        pass
+
+    with BytesIO() as compressed_out:
+        compressor = Compressor(compressed_out, window=window)
+
+        compressor.match_cb = match_cb
+        compressor.extended_match_cb = extended_match_cb
+        compressor.literal_cb = literal_cb
+        compressor.rle_cb = rle_cb
+        compressor.flush_cb = flush_cb
+
+        t_start = monotonic()
+        compressor.write(plaintext)
+        compressor.flush(write_token=False)
+        t_elapsed = monotonic() - t_start
+
+        compressed_size = compressed_out.tell()
+
+    print(f"{t_elapsed=}")
+
+    # Save results as pickled data for later analysis
+    results = {
+        "src": src,
+        "literal_count": literal_count,
+        "match": match,
+        "extended_match": extended_match,
+        "rle": rle,
+        "plaintext_size": len(plaintext),
+        "compressed_size": compressed_size,
+        "t_elapsed": t_elapsed,
+    }
+
+    with dst.open("wb") as f:
+        pickle.dump(results, f)
+
+
+@analyze_app.command(name="events")
+def analyze_events(
+    src: Path = Path("out.events"),
+):
+    with src.open("rb") as f:
+        results = pickle.load(f)  # noqa: S301
+
+    print(f"Source: {results['src']}")
+    print(f"Plaintext size: {results['plaintext_size']:,} bytes")
+    print(f"Compressed size: {results['compressed_size']:,} bytes")
+    print(f"Compression ratio: {results['plaintext_size'] / results['compressed_size']:.2f}")
+    print(f"Compression time: {results['t_elapsed']:.3f}s")
+    print(f"Literal count: {results['literal_count']:,}")
+
+    # Print match statistics
+    if results["match"]:
+        print(f"\nMatch events: {sum(results['match'].values()):,}")
+        print("Match size distribution:")
+        for size in sorted(results["match"].keys()):
+            print(f"  Size {size}: {results['match'][size]:,} matches")
+
+    # Print extended match statistics
+    if results["extended_match"]:
+        print(f"\nExtended match events: {sum(results['extended_match'].values()):,}")
+        print("Extended match size distribution:")
+        for size in sorted(results["extended_match"].keys()):
+            print(f"  Size {size}: {results['extended_match'][size]:,} matches")
+
+    # Print RLE statistics
+    if results["rle"]:
+        print(f"\nRLE events: {sum(results['rle'].values()):,}")
+        print("RLE size distribution:")
+        for size in sorted(results["rle"].keys()):
+            print(f"  Size {size}: {results['rle'][size]:,} runs")
+
+    # Collect data for plotting
+    plot_data = []
+    if results["match"]:
+        plot_data.append(("Match Size Distribution", "Match Size", results["match"]))
+    if results["extended_match"]:
+        plot_data.append(("Extended Match Size Distribution", "Extended Match Size", results["extended_match"]))
+    if results["rle"]:
+        plot_data.append(("RLE Size Distribution", "RLE Size", results["rle"]))
+
+    if plot_data:
+        plot_multiple_histograms(plot_data, main_title=f"{src.stem} Event Distributions")
 
 
 @analyze_app.command(name="literal-streaks")
@@ -152,6 +269,86 @@ def analyze_literal_streaks(
             x_label="Literal Run Lengths",
             title=f"{src.stem} Literal Run Lengths",
         )
+
+
+def plot_multiple_histograms(plot_data, *, main_title: str):
+    """Plot multiple histograms in the same window using subplots.
+
+    Parameters
+    ----------
+    plot_data : list of tuples
+        List of (title, x_label, histogram_data) tuples
+    main_title : str
+        Main title for the entire figure
+    """
+    if not plot_data:
+        print("No data to plot")
+        return
+
+    n_plots = len(plot_data)
+
+    # Determine subplot layout
+    if n_plots == 1:
+        rows, cols = 1, 1
+    elif n_plots == 2:
+        rows, cols = 1, 2
+    else:  # n_plots == 3
+        rows, cols = 1, 3
+
+    fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 6))
+
+    # Ensure axes is always a list for consistent indexing
+    if n_plots == 1:
+        axes = [axes]
+
+    for i, (title, x_label, histogram_data) in enumerate(plot_data):
+        ax = axes[i]
+
+        if not histogram_data:
+            ax.text(0.5, 0.5, f"No {title.lower()} data", ha="center", va="center", transform=ax.transAxes)
+            ax.set_title(title)
+            continue
+
+        run_lengths = np.array(list(histogram_data.keys()))
+        frequencies = np.array(list(histogram_data.values()))
+
+        # Create bar plot
+        bars = ax.bar(run_lengths, frequencies, alpha=0.7, edgecolor="black", color="steelblue", linewidth=0.5)
+
+        # Add frequency labels on bars
+        for bar, freq in zip(bars, frequencies):
+            y_pos = bar.get_height() + 0.01 * max(frequencies)
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                y_pos,
+                str(freq),
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                rotation=45,
+            )
+
+        ax.set_xlabel(x_label, fontsize=11)
+        ax.set_ylabel("Frequency", fontsize=11)
+        ax.set_title(title, fontsize=12, fontweight="bold")
+        ax.grid(True, alpha=0.3, axis="y")
+
+        # Smart x-axis tick spacing
+        n_bars = len(run_lengths)
+        if n_bars <= 15:
+            ax.set_xticks(run_lengths)
+        else:
+            # Reduce number of ticks for readability
+            step = max(1, len(run_lengths) // 10)
+            ax.set_xticks(run_lengths[::step])
+
+        # Rotate labels if many ticks
+        if n_bars > 8:
+            ax.tick_params(axis="x", rotation=45)
+
+    fig.suptitle(main_title, fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.show()
 
 
 def plot_histogram(histogram_data, *, x_label: str, title: str, log_scale: bool = False):
