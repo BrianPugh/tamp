@@ -412,7 +412,9 @@ class Compressor:
         bytes_written = 0
         if self.extended_match_cb:
             string = self._window_buffer.get(self._extended_match_position, self._extended_match_count)
-            self.extended_match_cb(self._extended_match_position, self._extended_match_count, string)
+            self.extended_match_cb(
+                self._window_buffer.pos, self._extended_match_position, self._extended_match_count, string
+            )
         bytes_written += self._bit_writer.write_huffman_and_literal_flag(_EXTENDED_MATCH_SYMBOL)
         bytes_written += self._bit_writer.write(self._extended_match_position, self.window_bits)
         bytes_written += self._write_extended_huffman(
@@ -445,6 +447,7 @@ class Compressor:
 
         if self.match_cb:
             self.match_cb(
+                self._window_buffer.pos,
                 search_i,
                 match_size,
                 match,
