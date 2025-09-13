@@ -131,8 +131,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
     while (input != input_end || decompressor->bit_buffer_pos) {
         // Populate the bit buffer
         while (input != input_end && decompressor->bit_buffer_pos <= 24) {
+            uint32_t t = *input;
             decompressor->bit_buffer_pos += 8;
-            decompressor->bit_buffer |= *input << (32 - decompressor->bit_buffer_pos);
+            decompressor->bit_buffer |= t << (32 - decompressor->bit_buffer_pos);
             input++;
             (*input_consumed_size)++;
         }
