@@ -70,7 +70,14 @@ repos:
     rev: v1.3.5
     hooks:
       - id: cppcheck
-        args: ['--suppress=missingIncludeSystem', '--suppress=unusedFunction', '--error-exitcode=1']
+        args:
+          [
+            '-Itamp/_c_src',
+            '-Ictests/Unity/src',
+            '--inline-suppr',
+            '--suppress=missingIncludeSystem',
+            '--error-exitcode=1',
+          ]
 
   # JavaScript/TypeScript/Node.js tools
 
