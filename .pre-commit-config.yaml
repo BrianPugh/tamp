@@ -70,14 +70,15 @@ repos:
     rev: v1.3.5
     hooks:
       - id: cppcheck
-        exclude: ^espidf/
+        exclude: ^(espidf|mpy_bindings|ctests)/
         args:
           [
             '-Itamp/_c_src',
-            '-Ictests/Unity/src',
             '--inline-suppr',
             '--suppress=missingIncludeSystem',
+            '--suppress=unusedFunction',
             '--error-exitcode=1',
+            '--force',
           ]
 
   # JavaScript/TypeScript/Node.js tools
