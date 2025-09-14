@@ -1,6 +1,21 @@
 # Tamp WebAssembly Build
 # Requires Emscripten SDK to be installed and activated
 
+# Check if emcc is available
+EMCC := $(shell command -v emcc 2> /dev/null)
+ifndef EMCC
+    $(info )
+    $(info ERROR: emcc not found! Please activate the Emscripten SDK:)
+    $(info   source /path/to/emsdk/emsdk_env.sh)
+    $(info )
+    $(info If you haven't installed the SDK yet:)
+    $(info   git clone https://github.com/emscripten-core/emsdk.git)
+    $(info   cd emsdk && ./emsdk install latest && ./emsdk activate latest)
+    $(info   source ./emsdk_env.sh)
+    $(info )
+    $(error Emscripten SDK not activated)
+endif
+
 EMCC = emcc
 SRCDIR = ../tamp/_c_src/tamp
 OUTDIR = dist
