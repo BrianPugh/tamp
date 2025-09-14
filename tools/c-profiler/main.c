@@ -118,7 +118,7 @@ exit:
     return res;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, const char *argv[]) {
     if (strcmp(argv[1], "compressor") == 0)
         return benchmark_compressor();
     else if (strcmp(argv[1], "decompressor") == 0)
