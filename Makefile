@@ -142,8 +142,13 @@ mpy-compression-benchmark:
 	@time belay run micropython -X heapsize=300M tools/micropython-compression-benchmark.py
 
 CTEST_CC = gcc
-CTEST_CFLAGS = -Ictests/Unity/src -Itamp/_c_src
-CTEST_LDFLAGS = -Lctests/unity
+
+# Always enable sanitizers for c-test
+SANITIZER_FLAGS = -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g -O0
+SANITIZER_LDFLAGS = -fsanitize=address -fsanitize=undefined
+
+CTEST_CFLAGS = -Ictests/Unity/src -Itamp/_c_src $(SANITIZER_FLAGS)
+CTEST_LDFLAGS = -Lctests/unity $(SANITIZER_LDFLAGS)
 CTEST_LIBS = -lunity
 
 mkdir-build:
@@ -158,7 +163,7 @@ TAMP_OBJS = \
 
 CTEST_OBJS = \
 	build/unity/unity.o \
-	build/ctests/test_decompressor.o
+	build/ctests/test_runner.o
 
 build/%.o: tamp/_c_src/tamp/%.c mkdir-build
 	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
@@ -174,6 +179,12 @@ build/test_runner: $(TAMP_OBJS) $(CTEST_OBJS)
 
 c-test: build/test_runner
 	./build/test_runner
+
+clean-c-test:
+	rm -rf build/test_runner
+	rm -rf build/*.o
+	rm -rf build/ctests/*.o
+	rm -rf build/unity/*.o
 
 ##########
 # Website #
