@@ -172,7 +172,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
         (*output_written_size) += flush_bytes_written;
         if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
         output_size -= flush_bytes_written;
-        output += flush_bytes_written;
+        output += flush_bytes_written;  // cppcheck-suppress unreadVariable
     }
 
     if (TAMP_UNLIKELY(output_size == 0)) return TAMP_OUTPUT_FULL;
