@@ -93,10 +93,10 @@ jobs:
         with:
           reference: v1.22.0
 
-      - name: Install library
+      - name: Install library with sanitizers
         run: |
           poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
-          poetry install --no-interaction
+          TAMP_SANITIZE=1 poetry install --no-interaction
 
       - name: Cache pre-commit
         uses: actions/cache@v4
@@ -118,12 +118,16 @@ jobs:
           source ${{ env.ACTIVATE_PYTHON_VENV }}
           SKIP=wasm-eslint,wasm-npm-test,wasm-file-validation,typescript-check,package-json-lint pre-commit run --show-diff-on-failure --color=always --all-files
 
-      - name: Run tests
+      - name: Run tests with sanitizers
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
+          UBSAN_OPTIONS=print_stacktrace=1 ASAN_OPTIONS=detect_leaks=0 \
           python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
           belay run micropython -X heapsize=200M -m unittest tests/*.py
           coverage report
+
+      - name: Run C tests
+        run: make c-test
 
       - name: Verify CLI compression/decompression integrity
         run: |
