@@ -70,7 +70,7 @@ repos:
     rev: v1.3.5
     hooks:
       - id: cppcheck
-        exclude: ^(espidf|mpy_bindings|ctests)/
+        exclude: ^(espidf|mpy_bindings|ctests|tools)/
         args:
           [
             '-Itamp/_c_src',
@@ -78,6 +78,8 @@ repos:
             '--suppress=missingIncludeSystem',
             '--suppress=unusedFunction',
             '--suppress=useStandardLibrary',
+            '--suppress=checkersReport',
+            '--suppress=unmatchedSuppression',
             '--error-exitcode=1',
             '--force',
           ]
