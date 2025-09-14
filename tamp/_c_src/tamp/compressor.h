@@ -142,7 +142,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
  *
  * @return true if the compressor is full, false otherwise.
  */
-bool tamp_compressor_full(TampCompressor *compressor);
+bool tamp_compressor_full(const TampCompressor *compressor);
 
 /**
  * @brief Completely flush the internal bit buffer. Makes output "complete".

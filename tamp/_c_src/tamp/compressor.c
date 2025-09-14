@@ -42,7 +42,7 @@ static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *
     return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
 
-inline bool tamp_compressor_full(TampCompressor *compressor) {
+inline bool tamp_compressor_full(const TampCompressor *compressor) {
     return compressor->input_size == sizeof(compressor->input);
 }
 
