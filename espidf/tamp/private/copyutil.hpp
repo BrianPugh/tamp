@@ -90,8 +90,8 @@ static constexpr uint32_t MSB = (1 << log2<N>());
  * @param len
  */
 template <uint32_t CEIL = 16>
-    requires(CEIL != 0 /* && (CEIL & (CEIL-1)) == 0 */)
 static inline void __attribute__((always_inline)) unrolled_cpy(void* dst, const void* src, std::size_t len) noexcept {
+    static_assert(CEIL != 0 /* && (CEIL & (CEIL-1)) == 0 */);
     if constexpr (CEIL > 32) {
         // You should probably be using std::memcpy...
         {
@@ -120,6 +120,10 @@ static inline void __attribute__((always_inline)) unrolled_cpy(void* dst, const 
             incptr<CEIL / 2>(src);
         }
         unrolled_cpy<CEIL / 2>(dst, src, len);
+    } else {
+        (void)dst;
+        (void)src;
+        (void)len;
     }
 }
 }  // namespace

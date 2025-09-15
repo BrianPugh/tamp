@@ -20,13 +20,23 @@
 
 #include <cstdint>
 
-#if __cplusplus > 201703L
+#if __has_include(<span>) && __cplusplus > 201703L
 #include <span>
 #endif
 #include <algorithm>
 #include <type_traits>
 
 #include "tamp_arch.hpp"
+
+#if __cplusplus >= 202002L
+// #define TAMP_REQUIRES(...) requires(__VA_ARGS__)
+#define TAMP_CPP_LIKELY [[likely]]
+#define TAMP_CPP_UNLIKELY [[unlikely]]
+#else
+// #define TAMP_REQUIRES(...) /* nothing */
+#define TAMP_CPP_LIKELY
+#define TAMP_CPP_UNLIKELY
+#endif
 
 namespace tamp {
 
@@ -274,13 +284,14 @@ class Locator {
 
     template <typename T, uint32_t M, uint32_t N = 0>
     static bool __attribute__((always_inline)) unrolled_find(const uint8_t*& data, const uint32_t v) noexcept {
-        if (as<T>(data + N) != v) [[likely]] {
-            if constexpr (N + 1 < M) {
-                return unrolled_find<T, M, N + 1>(data, v);
-            } else {
-                return false;
+        if (as<T>(data + N) != v) TAMP_CPP_LIKELY {
+                if constexpr (N + 1 < M) {
+                    return unrolled_find<T, M, N + 1>(data, v);
+                } else {
+                    return false;
+                }
             }
-        } else {
+        else {
             incptr<N>(data);
             return true;
         }
@@ -297,24 +308,26 @@ class Locator {
          */
         static_assert(N < M);
         if constexpr (N % 2 == 0) {
-            if ((as<uint32_t>(data + ((N / 2) * 2)) << 8) != vl) [[likely]] {
-                if constexpr (N + 1 < M) {
-                    return unrolled_find_3<M, N + 1>(data, vl, vh);
-                } else {
-                    return false;
+            if ((as<uint32_t>(data + ((N / 2) * 2)) << 8) != vl) TAMP_CPP_LIKELY {
+                    if constexpr (N + 1 < M) {
+                        return unrolled_find_3<M, N + 1>(data, vl, vh);
+                    } else {
+                        return false;
+                    }
                 }
-            } else {
+            else {
                 incptr<N>(data);
                 return true;
             }
         } else {
-            if ((as<uint32_t>(data + ((N / 2) * 2)) >> 8) != vh) [[likely]] {
-                if constexpr (N + 1 < M) {
-                    return unrolled_find_3<M, N + 1>(data, vl, vh);
-                } else {
-                    return false;
+            if ((as<uint32_t>(data + ((N / 2) * 2)) >> 8) != vh) TAMP_CPP_LIKELY {
+                    if constexpr (N + 1 < M) {
+                        return unrolled_find_3<M, N + 1>(data, vl, vh);
+                    } else {
+                        return false;
+                    }
                 }
-            } else {
+            else {
                 incptr<N>(data);
                 return true;
             }
@@ -338,51 +351,51 @@ class Locator {
         const uint8_t* const end = data + dataLen - (patLen - 1);
 
         if (patLen > sizeof(uint16_t)) {
-            if (patLen == sizeof(uint32_t)) [[unlikely]] {
-                const uint32_t v = as<uint32_t>(pattern);
+            if (patLen == sizeof(uint32_t)) TAMP_CPP_UNLIKELY {
+                    const uint32_t v = as<uint32_t>(pattern);
 
-                if constexpr (Arch::XTENSA && Arch::XT_LOOP) {
-                    uint32_t tmp;
+                    if constexpr (Arch::XTENSA && Arch::XT_LOOP) {
+                        uint32_t tmp;
 
-                    asm("LOOPNEZ %[len], end_%="
-                        "\n"
-                        "L32I %[tmp], %[data], 0"
-                        "\n"
-                        "ADDI %[data], %[data], 1"
-                        "\n"  // Pipelining.
-                        "BEQ %[tmp], %[v], found_%="
-                        "\n"
-                        "end_%=:"
-                        "\n"
-                        "MOVI %[data], 1"
-                        "\n"  // Make result = 0 w/o a jump
-                        "found_%=:"
-                        "\n"
-                        "ADDI %[data], %[data], -1"
-                        "\n"
-                        "exit_%=:"
-                        : [tmp] "=&r"(tmp), [data] "+&r"(data)
-                        : [v] "r"(v), [len] "r"(dataLen - (sizeof(uint32_t) - 1)),
-                          "m"(*(const uint8_t(*)[dataLen])data));
+                        asm("LOOPNEZ %[len], end_%="
+                            "\n"
+                            "L32I %[tmp], %[data], 0"
+                            "\n"
+                            "ADDI %[data], %[data], 1"
+                            "\n"  // Pipelining.
+                            "BEQ %[tmp], %[v], found_%="
+                            "\n"
+                            "end_%=:"
+                            "\n"
+                            "MOVI %[data], 1"
+                            "\n"  // Make result = 0 w/o a jump
+                            "found_%=:"
+                            "\n"
+                            "ADDI %[data], %[data], -1"
+                            "\n"
+                            "exit_%=:"
+                            : [tmp] "=&r"(tmp), [data] "+&r"(data)
+                            : [v] "r"(v), [len] "r"(dataLen - (sizeof(uint32_t) - 1)),
+                              "m"(*(const uint8_t(*)[dataLen])data));
 
-                    return data;
+                        return data;
 
-                } else {
-                    constexpr uint32_t LOOP_UNROLL_FACTOR = 8;
+                    } else {
+                        constexpr uint32_t LOOP_UNROLL_FACTOR = 8;
 
-                    const uint8_t* const end_unrolled = data + multof<LOOP_UNROLL_FACTOR>(dataLen - (patLen - 1));
-                    while (data < end_unrolled && !unrolled_find<uint32_t, LOOP_UNROLL_FACTOR>(data, v)) [[likely]] {
-                        incptr<LOOP_UNROLL_FACTOR>(data);
-                    }
+                        const uint8_t* const end_unrolled = data + multof<LOOP_UNROLL_FACTOR>(dataLen - (patLen - 1));
+                        while (data < end_unrolled && !unrolled_find<uint32_t, LOOP_UNROLL_FACTOR>(data, v))
+                            TAMP_CPP_LIKELY { incptr<LOOP_UNROLL_FACTOR>(data); }
 
-                    if (data >= end_unrolled) {
-                        // Nothing found so far.
-                        while (data < end && as<uint32_t>(data) != v) {
-                            incptr<1>(data);
+                        if (data >= end_unrolled) {
+                            // Nothing found so far.
+                            while (data < end && as<uint32_t>(data) != v) {
+                                incptr<1>(data);
+                            }
                         }
                     }
                 }
-            } else {
+            else {
                 // assert patLen == 3
 
                 // Given a 24-bit value in a 32-bit variable V and 4 bytes (32 bits) loaded from memory
@@ -443,9 +456,9 @@ class Locator {
                     // Loop unrolled 8x.
                     const uint8_t* const end_unrolled = data + multof<LOOP_UNROLL_FACTOR>(dataLen - (patLen - 1));
 
-                    while (data < end_unrolled && !unrolled_find_3<LOOP_UNROLL_FACTOR>(data, vl, vh)) [[likely]] {
-                        incptr<LOOP_UNROLL_FACTOR>(data);
-                    }
+                    while (data < end_unrolled && !unrolled_find_3<LOOP_UNROLL_FACTOR>(data, vl, vh)) TAMP_CPP_LIKELY {
+                            incptr<LOOP_UNROLL_FACTOR>(data);
+                        }
 
                     if (data >= end_unrolled) {
                         // Nothing found so far.
@@ -498,9 +511,8 @@ class Locator {
                     // Loop unrolled 8x.
                     const uint8_t* const end_unrolled = data + multof<LOOP_UNROLL_FACTOR>(dataLen - (patLen - 1));
 
-                    while (data < end_unrolled && !unrolled_find<uint16_t, LOOP_UNROLL_FACTOR>(data, v)) [[likely]] {
-                        incptr<LOOP_UNROLL_FACTOR>(data);
-                    }
+                    while (data < end_unrolled && !unrolled_find<uint16_t, LOOP_UNROLL_FACTOR>(data, v))
+                        TAMP_CPP_LIKELY { incptr<LOOP_UNROLL_FACTOR>(data); }
 
                     if (data >= end_unrolled) {
                         // Nothing found so far.
@@ -510,29 +522,30 @@ class Locator {
                     }
                 }
 
-            } else [[unlikely]] {
-                // assert patLen == 1
-                const uint32_t v = as<uint8_t>(pattern);
-                if constexpr (Arch::XTENSA && Arch::XT_LOOP) {
-                    uint32_t tmp = dataLen;
-                    asm volatile(
-                        "LOOPNEZ %[tmp], end_%="
-                        "\n"
-                        "L8UI %[tmp], %[data], 0"
-                        "\n"
-                        "BEQ %[tmp], %[v], end_%="
-                        "\n"
-                        "ADDI %[data], %[data], 1"
-                        "\n"
-                        "end_%=:"
-                        : [tmp] "+r"(tmp), [data] "+r"(data)
-                        : [v] "r"(v));
-                } else {
-                    while (data < end && as<uint8_t>(data) != v) {
-                        incptr<1>(data);
+            } else
+                TAMP_CPP_UNLIKELY {
+                    // assert patLen == 1
+                    const uint32_t v = as<uint8_t>(pattern);
+                    if constexpr (Arch::XTENSA && Arch::XT_LOOP) {
+                        uint32_t tmp = dataLen;
+                        asm volatile(
+                            "LOOPNEZ %[tmp], end_%="
+                            "\n"
+                            "L8UI %[tmp], %[data], 0"
+                            "\n"
+                            "BEQ %[tmp], %[v], end_%="
+                            "\n"
+                            "ADDI %[data], %[data], 1"
+                            "\n"
+                            "end_%=:"
+                            : [tmp] "+r"(tmp), [data] "+r"(data)
+                            : [v] "r"(v));
+                    } else {
+                        while (data < end && as<uint8_t>(data) != v) {
+                            incptr<1>(data);
+                        }
                     }
                 }
-            }
         }
         return (data < end) ? data : nullptr;
     }
@@ -541,13 +554,14 @@ class Locator {
     template <uint32_t M, uint32_t N = 0>
     static bool __attribute__((always_inline))
     unrolled_find_f_l(const uint8_t*& first, const uint8_t*& last, const uint32_t f, const uint32_t l) noexcept {
-        if (f != as<uint32_t>(first + N) || l != as<uint32_t>(last + N)) [[likely]] {
-            if constexpr (N + 1 < M) {
-                return unrolled_find_f_l<M, N + 1>(first, last, f, l);
-            } else {
-                return false;
+        if (f != as<uint32_t>(first + N) || l != as<uint32_t>(last + N)) TAMP_CPP_LIKELY {
+                if constexpr (N + 1 < M) {
+                    return unrolled_find_f_l<M, N + 1>(first, last, f, l);
+                } else {
+                    return false;
+                }
             }
-        } else {
+        else {
             incptr<N>(first);
             incptr<N>(last);
             return true;
@@ -563,9 +577,10 @@ class Locator {
         do {
             const uint8_t* ff = find_pattern_short_scalar((const uint8_t*)&f, sizeof(uint32_t), fp, end - fp);
             if (ff) {
-                if (*(const uint32_t*)(ff + len) != l) [[likely]] {
-                    fp = ff + 1;
-                } else {
+                if (*(const uint32_t*)(ff + len) != l) TAMP_CPP_LIKELY {
+                        fp = ff + 1;
+                    }
+                else {
                     first = ff;
                     last = ff + len;
                     return true;
@@ -578,7 +593,7 @@ class Locator {
         // do {
         //     uint32_t ftmp1 = *(const uint32_t*)(fp++);
         //     uint32_t ftmp2 = *(const uint32_t*)(lp++);
-        //     if(f == ftmp1 && l == ftmp2) [[unlikely]] {
+        //     if(f == ftmp1 && l == ftmp2) TAMP_CPP_UNLIKELY {
         //         first = fp-1;
         //         last = lp-1;
         //         break;
@@ -622,10 +637,11 @@ class Locator {
             {
                 constexpr uint32_t LOOP_UNROLL_FACTOR = 8;
                 const uint8_t* const end_unrolled = first + multof<LOOP_UNROLL_FACTOR>(end - first);
-                while (first < end_unrolled && !unrolled_find_f_l<LOOP_UNROLL_FACTOR>(first, last, f, l)) [[likely]] {
-                    incptr<LOOP_UNROLL_FACTOR>(first);
-                    incptr<LOOP_UNROLL_FACTOR>(last);
-                }
+                while (first < end_unrolled && !unrolled_find_f_l<LOOP_UNROLL_FACTOR>(first, last, f, l))
+                    TAMP_CPP_LIKELY {
+                        incptr<LOOP_UNROLL_FACTOR>(first);
+                        incptr<LOOP_UNROLL_FACTOR>(last);
+                    }
 
                 if (first >= end_unrolled) {
                     // Nothing found so far.
@@ -655,13 +671,14 @@ class Locator {
 
     template <uint32_t M, uint32_t N = 0, typename P>
     static bool __attribute__((always_inline)) unrolled_cmp8(const P*& d1, const P*& d2) noexcept {
-        if (*(p<uint8_t>(d1) + N) == *(p<uint8_t>(d2) + N)) [[likely]] {
-            if constexpr (N + 1 < M) {
-                return unrolled_cmp8<M, N + 1>(d1, d2);
-            } else {
-                return true;
+        if (*(p<uint8_t>(d1) + N) == *(p<uint8_t>(d2) + N)) TAMP_CPP_LIKELY {
+                if constexpr (N + 1 < M) {
+                    return unrolled_cmp8<M, N + 1>(d1, d2);
+                } else {
+                    return true;
+                }
             }
-        } else {
+        else {
             incptr<N>(d1);
             incptr<N>(d2);
             return false;
@@ -717,10 +734,11 @@ class Locator {
             const uint8_t* const end = p<uint8_t>(d1) + len;
 
             while (d1 < end) {
-                if (as<uint8_t>(d1) == as<uint8_t>(d2)) [[likely]] {
-                    incptr<1>(d1);
-                    incptr<1>(d2);
-                } else {
+                if (as<uint8_t>(d1) == as<uint8_t>(d2)) TAMP_CPP_LIKELY {
+                        incptr<1>(d1);
+                        incptr<1>(d2);
+                    }
+                else {
                     break;
                 }
             }
@@ -1025,12 +1043,13 @@ class Locator {
                             s1 += bits;
                             tmp = tmp << bits;  // Remove the bit we're handling now.
                         }
-                        if (s1 <= end) [[likely]] {
-                            if (cmpLen == 0 || cmp8(s1, pat1, cmpLen) >= cmpLen) {
-                                // stats.matchFound(patLen, (s1-1)-data + patLen);
-                                return s1 - 1;
+                        if (s1 <= end) TAMP_CPP_LIKELY {
+                                if (cmpLen == 0 || cmp8(s1, pat1, cmpLen) >= cmpLen) {
+                                    // stats.matchFound(patLen, (s1-1)-data + patLen);
+                                    return s1 - 1;
+                                }
                             }
-                        } else {
+                        else {
                             // Found match would extend beyond the end of data.
                             return nullptr;
                         }
@@ -1069,11 +1088,11 @@ class Locator {
                 if (match) {
                     bestMatch = match;
                     matchLen = searchLen;
-                    if (searchLen < patLen) [[likely]] {
-                        // If the current match happens to extend beyond what we searched for,
-                        // we'll take that too.
-                        matchLen += cmp8(pattern + searchLen, match + searchLen, patLen - searchLen);
-                    }
+                    if (searchLen < patLen) TAMP_CPP_LIKELY {
+                            // If the current match happens to extend beyond what we searched for,
+                            // we'll take that too.
+                            matchLen += cmp8(pattern + searchLen, match + searchLen, patLen - searchLen);
+                        }
                     dataLen -= match + 1 - data;
                     data = match + 1;
 
