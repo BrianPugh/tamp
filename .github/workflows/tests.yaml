@@ -99,6 +99,8 @@ jobs:
         run: |
           poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
           TAMP_SANITIZE=1 poetry install --no-interaction
+          # Set up LD_PRELOAD for AddressSanitizer for all subsequent steps
+          echo "LD_PRELOAD=$(gcc -print-file-name=libasan.so)" >> $GITHUB_ENV
 
       - name: Cache pre-commit
         uses: actions/cache@v4
@@ -126,7 +128,7 @@ jobs:
       - name: Run tests with sanitizers
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
-          LD_PRELOAD=$(gcc -print-file-name=libasan.so) UBSAN_OPTIONS=print_stacktrace=1 ASAN_OPTIONS=detect_leaks=0 \
+          UBSAN_OPTIONS=print_stacktrace=1 ASAN_OPTIONS=detect_leaks=0 \
           python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
           belay run micropython -X heapsize=200M -m unittest tests/*.py
           coverage report
