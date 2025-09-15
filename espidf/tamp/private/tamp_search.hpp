@@ -354,41 +354,41 @@ class Locator {
                 if constexpr (Arch::XTENSA && Arch::XT_LOOP) {
                     uint32_t tmp;
 
-                        asm("LOOPNEZ %[len], end_%="
-                            "\n"
-                            "L32I %[tmp], %[data], 0"
-                            "\n"
-                            "ADDI %[data], %[data], 1"
-                            "\n"  // Pipelining.
-                            "BEQ %[tmp], %[v], found_%="
-                            "\n"
-                            "end_%=:"
-                            "\n"
-                            "MOVI %[data], 1"
-                            "\n"  // Make result = 0 w/o a jump
-                            "found_%=:"
-                            "\n"
-                            "ADDI %[data], %[data], -1"
-                            "\n"
-                            "exit_%=:"
-                            : [tmp] "=&r"(tmp), [data] "+&r"(data)
-                            : [v] "r"(v), [len] "r"(dataLen - (sizeof(uint32_t) - 1)),
-                              "m"(*(const uint8_t(*)[dataLen])data));
+                    asm("LOOPNEZ %[len], end_%="
+                        "\n"
+                        "L32I %[tmp], %[data], 0"
+                        "\n"
+                        "ADDI %[data], %[data], 1"
+                        "\n"  // Pipelining.
+                        "BEQ %[tmp], %[v], found_%="
+                        "\n"
+                        "end_%=:"
+                        "\n"
+                        "MOVI %[data], 1"
+                        "\n"  // Make result = 0 w/o a jump
+                        "found_%=:"
+                        "\n"
+                        "ADDI %[data], %[data], -1"
+                        "\n"
+                        "exit_%=:"
+                        : [tmp] "=&r"(tmp), [data] "+&r"(data)
+                        : [v] "r"(v), [len] "r"(dataLen - (sizeof(uint32_t) - 1)),
+                          "m"(*(const uint8_t(*)[dataLen])data));
 
-                        return data;
+                    return data;
 
-                    } else {
-                        constexpr uint32_t LOOP_UNROLL_FACTOR = 8;
+                } else {
+                    constexpr uint32_t LOOP_UNROLL_FACTOR = 8;
 
-                        const uint8_t* const end_unrolled = data + multof<LOOP_UNROLL_FACTOR>(dataLen - (patLen - 1));
-                        while (data < end_unrolled && !unrolled_find<uint32_t, LOOP_UNROLL_FACTOR>(data, v)) TAMP_CPP_LIKELY {
-                            incptr<LOOP_UNROLL_FACTOR>(data);
-                        }
+                    const uint8_t* const end_unrolled = data + multof<LOOP_UNROLL_FACTOR>(dataLen - (patLen - 1));
+                    while (data < end_unrolled && !unrolled_find<uint32_t, LOOP_UNROLL_FACTOR>(data, v)) TAMP_CPP_LIKELY {
+                        incptr<LOOP_UNROLL_FACTOR>(data);
+                    }
 
-                        if (data >= end_unrolled) {
-                            // Nothing found so far.
-                            while (data < end && as<uint32_t>(data) != v) {
-                                incptr<1>(data);
+                    if (data >= end_unrolled) {
+                        // Nothing found so far.
+                        while (data < end && as<uint32_t>(data) != v) {
+                            incptr<1>(data);
                         }
                     }
                 }
@@ -526,15 +526,15 @@ class Locator {
                 if constexpr (Arch::XTENSA && Arch::XT_LOOP) {
                     uint32_t tmp = dataLen;
                     asm volatile(
-                            "LOOPNEZ %[tmp], end_%="
-                            "\n"
-                            "L8UI %[tmp], %[data], 0"
-                            "\n"
-                            "BEQ %[tmp], %[v], end_%="
-                            "\n"
-                            "ADDI %[data], %[data], 1"
-                            "\n"
-                            "end_%=:"
+                        "LOOPNEZ %[tmp], end_%="
+                        "\n"
+                        "L8UI %[tmp], %[data], 0"
+                        "\n"
+                        "BEQ %[tmp], %[v], end_%="
+                        "\n"
+                        "ADDI %[data], %[data], 1"
+                        "\n"
+                        "end_%=:"
                         : [tmp] "+r"(tmp), [data] "+r"(data)
                         : [v] "r"(v));
                 } else {
