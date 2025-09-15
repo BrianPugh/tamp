@@ -281,5 +281,5 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_TOKEN }}
-          packages_dir: wheels/
-          skip_existing: true
+          packages-dir: wheels/
+          skip-existing: true
