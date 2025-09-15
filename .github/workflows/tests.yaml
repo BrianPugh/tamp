@@ -45,6 +45,8 @@ jobs:
 
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up python 3.13
         id: setup-python-system
