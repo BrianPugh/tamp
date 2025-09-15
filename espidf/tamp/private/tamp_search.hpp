@@ -29,11 +29,9 @@
 #include "tamp_arch.hpp"
 
 #if __cplusplus >= 202002L
-// #define TAMP_REQUIRES(...) requires(__VA_ARGS__)
 #define TAMP_CPP_LIKELY [[likely]]
 #define TAMP_CPP_UNLIKELY [[unlikely]]
 #else
-// #define TAMP_REQUIRES(...) /* nothing */
 #define TAMP_CPP_LIKELY
 #define TAMP_CPP_UNLIKELY
 #endif
