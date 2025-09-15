@@ -113,6 +113,9 @@ jobs:
       - name: Download enwik8 dataset
         run: make download-enwik8
 
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
       - name: Pre-commit run
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
