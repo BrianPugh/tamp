@@ -12,6 +12,7 @@ extern "C" {
 #if ESP_PLATFORM
 // (External) code #including this header MUST use the SAME TAMP_ESP32 setting that is used when
 // building this lib!
+// cppcheck-suppress missingInclude
 #include "sdkconfig.h"
 #endif
 

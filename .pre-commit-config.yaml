@@ -66,6 +66,24 @@ repos:
         types_or: [c, c++]
         args: ['-style=file', '-i']
 
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: cppcheck
+        exclude: ^(espidf|mpy_bindings|ctests|tools)/
+        args:
+          [
+            '-Itamp/_c_src',
+            '--inline-suppr',
+            '--suppress=missingIncludeSystem',
+            '--suppress=unusedFunction',
+            '--suppress=useStandardLibrary',
+            '--suppress=checkersReport',
+            '--suppress=unmatchedSuppression',
+            '--error-exitcode=1',
+            '--force',
+          ]
+
   # JavaScript/TypeScript/Node.js tools
 
   - repo: https://github.com/pre-commit/mirrors-prettier

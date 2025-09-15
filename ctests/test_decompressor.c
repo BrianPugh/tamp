@@ -4,12 +4,6 @@
 #include "tamp/decompressor.h"
 #include "unity.h"
 
-void setUp(void) { /* This is run before EACH test */
-}
-
-void tearDown(void) { /* This is run after EACH test */
-}
-
 void test_decompressor_byte_by_byte(void) {
     /*****
      * Tests the decompressor if we feed in 1 byte at a time.
@@ -72,10 +66,4 @@ void test_decompressor_byte_by_byte(void) {
     }
 
     TEST_ASSERT_EQUAL_STRING("foo foo foo", output_buffer_complete);
-}
-
-int main(void) {
-    UNITY_BEGIN();
-    RUN_TEST(test_decompressor_byte_by_byte);
-    return UNITY_END();
 }

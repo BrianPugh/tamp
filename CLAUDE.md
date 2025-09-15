@@ -67,6 +67,22 @@ poetry run ruff format             # Formatting
 poetry run pyright                 # Type checking
 ```
 
+**Testing with AddressSanitizer (Linux only):**
+
+```bash
+# Build with sanitizers enabled
+TAMP_SANITIZE=1 poetry run python build.py build_ext --inplace
+
+# Run tests with AddressSanitizer (requires LD_PRELOAD on Linux)
+LD_PRELOAD=$(gcc -print-file-name=libasan.so) \
+ASAN_OPTIONS=detect_leaks=0 \
+UBSAN_OPTIONS=print_stacktrace=1 \
+poetry run pytest
+
+# Note: AddressSanitizer is only supported on Linux due to security
+# restrictions on macOS that prevent LD_PRELOAD/DYLD_INSERT_LIBRARIES
+```
+
 ### WebAssembly Development
 
 **Prerequisites:** Emscripten SDK must be installed and activated

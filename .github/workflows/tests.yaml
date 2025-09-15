@@ -45,6 +45,8 @@ jobs:
 
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up python 3.13
         id: setup-python-system
@@ -93,10 +95,13 @@ jobs:
         with:
           reference: v1.22.0
 
-      - name: Install library
+      - name: Install library with sanitizers
         run: |
           poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
-          poetry install --no-interaction
+          TAMP_SANITIZE=1 poetry install --no-interaction
+          # Set ASAN options globally (won't affect non-ASAN binaries)
+          echo "ASAN_OPTIONS=detect_leaks=0" >> $GITHUB_ENV
+          echo "UBSAN_OPTIONS=print_stacktrace=1" >> $GITHUB_ENV
 
       - name: Cache pre-commit
         uses: actions/cache@v4
@@ -113,24 +118,32 @@ jobs:
       - name: Download enwik8 dataset
         run: make download-enwik8
 
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
       - name: Pre-commit run
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
           SKIP=wasm-eslint,wasm-npm-test,wasm-file-validation,typescript-check,package-json-lint pre-commit run --show-diff-on-failure --color=always --all-files
 
-      - name: Run tests
+      - name: Run tests with sanitizers
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
-          python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
+          LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
           belay run micropython -X heapsize=200M -m unittest tests/*.py
           coverage report
+
+      - name: Run C tests
+        run: make c-test
 
       - name: Verify CLI compression/decompression integrity
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
           make download-enwik8
           original_hash=$(sha256sum build/enwik8 | cut -d' ' -f1)
-          roundtrip_hash=$(tamp compress build/enwik8 | tamp decompress | sha256sum | cut -d' ' -f1)
+          # Use LD_PRELOAD for ASAN when running the CLI commands
+          LIBASAN_PATH=$(gcc -print-file-name=libasan.so)
+          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress build/enwik8 | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
           if [ "$original_hash" = "$roundtrip_hash" ]; then
             echo "✓ Compression/decompression integrity verified"
             echo "Original hash: $original_hash"
@@ -157,4 +170,4 @@ jobs:
       - name: Build HTML docs
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
-          sphinx-build -b html docs/source/ docs/build/html
+          LD_PRELOAD=$(gcc -print-file-name=libasan.so) sphinx-build -b html docs/source/ docs/build/html

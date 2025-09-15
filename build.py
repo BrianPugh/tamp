@@ -6,6 +6,20 @@ allowed_to_fail = os.environ.get("CIBUILDWHEEL", "0") != "1"
 
 profile = os.environ.get("TAMP_PROFILE", "0") == "1"
 
+# Enable sanitizers by default for development builds, disable for CI/production
+in_ci = os.environ.get("CI", "false").lower() == "true"
+building_wheel = os.environ.get("CIBUILDWHEEL", "0") == "1"
+is_production_build = in_ci or building_wheel
+
+sanitize = os.environ.get("TAMP_SANITIZE", "0") == "1"
+
+# Ensure profile and sanitize are mutually exclusive
+if profile and sanitize:
+    raise ValueError(
+        "Cannot enable both profiling and sanitizers at the same time. "
+        "Please choose either TAMP_PROFILE=1 or TAMP_SANITIZE=1, not both."
+    )
+
 
 def build_cython_extensions():
     import Cython.Compiler.Options
@@ -15,6 +29,13 @@ def build_cython_extensions():
     from setuptools.dist import Distribution
 
     Cython.Compiler.Options.annotate = True
+
+    if sanitize:
+        print("Building with sanitizers enabled (UBSan + ASan)")
+    elif is_production_build:
+        print("Building for production (sanitizers disabled)")
+    else:
+        print("Building for development")
 
     define_macros = []
 
@@ -39,7 +60,20 @@ def build_cython_extensions():
                 "/O2",
             ]
     else:  # UNIX-based systems
-        if profile:
+        if sanitize:
+            extra_compile_args = [
+                "-O0",  # No optimization for better sanitizer output
+                "-g",  # Include debug symbols
+                "-fsanitize=undefined",
+                "-fsanitize=address",
+                "-fno-omit-frame-pointer",
+                "-Wno-unreachable-code-fallthrough",
+                "-Wno-deprecated-declarations",
+                "-Wno-parentheses-equality",
+                "-Wno-unreachable-code",
+            ]
+            extra_link_args = ["-fsanitize=undefined", "-fsanitize=address"]
+        elif profile:
             extra_compile_args = [
                 "-O2",  # Use O2 instead of O3 for better debug info
                 "-g",  # Include debug symbols
@@ -49,6 +83,7 @@ def build_cython_extensions():
                 "-Wno-parentheses-equality",
                 "-Wno-unreachable-code",
             ]
+            extra_link_args = []
         else:
             extra_compile_args = [
                 "-O3",
@@ -60,7 +95,18 @@ def build_cython_extensions():
                 "-Wno-unreachable-code",  # TODO: This should no longer be necessary with Cython>=3.0.3
                 # https://github.com/cython/cython/issues/5681
             ]
+            extra_link_args = []
     include_dirs = ["tamp/_c_src/", "tamp/"]
+
+    extension_kwargs = {
+        "include_dirs": include_dirs,
+        "extra_compile_args": extra_compile_args,
+        "language": "c",
+        "define_macros": define_macros,
+    }
+
+    if sanitize:
+        extension_kwargs["extra_link_args"] = extra_link_args
 
     extensions = [
         Extension(
@@ -70,10 +116,7 @@ def build_cython_extensions():
                 "tamp/_c_src/tamp/compressor.c",
                 "tamp/_c_compressor.pyx",
             ],
-            include_dirs=include_dirs,
-            extra_compile_args=extra_compile_args,
-            language="c",
-            define_macros=define_macros,
+            **extension_kwargs,
         ),
         Extension(
             "tamp._c_decompressor",
@@ -82,20 +125,14 @@ def build_cython_extensions():
                 "tamp/_c_src/tamp/decompressor.c",
                 "tamp/_c_decompressor.pyx",
             ],
-            include_dirs=include_dirs,
-            extra_compile_args=extra_compile_args,
-            language="c",
-            define_macros=define_macros,
+            **extension_kwargs,
         ),
         Extension(
             "tamp._c_common",
             [
                 "tamp/_c_common.pyx",
             ],
-            include_dirs=include_dirs,
-            extra_compile_args=extra_compile_args,
-            language="c",
-            define_macros=define_macros,
+            **extension_kwargs,
         ),
     ]
 
