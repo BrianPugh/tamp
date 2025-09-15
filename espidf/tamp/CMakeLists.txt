@@ -7,7 +7,13 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-set(CMAKE_CXX_STANDARD 20)
+if(IDF_VER_MAJOR EQUAL 4 AND IDF_VER_MINOR LESS 5)
+    # ESP-IDF 4.0 -> 4.4: default compiler is C++11; enable C++17 safely
+    set(CMAKE_CXX_STANDARD 17)
+else()
+    # ESP-IDF >= 4.5 or 5.x: use C++20
+    set(CMAKE_CXX_STANDARD 20)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 

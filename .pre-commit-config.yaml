@@ -65,6 +65,7 @@ repos:
       - id: clang-format
         types_or: [c, c++]
         args: ['-style=file', '-i']
+        exclude: ^espidf/tamp/private/tamp_search\.hpp$
 
   - repo: https://github.com/pocc/pre-commit-hooks
     rev: v1.3.5
