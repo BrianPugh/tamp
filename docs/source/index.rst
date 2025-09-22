@@ -16,3 +16,4 @@ Tamp
    python_api
    c_library
    javascript
+   rust
