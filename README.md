@@ -43,6 +43,8 @@ of RAM and firmware storage.
     - `tamp/_c_src/`
   - Javascript/Typescript via Emscripten WASM.
     - `wasm/`
+  - Unofficial [rust bindings](https://github.com/tmpfs/tamp-rs).
+    - See documentation [here](https://docs.rs/tamp/latest/tamp/index.html).
 - High compression ratios, low memory use, and fast.
 - Compact compression and decompression implementations.
   - Compiled C library is <4KB (compressor + decompressor).
