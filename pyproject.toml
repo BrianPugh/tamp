@@ -37,6 +37,7 @@ tamp = "tamp.cli.main:run_app"
 python = "^3.8"
 cyclopts = ">=1.0.0"
 typing-extensions = ">=4.8.0"
+stringzilla = {version = "*", optional = true}
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=4.5.0"
