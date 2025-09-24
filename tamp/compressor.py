@@ -6,6 +6,11 @@ try:
 except ImportError:
     pass
 
+try:
+    import stringzilla as sz
+except ImportError:
+    sz = None
+
 from . import ExcessBitsError, bit_size, compute_min_pattern_size, initialize_dictionary
 
 # encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths
@@ -79,7 +84,11 @@ class _RingBuffer:
             self.write_byte(byte)
 
     def index(self, pattern, start):
-        return self.buffer.index(pattern, start)
+        result = sz.find(self.buffer, pattern, start=start) if sz else self.buffer.find(pattern, start)
+
+        if result == -1:
+            raise ValueError("substring not found")
+        return result
 
 
 class Compressor:
