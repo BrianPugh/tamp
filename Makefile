@@ -271,7 +271,7 @@ esp-qemu-test: esp-idf-copy-sources esp-qemu-test-setup esp-qemu-test-build
 		echo "Error: IDF_PATH not set. Please source ESP-IDF environment first."; \
 		exit 1; \
 	fi
-	@cd espidf/test && python -m pytest --embedded-services idf,qemu -m qemu
+	@cd espidf/test && python -m pytest --embedded-services idf,qemu -m qemu -s
 .PHONY: esp-qemu-test
 
 # Run QEMU tests for ESP32 only
@@ -291,7 +291,7 @@ esp-qemu-test-esp32s3: esp-idf-copy-sources esp-qemu-test-setup esp-qemu-test-bu
 		echo "Error: IDF_PATH not set. Please source ESP-IDF environment first."; \
 		exit 1; \
 	fi
-	@cd espidf/test && python -m pytest --embedded-services idf,qemu -m "esp32s3 and qemu" --target esp32s3
+	@cd espidf/test && python -m pytest --embedded-services idf,qemu -m "esp32s3 and qemu" --target esp32s3 -s
 .PHONY: esp-qemu-test-esp32s3
 
 # Clean ESP32 QEMU test artifacts
