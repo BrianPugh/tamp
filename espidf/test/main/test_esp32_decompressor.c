@@ -1,10 +1,9 @@
-#include <assert.h>
-#include <stddef.h>
+#include <string.h>
 
 #include "tamp/decompressor.h"
 #include "unity.h"
 
-void test_decompressor_byte_by_byte(void) {
+void test_esp32_decompressor_byte_by_byte(void) {
     /*****
      * Tests the decompressor if we feed in 1 byte at a time.
      */
@@ -46,8 +45,8 @@ void test_decompressor_byte_by_byte(void) {
         size_t remaining_buffer = sizeof(output_buffer_complete) - output_written_size;
         res = tamp_decompressor_decompress(&d, output_buffer, remaining_buffer, &output_chunk_written_size, &input_byte,
                                            read_size, &input_chunk_consumed_size);
-        assert(res >= TAMP_OK);  // i.e. an "ok" result
-        assert(input_chunk_consumed_size == read_size);
+        TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);  // i.e. an "ok" result
+        TEST_ASSERT_EQUAL(input_chunk_consumed_size, read_size);
 
         output_written_size += output_chunk_written_size;
         output_buffer += output_chunk_written_size;
@@ -66,5 +65,46 @@ void test_decompressor_byte_by_byte(void) {
         file_exhausted = read_size == 0;
     }
 
-    TEST_ASSERT_EQUAL_STRING("foo foo foo", output_buffer_complete);
+    TEST_ASSERT_EQUAL_STRING("foo foo foo", (char *)output_buffer_complete);
+}
+
+void test_esp32_decompressor_simple(void) {
+    tamp_res res;
+    TampDecompressor decompressor;
+    unsigned char window[1 << 10];
+
+    // Pre-compressed data for "hello world hello world"
+    const unsigned char compressed[] = {
+        0b01011000,  // header (window_bits=10, literal_bits=8)
+        0b10010110,  // literal "h"
+        0b01100101,  // literal "e"
+        0b01101100,  // literal "l"
+        0b01101100,  // literal "l"
+        0b01101111,  // literal "o"
+        0b00100000,  // literal " "
+        0b01110111,  // literal "w"
+        0b01101111,  // literal "o"
+        0b01110010,  // literal "r"
+        0b01101100,  // literal "l"
+        0b01100100,  // literal "d"
+        0b00100000,  // literal " "
+        // Match: "hello world" at index 0, size 11
+        0b00000000,
+        0b00000000,
+        0b00000000,
+        0b00000000,
+    };
+
+    unsigned char output[64];
+    size_t output_written;
+    size_t input_consumed;
+
+    res = tamp_decompressor_init(&decompressor, NULL, window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written,
+                                       (unsigned char *)compressed, sizeof(compressed), &input_consumed);
+
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_GREATER_THAN(0, output_written);
 }

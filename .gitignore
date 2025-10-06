@@ -445,3 +445,27 @@ tramp
 # Temporary files
 *.tmp
 *.temp
+*.backup
+*.old
+
+# Temporary development files
+scratch.md
+profile*.svg
+
+
+##---------------------------------------------------
+# ESP-IDF .gitignore
+##---------------------------------------------------
+
+# Auto-generated build configuration
+sdkconfig
+sdkconfig.old
+sdkconfig.defaults.old
+
+# ESP-IDF dependency management
+dependencies.lock
+
+# Build artifacts
+build/
+managed_components/
+espidf/test/components/

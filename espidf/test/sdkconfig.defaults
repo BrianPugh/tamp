@@ -1,0 +1,18 @@
+# QEMU-specific configuration for Tamp tests
+
+# Enable Tamp ESP32 optimizations
+CONFIG_TAMP_ESP32=y
+
+# Disable watchdog for QEMU testing
+CONFIG_ESP_TASK_WDT_EN=n
+CONFIG_ESP_INT_WDT=n
+
+# Reduce logging for cleaner test output
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# QEMU settings
+CONFIG_ESP_CONSOLE_UART_NUM=0
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# Minimal partition table
+CONFIG_PARTITION_TABLE_SINGLE_APP=y

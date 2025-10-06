@@ -1,0 +1,15 @@
+# pytest-embedded requirements for ESP-IDF QEMU testing
+#
+# IMPORTANT: Use pytest-embedded 1.x for ESP-IDF 5.5 compatibility
+#   - ESP-IDF 5.5 requires esptool~=4.10
+#   - pytest-embedded 2.x requires esptool>5.1 (incompatible)
+#   - pytest-embedded 1.x works with esptool 4.x
+#   - All pytest-embedded plugins must be same major version
+#
+# Compatible with ESP-IDF 5.5 + Python 3.9+
+pytest>=7.0,<9.0
+pytest-embedded>=1.16,<2.0
+pytest-embedded-idf>=1.16,<2.0
+pytest-embedded-qemu>=1.16,<2.0
+pytest-embedded-serial>=1.16,<2.0
+pytest-embedded-serial-esp>=1.16,<2.0

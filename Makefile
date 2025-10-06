@@ -203,6 +203,109 @@ website-clean:
 	rm -rf build/pages-deploy
 	rm -rf website/node_modules website/package-lock.json
 
+################
+# ESP-IDF Component #
+################
+
+# Copy C source files to ESP-IDF component directory
+esp-idf-copy-sources:
+	@echo "Copying C source files to espidf/tamp/..."
+	@mkdir -p espidf/tamp/tamp
+	@cp -r tamp/_c_src/tamp/* espidf/tamp/tamp/
+	@cp README.md espidf/tamp/
+.PHONY: esp-idf-copy-sources
+
+# Build ESP-IDF component package
+esp-idf-component-build: esp-idf-copy-sources
+	@echo "Building ESP-IDF component package..."
+	@cd espidf/tamp && compote component pack --name=tamp --version=0.0.0
+.PHONY: esp-idf-component-build
+
+# Clean ESP-IDF component artifacts
+esp-idf-component-clean:
+	@echo "Cleaning ESP-IDF component artifacts..."
+	@rm -rf espidf/tamp/dist
+	@rm -rf espidf/tamp/tamp
+	@rm -f espidf/tamp/README.md
+.PHONY: esp-idf-component-clean
+
+################
+# ESP32 QEMU Tests #
+################
+
+# Install pytest-embedded dependencies for QEMU testing
+esp-qemu-test-install:
+	@echo "Installing pytest-embedded dependencies..."
+	@if [ -z "$$IDF_PATH" ]; then \
+		echo "Error: IDF_PATH not set. Please source ESP-IDF environment first."; \
+		echo "  . \$$HOME/esp/esp-idf/export.sh"; \
+		exit 1; \
+	fi
+	@python -m pip install -q -r espidf/test/requirements.txt
+	@echo "pytest-embedded installed successfully"
+.PHONY: esp-qemu-test-install
+
+# Setup component symlink for testing (idempotent)
+esp-qemu-test-setup:
+	@mkdir -p espidf/test/components
+	@if [ ! -L espidf/test/components/tamp ]; then \
+		ln -sf ../../tamp espidf/test/components/tamp; \
+		echo "Created symlink: espidf/test/components/tamp -> espidf/tamp"; \
+	fi
+.PHONY: esp-qemu-test-setup
+
+# Build the ESP-IDF test application
+esp-qemu-test-build:
+	@echo "Building ESP-IDF test application..."
+	@if [ -z "$$IDF_PATH" ]; then \
+		echo "Error: IDF_PATH not set. Please source ESP-IDF environment first."; \
+		exit 1; \
+	fi
+	@cd espidf/test && idf.py build
+.PHONY: esp-qemu-test-build
+
+# Run ESP32 QEMU tests (both ESP32 and ESP32-S3)
+esp-qemu-test: esp-idf-copy-sources esp-qemu-test-setup esp-qemu-test-build
+	@echo "Running ESP32 QEMU tests with pytest-embedded..."
+	@if [ -z "$$IDF_PATH" ]; then \
+		echo "Error: IDF_PATH not set. Please source ESP-IDF environment first."; \
+		exit 1; \
+	fi
+	@cd espidf/test && python -m pytest --embedded-services idf,qemu -m qemu
+.PHONY: esp-qemu-test
+
+# Run QEMU tests for ESP32 only
+esp-qemu-test-esp32: esp-idf-copy-sources esp-qemu-test-setup esp-qemu-test-build
+	@echo "Running ESP32 QEMU tests..."
+	@if [ -z "$$IDF_PATH" ]; then \
+		echo "Error: IDF_PATH not set. Please source ESP-IDF environment first."; \
+		exit 1; \
+	fi
+	@cd espidf/test && python -m pytest --embedded-services idf,qemu -m "esp32 and qemu" --target esp32
+.PHONY: esp-qemu-test-esp32
+
+# Run QEMU tests for ESP32-S3 only
+esp-qemu-test-esp32s3: esp-idf-copy-sources esp-qemu-test-setup esp-qemu-test-build
+	@echo "Running ESP32-S3 QEMU tests..."
+	@if [ -z "$$IDF_PATH" ]; then \
+		echo "Error: IDF_PATH not set. Please source ESP-IDF environment first."; \
+		exit 1; \
+	fi
+	@cd espidf/test && python -m pytest --embedded-services idf,qemu -m "esp32s3 and qemu" --target esp32s3
+.PHONY: esp-qemu-test-esp32s3
+
+# Clean ESP32 QEMU test artifacts
+esp-qemu-test-clean:
+	rm -rf espidf/test/build
+	rm -rf espidf/test/sdkconfig
+	rm -rf espidf/test/sdkconfig.old
+	rm -rf espidf/test/components
+	rm -rf espidf/test/managed_components
+	rm -rf espidf/test/dependencies.lock
+	rm -rf espidf/test/.pytest_cache
+	rm -rf espidf/test/__pycache__
+.PHONY: esp-qemu-test-clean
+
 #############
 # C Library #
 #############

@@ -139,6 +139,55 @@ make tamp-c-library        # Creates build/tamp.a
 make c-test               # Unit tests using Unity framework
 ```
 
+### ESP-IDF Component Development
+
+**Build Component Package:**
+
+```bash
+make esp-idf-copy-sources      # Copy C sources to espidf/tamp/
+make esp-idf-component-build   # Build component package
+make esp-idf-component-clean   # Clean component artifacts
+```
+
+### ESP32 QEMU Testing
+
+**Prerequisites:** ESP-IDF (v4.3+) with QEMU and pytest-embedded
+
+```bash
+# Install system dependencies (Linux/macOS)
+# Ubuntu/Debian:
+sudo apt-get install -y libgcrypt20 libglib2.0-0 libpixman-1-0 libsdl2-2.0-0 libslirp0
+
+# Install QEMU via ESP-IDF tools
+python $IDF_PATH/tools/idf_tools.py install qemu-xtensa qemu-riscv32
+
+# Source ESP-IDF environment (required in each terminal session)
+cd $IDF_PATH && . ./export.sh
+
+# Install pytest-embedded (Espressif's official testing framework)
+make esp-qemu-test-install
+```
+
+**Run Tests:**
+
+```bash
+make esp-qemu-test         # Run all QEMU tests (ESP32 + ESP32-S3)
+make esp-qemu-test-esp32   # Run ESP32 tests only
+make esp-qemu-test-esp32s3 # Run ESP32-S3 tests only
+make esp-qemu-test-clean   # Clean test artifacts
+```
+
+**Manual pytest Execution:**
+
+```bash
+cd espidf/test
+pytest --embedded-services idf,qemu -m qemu           # All tests
+pytest --embedded-services idf,qemu -m "esp32 and qemu" --target esp32  # ESP32 only
+```
+
+Uses **pytest-embedded**, Espressif's official testing framework for automated
+QEMU testing. See `espidf/test/README.md` for detailed setup instructions.
+
 ### Website Development
 
 **Build and Serve Website:**
@@ -179,6 +228,8 @@ make website-clean         # Clean website build artifacts
 - **WebAssembly tests** (`wasm/test/`) - JS/TS API testing with Node.js test
   runner
 - **C tests** (`ctests/`) - Low-level C API testing using Unity framework
+- **ESP32 QEMU tests** (`espidf/test/`) - ESP32/ESP32-S3 testing in QEMU
+  emulator
 - **Integration tests** - Cross-platform compatibility and performance
   benchmarks
 
