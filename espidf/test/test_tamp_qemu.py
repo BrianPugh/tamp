@@ -9,6 +9,7 @@ from pytest_embedded import Dut
 
 
 @pytest.mark.esp32
+@pytest.mark.esp32s3
 @pytest.mark.qemu
 @pytest.mark.generic
 def test_tamp_qemu(dut: Dut) -> None:
