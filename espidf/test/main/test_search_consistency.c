@@ -292,24 +292,35 @@ void test_search_binary_data(void) {
 void test_search_window_boundary(void) {
     TampCompressor compressor;
     unsigned char window[1 << 10];
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .use_custom_dictionary = true,  // Don't overwrite our test pattern
+    };
 
-    // Fill window and test pattern near the end
+    // Fill window and test pattern near the end (but not past the boundary)
     memset(window, 'x', sizeof(window));
-    memcpy(window + sizeof(window) - 10, "testpattern", 11);
+    // Copy only 10 bytes to avoid buffer overflow (1024-10=1014, plus 10 bytes = 1023, which is the last valid index)
+    memcpy(window + sizeof(window) - 10, "testpatter", 10);  // "testpatter" without the 'n'
 
-    unsigned char input_data[] = "testpat";
+    unsigned char input_data[] = "testpat";  // 7 bytes
 
-    setup_compressor_state(&compressor, window, NULL, 0,  // Window already set up
-                           input_data, sizeof(input_data) - 1);
+    tamp_compressor_init(&compressor, &conf, window);
+
+    // Manually set up input buffer
+    compressor.input_size = sizeof(input_data) - 1;  // -1 for null terminator
+    memcpy(compressor.input, input_data, compressor.input_size);
+    compressor.input_pos = 0;
 
     uint16_t ref_index = 0, opt_index = 0;
     uint8_t ref_size = 0, opt_size = 0;
 
     find_best_match_reference(&compressor, &ref_index, &ref_size);
 
-    setup_compressor_state(&compressor, window, NULL, 0,  // Window already set up
-                           input_data, sizeof(input_data) - 1);
-    memcpy(window + sizeof(window) - 10, "testpattern", 11);  // Restore
+    // Reset input buffer for second call
+    compressor.input_size = sizeof(input_data) - 1;
+    memcpy(compressor.input, input_data, compressor.input_size);
+    compressor.input_pos = 0;
 
     find_best_match(&compressor, &opt_index, &opt_size);
 
