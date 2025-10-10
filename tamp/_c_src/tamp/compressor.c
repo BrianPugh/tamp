@@ -297,7 +297,7 @@ tamp_res tamp_compressor_compress_cb(TampCompressor *compressor, unsigned char *
                                      size_t *output_written_size, const unsigned char *input, size_t input_size,
                                      size_t *input_consumed_size, tamp_callback_t callback, void *user_data) {
     tamp_res res;
-    size_t input_consumed_size_proxy, output_written_size_proxy;
+    size_t input_consumed_size_proxy = 0, output_written_size_proxy = 0;
     size_t total_input_size = input_size;
 
     if (TAMP_LIKELY(output_written_size))
