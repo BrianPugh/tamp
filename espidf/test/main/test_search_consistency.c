@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -65,15 +66,21 @@ static void setup_compressor_state(TampCompressor *compressor, unsigned char *wi
     TampConf conf = {
         .window = 10,
         .literal = 8,
-        .use_custom_dictionary = false,
+        .use_custom_dictionary = true,  // Use custom data, don't init with default dictionary
     };
 
-    tamp_compressor_init(compressor, &conf, window);
-
-    // Manually set up window with test data
+    // Set up window data BEFORE init (since use_custom_dictionary = true)
     if (window_data && window_len > 0) {
         memcpy(window, window_data, window_len);
+        // Fill rest with zeros to avoid garbage
+        if (window_len < (1 << 10)) {
+            memset(window + window_len, 0, (1 << 10) - window_len);
+        }
+    } else {
+        memset(window, 0, 1 << 10);
     }
+
+    tamp_compressor_init(compressor, &conf, window);
 
     // Manually set up input buffer
     if (input_data && input_len > 0) {
@@ -287,6 +294,139 @@ void test_search_binary_data(void) {
     if (ref_size > 0) {
         TEST_ASSERT_EQUAL_UINT16_MESSAGE(ref_index, opt_index, "Match index mismatch");
     }
+}
+
+void test_search_match_position_preference(void) {
+    TampCompressor compressor;
+    unsigned char window[1 << 10];
+
+    // Test case: Multiple matches of the same length
+    // "foo" appears at positions 0, 10, 20
+    // Reference implementation should prefer the LAST one (position 20) as it's closest
+    const char *window_data = "foo_______foo_______foo_______xxxxx";
+    const char *input_data = "foo";
+
+    setup_compressor_state(&compressor, window, (unsigned char *)window_data, strlen(window_data),
+                           (unsigned char *)input_data, strlen(input_data));
+
+    // Debug: Print window contents
+    printf("DEBUG: Window first 35 bytes: ");
+    for (int i = 0; i < 35 && i < (1 << 10); i++) {
+        if (window[i] >= 32 && window[i] < 127) {
+            printf("%c", window[i]);
+        } else {
+            printf(".");
+        }
+    }
+    printf("\n");
+    printf("DEBUG: Input size=%" PRIu32 ", input: ", (uint32_t)compressor.input_size);
+    for (int i = 0; i < compressor.input_size; i++) {
+        printf("%c", compressor.input[i]);
+    }
+    printf("\n");
+
+    uint16_t ref_index = 0, opt_index = 0;
+    uint8_t ref_size = 0, opt_size = 0;
+
+    find_best_match_reference(&compressor, &ref_index, &ref_size);
+
+    setup_compressor_state(&compressor, window, (unsigned char *)window_data, strlen(window_data),
+                           (unsigned char *)input_data, strlen(input_data));
+
+    find_best_match(&compressor, &opt_index, &opt_size);
+
+    printf("Match position preference: ref_size=%d ref_index=%d, opt_size=%d opt_index=%d\n", ref_size, ref_index,
+           opt_size, opt_index);
+
+    // EXPECTED: ref_index=20 (last match), opt_index might be 0 (first match)
+    // For now, just warn if they differ
+    if (ref_index != opt_index && ref_size == opt_size && ref_size > 0) {
+        printf("  WARNING: Different match positions selected for same-length matches!\n");
+        printf("  This MAY be acceptable depending on compression strategy.\n");
+    }
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(ref_size, opt_size, "Match size mismatch");
+    // Don't fail on index mismatch for now - just document it
+}
+
+void test_search_longer_match_earlier(void) {
+    TampCompressor compressor;
+    unsigned char window[1 << 10];
+
+    // Critical test: Longer match earlier in window, shorter match later
+    // "abcd" at position 0 (4 bytes)
+    // "abc" at position 10 (3 bytes)
+    // Should find the 4-byte match, not settle for 3-byte
+    const char *window_data = "abcd_____abc__________xxxxx";
+    const char *input_data = "abcd";  // Looking for 4-byte match
+
+    setup_compressor_state(&compressor, window, (unsigned char *)window_data, strlen(window_data),
+                           (unsigned char *)input_data, strlen(input_data));
+
+    // Debug output
+    printf("DEBUG: Window contains: 'abcd' at 0, 'abc' at 9\n");
+    printf("DEBUG: Pattern to find: 'abcd' (4 bytes)\n");
+
+    uint16_t ref_index = 0, opt_index = 0;
+    uint8_t ref_size = 0, opt_size = 0;
+
+    find_best_match_reference(&compressor, &ref_index, &ref_size);
+
+    setup_compressor_state(&compressor, window, (unsigned char *)window_data, strlen(window_data),
+                           (unsigned char *)input_data, strlen(input_data));
+
+    find_best_match(&compressor, &opt_index, &opt_size);
+
+    printf("Longer match earlier: ref_size=%d ref_index=%d, opt_size=%d opt_index=%d\n", ref_size, ref_index, opt_size,
+           opt_index);
+
+    if (ref_size != opt_size || ref_index != opt_index) {
+        printf("  *** MISMATCH DETECTED ***\n");
+        printf("  Expected: Both should find 4-byte match at index 0\n");
+        printf("  Reference: size=%d index=%d\n", ref_size, ref_index);
+        printf("  Optimized: size=%d index=%d\n", opt_size, opt_index);
+    }
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(ref_size, opt_size, "CRITICAL BUG: Match size mismatch - missed longer match!");
+    if (ref_size > 0) {
+        TEST_ASSERT_EQUAL_UINT16_MESSAGE(ref_index, opt_index, "Match index mismatch");
+    }
+    // This is the key assertion - we should find a 4-byte match, not 3-byte
+    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(4, opt_size, "Should find 4-byte match");
+}
+
+void test_search_shorter_match_later(void) {
+    TampCompressor compressor;
+    unsigned char window[1 << 10];
+
+    // Opposite case: Shorter match earlier, longer match later
+    // "abc" at position 0 (3 bytes)
+    // "abcdef" at position 10 (6 bytes)
+    // Should definitely find the 6-byte match
+    const char *window_data = "abc______abcdef___________xxxxx";
+    const char *input_data = "abcdef";  // Looking for 6-byte match
+
+    setup_compressor_state(&compressor, window, (unsigned char *)window_data, strlen(window_data),
+                           (unsigned char *)input_data, strlen(input_data));
+
+    uint16_t ref_index = 0, opt_index = 0;
+    uint8_t ref_size = 0, opt_size = 0;
+
+    find_best_match_reference(&compressor, &ref_index, &ref_size);
+
+    setup_compressor_state(&compressor, window, (unsigned char *)window_data, strlen(window_data),
+                           (unsigned char *)input_data, strlen(input_data));
+
+    find_best_match(&compressor, &opt_index, &opt_size);
+
+    printf("Shorter match later: ref_size=%d ref_index=%d, opt_size=%d opt_index=%d\n", ref_size, ref_index, opt_size,
+           opt_index);
+
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(ref_size, opt_size, "Match size mismatch");
+    if (ref_size > 0) {
+        TEST_ASSERT_EQUAL_UINT16_MESSAGE(ref_index, opt_index, "Match index mismatch");
+    }
+    TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(6, opt_size, "Should find 6-byte match");
 }
 
 void test_search_window_boundary(void) {

@@ -19,7 +19,14 @@ extern void test_search_partial_match(void);
 extern void test_search_long_pattern(void);
 extern void test_search_edge_case_minimum_pattern(void);
 extern void test_search_binary_data(void);
+extern void test_search_match_position_preference(void);
+extern void test_search_longer_match_earlier(void);
+extern void test_search_shorter_match_later(void);
 extern void test_search_window_boundary(void);
+
+// Real compression tests
+extern void test_real_text_compression(void);
+extern void test_enwik8_like_text(void);
 
 void setUp(void) {
     // This is run before EACH test
@@ -58,7 +65,16 @@ void app_main(void) {
     RUN_TEST(test_search_long_pattern);
     RUN_TEST(test_search_edge_case_minimum_pattern);
     RUN_TEST(test_search_binary_data);
+
+    printf("\n--- Critical Bug Detection Tests ---\n");
+    RUN_TEST(test_search_match_position_preference);
+    RUN_TEST(test_search_longer_match_earlier);
+    RUN_TEST(test_search_shorter_match_later);
     RUN_TEST(test_search_window_boundary);
+
+    printf("\n--- Real Compression Tests ---\n");
+    RUN_TEST(test_real_text_compression);
+    RUN_TEST(test_enwik8_like_text);
 
     int result = UNITY_END();
 
