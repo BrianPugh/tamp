@@ -22,13 +22,21 @@ if profile and sanitize:
 
 
 def build_cython_extensions():
-    import Cython.Compiler.Options
-    from Cython.Build import build_ext, cythonize
-    from Cython.Compiler.Options import get_directive_defaults
-    from setuptools import Extension
-    from setuptools.dist import Distribution
+    try:
+        import Cython.Compiler.Options
+        from Cython.Build import build_ext, cythonize
+        from Cython.Compiler.Options import get_directive_defaults
 
-    Cython.Compiler.Options.annotate = True
+        has_cython = True
+        Cython.Compiler.Options.annotate = True
+    except ImportError:
+        has_cython = False
+        from setuptools import Extension
+        from setuptools.command.build_ext import build_ext
+        from setuptools.dist import Distribution
+    else:
+        from setuptools import Extension
+        from setuptools.dist import Distribution
 
     if sanitize:
         print("Building with sanitizers enabled (UBSan + ASan)")
@@ -108,52 +116,94 @@ def build_cython_extensions():
     if sanitize:
         extension_kwargs["extra_link_args"] = extra_link_args
 
-    extensions = [
-        Extension(
-            "tamp._c_compressor",
-            [
-                "tamp/_c_src/tamp/common.c",
-                "tamp/_c_src/tamp/compressor.c",
-                "tamp/_c_compressor.pyx",
-            ],
-            **extension_kwargs,
-        ),
-        Extension(
-            "tamp._c_decompressor",
-            [
-                "tamp/_c_src/tamp/common.c",
-                "tamp/_c_src/tamp/decompressor.c",
-                "tamp/_c_decompressor.pyx",
-            ],
-            **extension_kwargs,
-        ),
-        Extension(
-            "tamp._c_common",
-            [
-                "tamp/_c_common.pyx",
-            ],
-            **extension_kwargs,
-        ),
-    ]
+    # Check if pre-generated .c files exist (for building from sdist without Cython)
+    c_compressor_exists = Path("tamp/_c_compressor.c").exists()
+    c_decompressor_exists = Path("tamp/_c_decompressor.c").exists()
+    c_common_exists = Path("tamp/_c_common.c").exists()
+    use_c_files = not has_cython and c_compressor_exists and c_decompressor_exists and c_common_exists
+
+    if use_c_files:
+        print("Building from pre-generated C files (Cython not available)")
+        extensions = [
+            Extension(
+                "tamp._c_compressor",
+                [
+                    "tamp/_c_src/tamp/common.c",
+                    "tamp/_c_src/tamp/compressor.c",
+                    "tamp/_c_compressor.c",
+                ],
+                **extension_kwargs,
+            ),
+            Extension(
+                "tamp._c_decompressor",
+                [
+                    "tamp/_c_src/tamp/common.c",
+                    "tamp/_c_src/tamp/decompressor.c",
+                    "tamp/_c_decompressor.c",
+                ],
+                **extension_kwargs,
+            ),
+            Extension(
+                "tamp._c_common",
+                [
+                    "tamp/_c_common.c",
+                ],
+                **extension_kwargs,
+            ),
+        ]
+    else:
+        if not has_cython:
+            raise ImportError("Cython is required to build from source. Install it with: pip install cython>=3.0.0")
+        extensions = [
+            Extension(
+                "tamp._c_compressor",
+                [
+                    "tamp/_c_src/tamp/common.c",
+                    "tamp/_c_src/tamp/compressor.c",
+                    "tamp/_c_compressor.pyx",
+                ],
+                **extension_kwargs,
+            ),
+            Extension(
+                "tamp._c_decompressor",
+                [
+                    "tamp/_c_src/tamp/common.c",
+                    "tamp/_c_src/tamp/decompressor.c",
+                    "tamp/_c_decompressor.pyx",
+                ],
+                **extension_kwargs,
+            ),
+            Extension(
+                "tamp._c_common",
+                [
+                    "tamp/_c_common.pyx",
+                ],
+                **extension_kwargs,
+            ),
+        ]
 
     include_dirs = set()
     for extension in extensions:
         include_dirs.update(extension.include_dirs)
     include_dirs = list(include_dirs)
 
-    # Configure cythonize options for profiling
-    cythonize_kwargs = {
-        "include_path": include_dirs,
-        "language_level": 3,
-        "annotate": True,
-    }
+    # Cythonize if using .pyx files, otherwise use .c files directly
+    if use_c_files:
+        ext_modules = extensions
+    else:
+        # Configure cythonize options for profiling
+        cythonize_kwargs = {
+            "include_path": include_dirs,
+            "language_level": 3,
+            "annotate": True,
+        }
 
-    if profile:
-        # Enable additional debugging for profiling
-        cythonize_kwargs["gdb_debug"] = True
-        cythonize_kwargs["emit_linenums"] = True
+        if profile:
+            # Enable additional debugging for profiling
+            cythonize_kwargs["gdb_debug"] = True
+            cythonize_kwargs["emit_linenums"] = True
 
-    ext_modules = cythonize(extensions, **cythonize_kwargs)
+        ext_modules = cythonize(extensions, **cythonize_kwargs)
     dist = Distribution({"ext_modules": ext_modules})
     cmd = build_ext(dist)
     cmd.ensure_finalized()

@@ -53,6 +53,14 @@ jobs:
           poetry config virtualenvs.create true
           poetry config virtualenvs.in-project true
 
+      - name: Install dev dependencies (for Cython)
+        run: |
+          poetry install --with dev
+
+      - name: Cythonize extensions
+        run: |
+          poetry run python build.py build_ext --inplace
+
       - name: Build sdist
         run: |
           poetry self add "poetry-dynamic-versioning[plugin]"
