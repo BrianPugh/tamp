@@ -70,12 +70,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest]
-        cibw_build: ['cp38-*', 'cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
+        cibw_build: ['cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
         cibw_archs: ['AMD64', 'x86', 'ARM64']
-        exclude:
-          - os: windows-latest
-            cibw_build: 'cp38-*'
-            cibw_archs: 'ARM64'
     env:
       PYTHON: 3.12
 
@@ -121,7 +117,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04] # TODO: change back to ubuntu-latest; see https://github.com/actions/runner-images/issues/11471
-        cibw_build: ['cp38-*', 'cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
+        cibw_build: ['cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
         cibw_archs: ['x86_64', 'i686', 'aarch64', 'ppc64le']
     env:
       PYTHON: 3.12
@@ -168,7 +164,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-13] # x86_64 runner
-        cibw_build: ['cp38-*', 'cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
+        cibw_build: ['cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
         cibw_archs: ['x86_64']
     env:
       PYTHON: 3.12
@@ -207,9 +203,10 @@ jobs:
     name: '${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}'
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-14] # ARM runner
-        cibw_build: ['cp38-*', 'cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
+        cibw_build: ['cp39-*', 'cp310-*', 'cp311-*', 'cp312-*']
         cibw_archs: ['arm64']
     env:
       PYTHON: 3.12
@@ -238,33 +235,11 @@ jobs:
           CIBW_TEST_SKIP: '*-macosx_arm64'
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest {package}/tests
-          CIBW_REPAIR_WHEEL_COMMAND: |
-            echo "Target delocate archs: {delocate_archs}"
-
-            ORIGINAL_WHEEL={wheel}
-
-            echo "Running delocate-listdeps to list linked original wheel dependencies"
-            delocate-listdeps --all $ORIGINAL_WHEEL
-
-            echo "Renaming .whl file when architecture is 'macosx_arm64'"
-            RENAMED_WHEEL=${ORIGINAL_WHEEL//x86_64/arm64}
-
-            echo "Wheel will be renamed to $RENAMED_WHEEL"
-            mv $ORIGINAL_WHEEL $RENAMED_WHEEL
-
-            echo "Running delocate-wheel command on $RENAMED_WHEEL"
-            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v $RENAMED_WHEEL
-
-            echo "Running delocate-listdeps to list linked wheel dependencies"
-            WHEEL_SIMPLE_FILENAME="${RENAMED_WHEEL##*/}"
-            delocate-listdeps --all {dest_dir}/$WHEEL_SIMPLE_FILENAME
-
-            echo "DONE."
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}-${{ env.CIBW_BUILD_SANITIZED }}-${{ matrix.cibw_archs }}
-          path: ./wheelhouse/*.whl
+          path: wheelhouse/*.whl
 
   upload_to_pypi:
     if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')

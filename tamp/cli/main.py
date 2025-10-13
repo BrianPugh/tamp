@@ -1,9 +1,8 @@
 import sys
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from cyclopts import App, Parameter, validators
-from typing_extensions import Annotated
 
 import tamp
 
