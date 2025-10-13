@@ -101,7 +101,7 @@ jobs:
           python-version: ${{ env.PYTHON }}
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.16.5
+        uses: pypa/cibuildwheel@v3.2.1
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
@@ -149,7 +149,7 @@ jobs:
           python-version: ${{ env.PYTHON }}
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.16.5
+        uses: pypa/cibuildwheel@v3.2.1
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
@@ -191,7 +191,7 @@ jobs:
           python-version: ${{ env.PYTHON }}
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.16.5
+        uses: pypa/cibuildwheel@v3.2.1
         env:
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
@@ -231,7 +231,7 @@ jobs:
           python-version: ${{ env.PYTHON }}
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.16.5
+        uses: pypa/cibuildwheel@v3.2.1
         env:
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
@@ -277,6 +277,12 @@ jobs:
           path: wheels
           pattern: wheels-*
           merge-multiple: true
+
+      - name: Validate wheels
+        run: |
+          python -m pip install check-wheel-contents
+          python -m zipfile --test wheels/*.whl
+          check-wheel-contents wheels/*.whl
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
