@@ -12,7 +12,7 @@ Tamp contains 4 implementations:
 
 Desktop Python
 ^^^^^^^^^^^^^^
-The Tamp library and CLI requires Python ``>=3.8`` and can be installed via:
+The Tamp library and CLI requires Python ``>=3.9`` and can be installed via:
 
 .. code-block:: bash
 

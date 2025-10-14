@@ -1,5 +1,5 @@
 [build-system]
-requires = ["poetry-core (>=1.0.0, <2.0.0)", "poetry-dynamic-versioning>=0.21.5", "cython>=3.0.0", "setuptools>=70.1"]
+requires = ["poetry-core (>=1.0.0, <2.0.0)", "poetry-dynamic-versioning>=0.21.5", "cython>=3.0.0", "setuptools>=74.1.2"]
 build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.poetry-dynamic-versioning]
@@ -34,9 +34,8 @@ tamp = "tamp.cli.main:run_app"
 
 [tool.poetry.dependencies]
 # Be as loose as possible if writing a library.
-python = "^3.8"
+python = "^3.9"
 cyclopts = ">=1.0.0"
-typing-extensions = ">=4.8.0"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=4.5.0"
@@ -59,10 +58,7 @@ ipdb = ">=0.13.13"
 mpremote = ">=1.20.0"
 cython = ">=0.29.34"
 pytest-subtests = ">=0.10.0"
-numpy = [
-    {version = ">=1.24", python = ">=3.8,<3.12"},
-    {version = ">=1.26", python = ">=3.12"}
-]
+numpy = ">=1.24"
 pyelftools = "^0.32"
 
 [tool.poetry.group.profile]
@@ -142,7 +138,7 @@ venvPath = "."
 venv = ".venv"
 
 [tool.ruff]
-target-version = 'py38'
+target-version = 'py39'
 unfixable = ["UP"]
 select = [
     "B",  # flake8-bugbear
@@ -174,7 +170,6 @@ exclude = [
 ]
 
 ignore = [
-    "B905",  # zip strict=True; remove once python <3.10 support is dropped.
     "D100",
     "D101",
     "D102",
