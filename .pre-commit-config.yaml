@@ -16,8 +16,8 @@ repos:
           - '--target-version=py310'
           - '--target-version=py311'
           - '--target-version=py312'
-          - '--target-version=py313'
-          - '--target-version=py314'
+          # - '--target-version=py313'
+          # - '--target-version=py314'
         types: [python]
 
   - repo: https://github.com/adamchainz/blacken-docs
