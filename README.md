@@ -4,7 +4,7 @@
 
 <div align="center">
 
-![Python compat](https://img.shields.io/badge/%3E=python-3.8-blue.svg)
+![Python compat](https://img.shields.io/badge/%3E=python-3.9-blue.svg)
 [![PyPi](https://img.shields.io/pypi/v/tamp.svg)](https://pypi.python.org/pypi/tamp)
 [![GHA Status](https://github.com/BrianPugh/tamp/actions/workflows/tests.yaml/badge.svg?branch=main)](https://github.com/BrianPugh/tamp/actions?query=workflow%3Atests)
 [![Coverage](https://codecov.io/github/BrianPugh/tamp/coverage.svg?branch=main)](https://codecov.io/github/BrianPugh/tamp?branch=main)
@@ -70,7 +70,7 @@ This section instructs how to install each implementation.
 
 ## Desktop Python
 
-The Tamp library and CLI requires Python `>=3.8` and can be installed via:
+The Tamp library and CLI requires Python `>=3.9` and can be installed via:
 
 ```bash
 pip install tamp

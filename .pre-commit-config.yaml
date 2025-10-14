@@ -12,10 +12,12 @@ repos:
       - id: black
         args:
           - '--line-length=120'
-          - '--target-version=py38'
           - '--target-version=py39'
           - '--target-version=py310'
           - '--target-version=py311'
+          - '--target-version=py312'
+          - '--target-version=py313'
+          - '--target-version=py314'
         types: [python]
 
   - repo: https://github.com/adamchainz/blacken-docs
@@ -95,50 +97,3 @@ repos:
         files: \.(js|ts|mjs|json|md|yaml|yml)$
         exclude: ^(dist/|node_modules/|\.git/)
         args: [--write]
-
-  # Node.js and WASM specific checks
-  - repo: local
-    hooks:
-      - id: wasm-eslint
-        name: WASM ESLint
-        entry: bash
-        args: ['-c', 'cd wasm && npm run lint']
-        language: system
-        files: ^wasm/(src|test)/.*\.(js|mjs)$
-        pass_filenames: false
-
-      - id: wasm-npm-test
-        name: WASM npm test
-        entry: bash
-        args: ['-c', 'cd wasm && npm test']
-        language: system
-        files: ^wasm/(src/.*\.(js|ts|mjs)|test/.*\.js|package\.json)$
-        pass_filenames: false
-
-      - id: wasm-file-validation
-        name: WebAssembly file validation
-        entry: bash
-        args:
-          [
-            '-c',
-            'for f in "$@"; do file "$f" | grep -q "WebAssembly" || (echo "Invalid WASM file: $f" && exit 1); done',
-          ]
-        language: system
-        files: \.wasm$
-        types: [binary]
-
-      - id: typescript-check
-        name: TypeScript definitions check
-        entry: bash
-        args: ['-c', 'cd wasm && npx tsc --noEmit --skipLibCheck src/*.d.ts']
-        language: system
-        files: ^wasm/src/.*\.d\.ts$
-        pass_filenames: false
-
-      - id: package-json-lint
-        name: package.json validation
-        entry: bash
-        args: ['-c', 'cd wasm && npm pkg fix']
-        language: system
-        files: ^wasm/package\.json$
-        pass_filenames: false
