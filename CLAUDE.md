@@ -37,47 +37,47 @@ different platforms:
 **Environment Setup:**
 
 ```bash
-poetry install              # Install dependencies
-poetry shell               # Activate virtual environment
+uv sync                    # Install dependencies
+uv sync --all-extras      # Install all optional dependencies
 ```
 
 **Build and Test:**
 
 ```bash
 # Build Cython extensions
-poetry run python build.py build_ext --inplace
+uv run python build.py build_ext --inplace
 
 # Run tests
-poetry run pytest                    # All tests
-poetry run pytest tests/test_compressor.py  # Specific test file
+uv run pytest                    # All tests
+uv run pytest tests/test_compressor.py  # Specific test file
 
 # Run both Python and MicroPython tests
 make test
 
 # CLI usage
-poetry run tamp compress input.txt -o output.tamp
-poetry run tamp decompress output.tamp -o restored.txt
+uv run tamp compress input.txt -o output.tamp
+uv run tamp decompress output.tamp -o restored.txt
 ```
 
 **Code Quality:**
 
 ```bash
-poetry run ruff check              # Linting
-poetry run ruff format             # Formatting
-poetry run pyright                 # Type checking
+uv run ruff check              # Linting
+uv run ruff format             # Formatting
+uv run pyright                 # Type checking
 ```
 
 **Testing with AddressSanitizer (Linux only):**
 
 ```bash
 # Build with sanitizers enabled
-TAMP_SANITIZE=1 poetry run python build.py build_ext --inplace
+TAMP_SANITIZE=1 uv run python build.py build_ext --inplace
 
 # Run tests with AddressSanitizer (requires LD_PRELOAD on Linux)
 LD_PRELOAD=$(gcc -print-file-name=libasan.so) \
 ASAN_OPTIONS=detect_leaks=0 \
 UBSAN_OPTIONS=print_stacktrace=1 \
-poetry run pytest
+uv run pytest
 
 # Note: AddressSanitizer is only supported on Linux due to security
 # restrictions on macOS that prevent LD_PRELOAD/DYLD_INSERT_LIBRARIES
@@ -155,7 +155,8 @@ make website-clean         # Clean website build artifacts
 
 **Python Build Process:**
 
-1. `pyproject.toml` defines Poetry configuration with dynamic versioning
+1. `pyproject.toml` defines project configuration with setuptools-scm for
+   dynamic versioning
 2. `build.py` handles Cython extension compilation with optimization flags
 3. Extensions link against shared C source in `tamp/_c_src/tamp/`
 
@@ -205,8 +206,9 @@ make website-clean         # Clean website build artifacts
 2. **Rebuild all implementations:**
 
    ```bash
-   # Python
-   poetry run python build.py build_ext --inplace
+   # Python (clean and rebuild)
+   make clean-cython
+   uv run python build.py build_ext --inplace
 
    # WebAssembly
    cd wasm && npm run build
@@ -240,7 +242,7 @@ make website-clean         # Clean website build artifacts
 
 ### Release Process
 
-1. **Version is automatically managed** via `poetry-dynamic-versioning`
+1. **Version is automatically managed** via `setuptools-scm`
 2. **Build artifacts include:**
    - Python wheels with compiled extensions
    - MicroPython `.mpy` files for multiple architectures

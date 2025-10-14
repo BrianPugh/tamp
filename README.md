@@ -375,6 +375,29 @@ Numbers reported in bytes.
 Heatshrink doesn't include a high level API; in an apples-to-apples comparison
 the Tamp library would be even smaller.
 
+# Development
+
+For local development and contributing to Tamp:
+
+```bash
+# Clone and setup environment
+git clone https://github.com/BrianPugh/tamp.git
+cd tamp
+uv sync
+
+# Build Cython/C extensions
+uv run python build.py build_ext --inplace
+
+# Run tests
+uv run pytest
+
+# Clean build artifacts (if needed)
+make clean-cython
+```
+
+For more detailed instructions, see the
+[Contributing Guide](.github/contributing.md).
+
 ## Acknowledgement
 
 - Thanks @BitsForPeople for the esp32-optimized compressor implementation.

@@ -17,7 +17,6 @@ jobs:
         os: [ubuntu-latest]
     env:
       PYTHON: 3.12
-      POETRY_HOME: '~/poetry'
 
     steps:
       - name: Check out repository
@@ -30,33 +29,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON }}
 
-      - name: Cache Poetry Install
-        uses: actions/cache@v4
-        id: cached-poetry
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ env.PYTHON }}-${{ hashFiles('.github/workflows/build_wheels.yaml') }}
-
-      - name: Install poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.8.5
-
-      - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
-        run: |
-          echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry # Needs to be separate from install-poetry because cache.
-        run: |
-          poetry self add poetry-dynamic-versioning[plugin]
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
+          enable-cache: true
 
       - name: Build sdist
         run: |
-          poetry self add "poetry-dynamic-versioning[plugin]"
-          poetry build --format=sdist
+          uv build --sdist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -96,10 +76,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
         env:
-          CIBW_BUILD_FRONTEND: 'pip'
+          CIBW_BUILD_FRONTEND: 'build[uv]'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_TEST_REQUIRES: pytest
@@ -146,7 +131,7 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
         env:
-          CIBW_BUILD_FRONTEND: 'pip'
+          CIBW_BUILD_FRONTEND: 'pip' # Keep pip for Windows ARM64 - uv doesn't support it yet
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_TEST_REQUIRES: pytest
@@ -191,10 +176,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
         env:
-          CIBW_BUILD_FRONTEND: 'pip'
+          CIBW_BUILD_FRONTEND: 'build[uv]'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_TEST_REQUIRES: pytest
@@ -234,10 +224,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
         env:
-          CIBW_BUILD_FRONTEND: 'pip'
+          CIBW_BUILD_FRONTEND: 'build[uv]'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_TEST_REQUIRES: pytest
@@ -275,10 +270,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.2.1
         env:
-          CIBW_BUILD_FRONTEND: 'pip'
+          CIBW_BUILD_FRONTEND: 'build[uv]'
           CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_TEST_SKIP: '*-macosx_arm64'

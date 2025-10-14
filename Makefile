@@ -89,11 +89,11 @@ build/enwik8-100kb: download-enwik8
 	@head -c 100000 build/enwik8 > build/enwik8-100kb
 
 build/enwik8-100kb.tamp: build/enwik8-100kb
-	@poetry run tamp compress build/enwik8-100kb -o build/enwik8-100kb.tamp
+	@uv run tamp compress build/enwik8-100kb -o build/enwik8-100kb.tamp
 
 test: venv
-	@poetry run python build.py build_ext --inplace && python -m pytest
-	@poetry run belay run micropython -m unittest tests/*.py
+	@uv run python build.py build_ext --inplace && python -m pytest
+	@uv run belay run micropython -m unittest tests/*.py
 	@echo "All Tests Passed!"
 
 collect-data: venv download-enwik8
@@ -102,22 +102,22 @@ collect-data: venv download-enwik8
 	@python tools/collect-data.py 10
 
 on-device-compression-benchmark: venv build/enwik8-100kb build/enwik8-100kb.tamp
-	@port=$$(python -c "import os, belay; print(belay.UsbSpecifier.parse_raw(os.environ['BELAY_DEVICE']).to_port())"); \
+	@port=$$(uv run python -c "import os, belay; print(belay.UsbSpecifier.parse_raw(os.environ['BELAY_DEVICE']).to_port())"); \
 	echo "Using port: $$port"; \
-	mpremote connect port:$$port rm :enwik8-100kb.tamp || true; \
-	belay sync '$(BELAY_DEVICE)' build/enwik8-100kb; \
-	belay install '$(BELAY_DEVICE)' --with=dev --run tools/on-device-compression-benchmark.py; \
-	mpremote connect port:$$port cp :enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp; \
+	uv run mpremote connect port:$$port rm :enwik8-100kb.tamp || true; \
+	uv run belay sync '$(BELAY_DEVICE)' build/enwik8-100kb; \
+	uv run belay install '$(BELAY_DEVICE)' --with=dev --run tools/on-device-compression-benchmark.py; \
+	uv run mpremote connect port:$$port cp :enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp; \
 	cmp build/enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp; \
 	echo "Success!"
 
 on-device-decompression-benchmark: venv build/enwik8-100kb.tamp
-	@port=$$(python -c "import os, belay; print(belay.UsbSpecifier.parse_raw(os.environ['BELAY_DEVICE']).to_port())"); \
+	@port=$$(uv run python -c "import os, belay; print(belay.UsbSpecifier.parse_raw(os.environ['BELAY_DEVICE']).to_port())"); \
 	echo "Using port: $$port"; \
-	mpremote connect port:$$port rm :enwik8-100kb-decompressed || true; \
-	belay sync '$(BELAY_DEVICE)' build/enwik8-100kb.tamp; \
-	belay install '$(BELAY_DEVICE)' --with=dev --run tools/on-device-decompression-benchmark.py; \
-	mpremote connect port:$$port cp :enwik8-100kb-decompressed build/on-device-enwik8-100kb-decompressed; \
+	uv run mpremote connect port:$$port rm :enwik8-100kb-decompressed || true; \
+	uv run belay sync '$(BELAY_DEVICE)' build/enwik8-100kb.tamp; \
+	uv run belay install '$(BELAY_DEVICE)' --with=dev --run tools/on-device-decompression-benchmark.py; \
+	uv run mpremote connect port:$$port cp :enwik8-100kb-decompressed build/on-device-enwik8-100kb-decompressed; \
 	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed; \
 	echo "Success!"
 

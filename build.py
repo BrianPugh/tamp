@@ -2,15 +2,13 @@ import os
 import shutil
 from pathlib import Path
 
-allowed_to_fail = os.environ.get("CIBUILDWHEEL", "0") != "1"
+# In CI/cibuildwheel, we want to ensure extensions are built
+# Otherwise, allow graceful fallback to pure Python implementation
+building_wheel = os.environ.get("CIBUILDWHEEL", "0") == "1"
+in_ci = os.environ.get("CI", "false").lower() == "true"
+must_succeed = building_wheel or in_ci
 
 profile = os.environ.get("TAMP_PROFILE", "0") == "1"
-
-# Enable sanitizers by default for development builds, disable for CI/production
-in_ci = os.environ.get("CI", "false").lower() == "true"
-building_wheel = os.environ.get("CIBUILDWHEEL", "0") == "1"
-is_production_build = in_ci or building_wheel
-
 sanitize = os.environ.get("TAMP_SANITIZE", "0") == "1"
 
 # Ensure profile and sanitize are mutually exclusive
@@ -22,18 +20,27 @@ if profile and sanitize:
 
 
 def build_cython_extensions():
-    import Cython.Compiler.Options
-    from Cython.Build import build_ext, cythonize
-    from Cython.Compiler.Options import get_directive_defaults
-    from setuptools import Extension
-    from setuptools.dist import Distribution
+    try:
+        import Cython.Compiler.Options
+        from Cython.Build import build_ext, cythonize
+        from Cython.Compiler.Options import get_directive_defaults
+        from setuptools import Extension
+        from setuptools.dist import Distribution
+    except ImportError as e:
+        if must_succeed:
+            raise RuntimeError(
+                "Cython is required to build extensions in CI/production builds. "
+                f"Install it with: pip install cython\nError: {e}"
+            )
+        print("Warning: Cython not available. Falling back to pure Python implementation.")
+        return
 
     Cython.Compiler.Options.annotate = True
 
     if sanitize:
         print("Building with sanitizers enabled (UBSan + ASan)")
-    elif is_production_build:
-        print("Building for production (sanitizers disabled)")
+    elif must_succeed:
+        print("Building for production (CI/cibuildwheel)")
     else:
         print("Building for development")
 
@@ -165,9 +172,15 @@ def build_cython_extensions():
         shutil.copyfile(output, relative_extension)
 
 
-if os.environ.get("TAMP_BUILD_C_EXTENSIONS", "1") == "1":
-    try:
-        build_cython_extensions()
-    except Exception:
-        if not allowed_to_fail:
-            raise
+# When running build.py directly (for development), build extensions
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "build_ext":
+        try:
+            build_cython_extensions()
+        except Exception as e:
+            if must_succeed:
+                raise
+            print(f"Warning: Failed to build C extensions: {e}")
+            print("The package will fall back to pure Python implementation.")

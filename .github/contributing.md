@@ -1,19 +1,57 @@
 ## Environment Setup
 
-1. We use [Poetry](https://python-poetry.org/docs/#installation) for managing
-   virtual environments and dependencies. Once Poetry is installed, run
-   `poetry install` in this repo to get started.
-2. For managing linters, static-analysis, and other tools, we use
+1. We use [uv](https://docs.astral.sh/uv/) for managing virtual environments and
+   dependencies. Once uv is installed, run `uv sync` in this repo to get
+   started.
+
+2. Build the Cython/C extensions (required for development and testing):
+
+   ```bash
+   uv run python build.py build_ext --inplace
+   ```
+
+3. Verify the installation:
+
+   ```bash
+   uv run python -c "import tamp; print(f'Version: {tamp.__version__}')"
+   uv run pytest  # Run tests
+   ```
+
+4. For managing linters, static-analysis, and other tools, we use
    [pre-commit](https://pre-commit.com/#installation). Once Pre-commit is
    installed, run `pre-commit install` in this repo to install the hooks. Using
    pre-commit ensures PRs match the linting requirements of the codebase.
+
+### Rebuilding After Changes
+
+If you modify C/Cython code (`.c`, `.h`, `.pyx` files), rebuild the extensions:
+
+```bash
+uv run python build.py build_ext --inplace
+```
+
+### Clean Build
+
+To start fresh:
+
+```bash
+make clean-cython  # Remove compiled Cython extensions
+uv run python build.py build_ext --inplace
+```
+
+Or for a complete clean (including build artifacts):
+
+```bash
+make clean  # Removes build/, dist/, and Cython files
+uv run python build.py build_ext --inplace
+```
 
 ## Documentation
 
 Whenever possible, please add docstrings to your code! We use
 [numpy-style napoleon docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/#google-vs-numpy).
-To confirm docstrings are valid, build the docs by running
-`poetry run make html` in the `docs/` folder.
+To confirm docstrings are valid, build the docs by running `uv run make html` in
+the `docs/` folder.
 
 I typically write dosctrings first, it will act as a guide to limit scope and
 encourage unit-testable code. Good docstrings include information like:

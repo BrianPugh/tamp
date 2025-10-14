@@ -30,52 +30,13 @@ jobs:
     env:
       OS: ${{ matrix.os }}
       PYTHON: ${{ matrix.python-version }}
-      POETRY_HOME: '~/poetry'
 
     steps:
-      - name: Set OS Environment Variables (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo 'ACTIVATE_PYTHON_VENV=.venv/scripts/activate' >> $GITHUB_ENV
-
-      - name: Set OS Environment Variables (not Windows)
-        if: runner.os != 'Windows'
-        run: |
-          echo 'ACTIVATE_PYTHON_VENV=.venv/bin/activate' >> $GITHUB_ENV
-
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Set up python 3.13
-        id: setup-python-system
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.13
-
-      - name: Cache Poetry Install
-        uses: actions/cache@v4
-        id: cached-poetry
-        with:
-          path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ steps.setup-python-system.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
-
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        with:
-          version: 1.8.5
-
-      - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
-        run: |
-          echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry # Needs to be separate from install-poetry because cache.
-        run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
-          poetry config installer.parallel ${{ runner.os != 'Windows' }} # Currently there seems to be some race-condition in windows
+          fetch-depth: 0 # Needed for setuptools-scm
 
       - name: Set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -83,12 +44,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Cache venv
-        uses: actions/cache@v4
-        id: cached-venv
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          path: .venv/
-          key: venv-cache-${{ runner.os }}-${{ steps.setup-python-project.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
+          enable-cache: true
+          cache-dependency-glob: 'pyproject.toml'
 
       - name: Install MicroPython
         uses: BrianPugh/install-micropython@v2
@@ -97,8 +57,7 @@ jobs:
 
       - name: Install library with sanitizers
         run: |
-          poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
-          TAMP_SANITIZE=1 poetry install --no-interaction
+          TAMP_SANITIZE=1 uv sync --all-extras
           # Set ASAN options globally (won't affect non-ASAN binaries)
           echo "ASAN_OPTIONS=detect_leaks=0" >> $GITHUB_ENV
           echo "UBSAN_OPTIONS=print_stacktrace=1" >> $GITHUB_ENV
@@ -123,27 +82,24 @@ jobs:
 
       - name: Pre-commit run
         run: |
-          source ${{ env.ACTIVATE_PYTHON_VENV }}
-          SKIP=wasm-eslint,wasm-npm-test,wasm-file-validation,typescript-check,package-json-lint pre-commit run --show-diff-on-failure --color=always --all-files
+          SKIP=wasm-eslint,wasm-npm-test,wasm-file-validation,typescript-check,package-json-lint uv run pre-commit run --show-diff-on-failure --color=always --all-files
 
       - name: Run tests with sanitizers
         run: |
-          source ${{ env.ACTIVATE_PYTHON_VENV }}
-          LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
-          belay run micropython -X heapsize=200M -m unittest tests/*.py
-          coverage report
+          LD_PRELOAD=$(gcc -print-file-name=libasan.so) uv run pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
+          uv run belay run micropython -X heapsize=200M -m unittest tests/*.py
+          uv run coverage report
 
       - name: Run C tests
         run: make c-test
 
       - name: Verify CLI compression/decompression integrity
         run: |
-          source ${{ env.ACTIVATE_PYTHON_VENV }}
           make download-enwik8
           original_hash=$(sha256sum build/enwik8 | cut -d' ' -f1)
           # Use LD_PRELOAD for ASAN when running the CLI commands
           LIBASAN_PATH=$(gcc -print-file-name=libasan.so)
-          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress build/enwik8 | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
+          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" uv run tamp compress build/enwik8 | LD_PRELOAD="$LIBASAN_PATH" uv run tamp decompress | sha256sum | cut -d' ' -f1)
           if [ "$original_hash" = "$roundtrip_hash" ]; then
             echo "✓ Compression/decompression integrity verified"
             echo "Original hash: $original_hash"
@@ -169,5 +125,4 @@ jobs:
       #----------------------------------------------
       - name: Build HTML docs
         run: |
-          source ${{ env.ACTIVATE_PYTHON_VENV }}
-          LD_PRELOAD=$(gcc -print-file-name=libasan.so) sphinx-build -b html docs/source/ docs/build/html
+          LD_PRELOAD=$(gcc -print-file-name=libasan.so) uv run sphinx-build -b html docs/source/ docs/build/html

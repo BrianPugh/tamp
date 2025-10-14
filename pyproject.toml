@@ -1,71 +1,80 @@
 [build-system]
-requires = ["poetry-core (>=1.0.0, <2.0.0)", "poetry-dynamic-versioning>=0.21.5", "cython>=3.0.0", "setuptools>=74.1.2"]
-build-backend = "poetry_dynamic_versioning.backend"
+requires = ["setuptools>=74.1.2", "setuptools-scm[toml]>=8.0.0", "cython>=3.0.0"]
+build-backend = "setuptools.build_meta"
 
-[tool.poetry-dynamic-versioning]
-enable = true
-vcs = "git"
-style = "semver"
-
-[tool.poetry]
+[project]
 name = "tamp"
-version = "0.0.0"  # Do not change, let poetry-dynamic-versioning handle it.
-homepage = "https://github.com/BrianPugh/tamp"
-repository = "https://github.com/BrianPugh/tamp"
-license = "Apache-2.0"
-description = ""
-authors = ["Brian Pugh"]
+dynamic = ["version"]
+description = "Low-memory, DEFLATE-inspired lossless compression library"
 readme = "README.md"
-packages = [{include = "tamp"}]
-include = ["tamp/*.so", "tamp/*.dll", "tamp/*.pyd"]
-
-[tool.poetry-dynamic-versioning.substitution]
-files = [
-    "tamp/__init__.py",
-    "mpy_bindings/bindings_common.py"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+authors = [{name = "Brian Pugh", email = "bnp117@gmail.com"}]
+keywords = ["compression", "lossless", "embedded", "deflate"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
-[tool.poetry.build]
-generate-setup-file = false
-script = 'build.py'
+dependencies = [
+    "cyclopts>=1.0.0",
+]
 
-[tool.poetry.scripts]
+[project.optional-dependencies]
+docs = [
+    "sphinx>=4.5.0",
+    "sphinx-rtd-theme>=3.0.0",
+    "gitpython>=3.1.31",
+    "sphinx-copybutton>=0.5.2",
+    "myst-parser[linkify]>=3.0.1",
+]
+dev = [
+    "coverage[toml]>=5.1",
+    "pre-commit>=2.16.0",
+    "pytest>=7.1.2",
+    "pytest-cov>=3.0.0",
+    "pytest-mock>=3.7.0",
+    "black>=23.1.0",
+    "belay>=0.21.3",
+    "tqdm>=4.65.0",
+    "matplotlib>=3.7.4",
+    "ipdb>=0.13.13",
+    "mpremote>=1.20.0",
+    "cython>=0.29.34",
+    "pytest-subtests>=0.10.0",
+    "numpy>=1.24",
+    "pyelftools>=0.32",
+    "setuptools>=74.1.2",
+]
+profile = [
+    "line-profiler<5.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/BrianPugh/tamp"
+Repository = "https://github.com/BrianPugh/tamp"
+Documentation = "https://tamp.readthedocs.io"
+
+[project.scripts]
 tamp = "tamp.cli.main:run_app"
 
-[tool.poetry.dependencies]
-# Be as loose as possible if writing a library.
-python = "^3.9"
-cyclopts = ">=1.0.0"
+[tool.setuptools]
+packages = ["tamp"]
+include-package-data = true
 
-[tool.poetry.group.docs.dependencies]
-sphinx = ">=4.5.0"
-sphinx_rtd_theme = ">=3.0.0"
-gitpython = ">=3.1.31"
-sphinx-copybutton = ">=0.5.2"
-myst-parser = {extras = ["linkify"], version = "^3.0.1"}
+[tool.setuptools.package-data]
+tamp = ["*.so", "*.dll", "*.pyd"]
 
-[tool.poetry.group.dev.dependencies]
-coverage = {extras = ["toml"], version = ">=5.1"}
-pre_commit = ">=2.16.0"
-pytest = ">=7.1.2"
-pytest-cov = ">=3.0.0"
-pytest-mock = ">=3.7.0"
-black = ">=23.1.0"
-belay = ">=0.21.3"
-tqdm = ">=4.65.0"
-matplotlib = ">=3.7.4"
-ipdb = ">=0.13.13"
-mpremote = ">=1.20.0"
-cython = ">=0.29.34"
-pytest-subtests = ">=0.10.0"
-numpy = ">=1.24"
-pyelftools = "^0.32"
-
-[tool.poetry.group.profile]
-optional = true
-
-[tool.poetry.group.profile.dependencies]
-line-profiler = "<5.0.0"
+[tool.setuptools-scm]
+write_to = "tamp/_version.py"
+version_scheme = "post-release"
+local_scheme = "no-local-version"
 
 [tool.belay]
 name = "tamp"
@@ -238,7 +247,7 @@ staticmethod-decorators = [
  venvs=[".venv"]
  paths=["tamp"]
  deps-file="pyproject.toml"
- sections=["tool.poetry.dependencies"]
+ sections=["project.dependencies"]
  exclude-deps =[
    "rich",
  ]
