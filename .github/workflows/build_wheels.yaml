@@ -71,7 +71,7 @@ jobs:
       matrix:
         os: [windows-latest]
         cibw_build: ['cp39-*', 'cp310-*', 'cp311-*', 'cp312-*', 'cp313-*', 'cp314-*']
-        cibw_archs: ['AMD64', 'x86', 'ARM64']
+        cibw_archs: ['AMD64', 'x86']
     env:
       PYTHON: 3.12
 
@@ -102,7 +102,53 @@ jobs:
           CIBW_BUILD_FRONTEND: 'pip'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_SKIP: '*-win_arm64'
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: pytest {package}/tests
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-${{ env.CIBW_BUILD_SANITIZED }}-${{ matrix.cibw_archs }}
+          path: wheelhouse/*.whl
+
+  build_wheels_windows_arm64:
+    name: '${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-11-arm]
+        cibw_build: ['cp39-*', 'cp310-*', 'cp311-*', 'cp312-*', 'cp313-*', 'cp314-*']
+        cibw_archs: ['ARM64']
+    env:
+      PYTHON: 3.12
+
+    steps:
+      - name: 'Set environment variables (Windows)'
+        shell: pwsh
+        run: |
+          (Get-ItemProperty "HKLM:System\CurrentControlSet\Control\FileSystem").LongPathsEnabled
+
+      - name: Sanitize matrix.cibw_build
+        id: sanitize_build
+        run: echo "CIBW_BUILD_SANITIZED=$(echo '${{ matrix.cibw_build }}' | sed 's/\*/_/g')" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up python ${{ env.PYTHON }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON }}
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.2.1
+        env:
+          CIBW_BUILD_FRONTEND: 'pip'
+          CIBW_ARCHS: ${{ matrix.cibw_archs }}
+          CIBW_BUILD: ${{ matrix.cibw_build }}
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest {package}/tests
 
@@ -269,7 +315,14 @@ jobs:
   validate_wheels:
     name: 'Validate wheels'
     needs:
-      ['build_sdist', 'build_wheels_windows', 'build_wheels_linux', 'build_wheels_macos', 'build_wheels_macos_arm64']
+      [
+        'build_sdist',
+        'build_wheels_windows',
+        'build_wheels_windows_arm64',
+        'build_wheels_linux',
+        'build_wheels_macos',
+        'build_wheels_macos_arm64',
+      ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
