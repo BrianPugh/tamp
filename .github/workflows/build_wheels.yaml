@@ -205,18 +205,17 @@ jobs:
           name: wheels-${{ matrix.os }}-${{ env.CIBW_BUILD_SANITIZED }}-${{ matrix.cibw_archs }}
           path: wheelhouse/*.whl
 
-  build_wheels_macos:
+  build_wheels_macos_x86_64:
     name: '${{ matrix.os }} ${{ matrix.cibw_archs }} ${{ matrix.cibw_build }}'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-13] # x86_64 runner
+        os: [macos-15]
         cibw_build: ['cp39-*', 'cp310-*', 'cp311-*', 'cp312-*', 'cp313-*', 'cp314-*']
         cibw_archs: ['x86_64']
     env:
       PYTHON: 3.12
-      SYSTEM_VERSION_COMPAT: 0 # https://github.com/actions/setup-python/issues/469#issuecomment-1192522949
 
     steps:
       - name: Check out repository
@@ -253,7 +252,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-14] # ARM runner
+        os: [macos-15] # ARM runner
         cibw_build: ['cp39-*', 'cp310-*', 'cp311-*', 'cp312-*', 'cp313-*', 'cp314-*']
         cibw_archs: ['arm64']
     env:
@@ -320,7 +319,7 @@ jobs:
         'build_wheels_windows',
         'build_wheels_windows_arm64',
         'build_wheels_linux',
-        'build_wheels_macos',
+        'build_wheels_macos_x86_64',
         'build_wheels_macos_arm64',
       ]
     runs-on: ubuntu-latest
