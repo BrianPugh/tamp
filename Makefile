@@ -27,6 +27,8 @@ help:
 	@echo "  make tamp-c-library     Build static C library"
 	@echo "  make website-build      Build website for deployment"
 
+.PHONY: clean test collect-data venv download
+
 
 ###########################
 # MicroPython Native Module
@@ -181,6 +183,12 @@ build/enwik8-100kb: download-enwik8
 
 build/enwik8-100kb.tamp: build/enwik8-100kb
 	@poetry run tamp compress build/enwik8-100kb -o build/enwik8-100kb.tamp
+
+download-micropython:
+	mkdir -p build
+	cd build && curl -O https://micropython.org/resources/firmware/RPI_PICO-20250415-v1.25.0.uf2
+
+download: download-enwik8 download-silesia download-micropython
 
 
 ##################

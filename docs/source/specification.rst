@@ -26,7 +26,8 @@ The bit-location 0 is equivalent to typical MSb position 7 of the first byte.
 | [2]     | custom_dictionary | A custom dictionary initialization method was used                  |
 |         |                   | and must be provided at decompression.                              |
 +---------+-------------------+---------------------------------------------------------------------+
-| [1]     | reserved          | Reserved for future use. Must be 0.                                 |
+| [1]     | v2                | Enables Tamp v2 features. Generally improves compression, but the   |
+|         |                   | decompressor needs to support it (introduced in tamp v1.11.0).      |
 +---------+-------------------+---------------------------------------------------------------------+
 | [0]     | more_header       | If ``True``, then the next byte in the stream is more header data.  |
 |         |                   | Currently always ``False``, but allows for future expandability.    |
@@ -60,7 +61,7 @@ Modifications are made to make the implementation simpler/faster.
       and points at the offset from the beginning of the dictionary buffer to the pattern.
       The shortest pattern-length is either going to be 2 or 3 bytes, depending on ``window``
       and ``literal`` parameters. The shortest pattern-length encoding must be shorter than
-      an equivalent stream of literals. The longest pattern-length will the minimum
+      an equivalent stream of literals. The longest pattern-length is the minimum
       pattern-length plus 13.
 
 Classically, the ``offset`` is from the current position in the buffer. Doing so results

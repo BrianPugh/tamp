@@ -10,6 +10,13 @@ from . import compute_min_pattern_size, initialize_dictionary
 _CHUNK_SIZE = 1 << 20
 _FLUSH = object()
 
+# These variables must match compressor.py
+_RLE_SYMBOL = 12
+_EXTENDED_MATCH_SYMBOL = 13
+_RLE_MAX_WINDOW = 8  # Maximum number of RLE bytes to write to the window.
+_LEADING_EXTENDED_MATCH_HUFFMAN_BITS = 3
+_LEADING_RLE_HUFFMAN_BITS = 4
+
 # Each key here are the huffman codes or'd with 0x80
 # This is so that each lookup is easy/quick.
 _huffman_lookup = {
@@ -57,15 +64,15 @@ class _BitReader:
             if not byte:
                 raise EOFError
             byte_value = int.from_bytes(byte, "little")
-            self.buffer |= byte_value << (24 - self.bit_pos)
+            self.buffer |= byte_value << (56 - self.bit_pos)
             self.bit_pos += 8
 
             if self.backup_buffer is not None and self.backup_bit_pos is not None:
-                self.backup_buffer |= byte_value << (24 - self.backup_bit_pos)
+                self.backup_buffer |= byte_value << (56 - self.backup_bit_pos)
                 self.backup_bit_pos += 8
 
-        result = self.buffer >> (32 - num_bits)
-        mask = (1 << (32 - num_bits)) - 1
+        result = self.buffer >> (64 - num_bits)
+        mask = (1 << (64 - num_bits)) - 1
         self.buffer = (self.buffer & mask) << num_bits
         self.bit_pos -= num_bits
 
@@ -120,6 +127,20 @@ class _RingBuffer:
         for byte in data:
             self.write_byte(byte)
 
+    def get(self, index, size):
+        out = bytearray(size)
+        for i in range(size):
+            pos = (index + i) % self.size
+            out[i] = self.buffer[pos]
+        return bytes(out)
+
+    @property
+    def last_written_byte(self) -> int:
+        pos = self.pos - 1
+        if pos < 0:
+            pos = self.size - 1
+        return self.buffer[pos]  # TODO: unit-test this thoroughly on initial start!
+
 
 class Decompressor:
     """Decompresses a file or stream of tamp-compressed data.
@@ -158,11 +179,9 @@ class Decompressor:
         self.window_bits = self._bit_reader.read(3) + 8
         self.literal_bits = self._bit_reader.read(2) + 5
         uses_custom_dictionary = self._bit_reader.read(1)
-        reserved = self._bit_reader.read(1)
+        self.v2 = self._bit_reader.read(1)
         more_header_bytes = self._bit_reader.read(1)
-
-        if reserved:
-            raise NotImplementedError
+        self._rle_last_written = False
 
         if more_header_bytes:
             raise NotImplementedError
@@ -176,6 +195,7 @@ class Decompressor:
 
         self.min_pattern_size = compute_min_pattern_size(self.window_bits, self.literal_bits)
 
+        # Used to store decoded bytes that do not currently fit in the output buffer.
         self.overflow = bytearray()
 
     def readinto(self, buf: bytearray) -> int:
@@ -191,49 +211,81 @@ class Decompressor:
         int
             Number of bytes decompressed into buffer.
         """
+        bytes_written = 0
+
         if len(self.overflow) > len(buf):
             buf[:] = self.overflow[: len(buf)]
-            written = len(buf)
+            bytes_written += len(buf)
             self.overflow = self.overflow[len(buf) :]
-            return written
+            return bytes_written
         elif self.overflow:
             buf[: len(self.overflow)] = self.overflow
-            written = len(self.overflow)
+            bytes_written += len(self.overflow)
             self.overflow = bytearray()
-        else:
-            written = 0
 
-        while written < len(buf):
+        def write_to_output(string):
+            nonlocal bytes_written
+            match_size = len(string)
+            to_buf = min(len(buf) - bytes_written, match_size)
+            buf[bytes_written : bytes_written + to_buf] = string[:to_buf]
+            bytes_written += to_buf
+            if to_buf < match_size:
+                self.overflow[:] = string[to_buf:]
+                return False  # stop decoding
+            return True
+
+        while bytes_written < len(buf):
             try:
                 with self._bit_reader:
                     is_literal = self._bit_reader.read(1)
 
                     if is_literal:
-                        c = self._bit_reader.read(self.literal_bits)
-                        self._window_buffer.write_byte(c)
-                        buf[written] = c
-                        written += 1
+                        string = bytes([self._bit_reader.read(self.literal_bits)])
+                        self._window_buffer.write_bytes(string)
+                        self._rle_last_written = False
                     else:
                         match_size = self._bit_reader.read_huffman()
                         if match_size is _FLUSH:
                             self._bit_reader.clear()
                             continue
-                        match_size += self.min_pattern_size
-                        index = self._bit_reader.read(self.window_bits)
+                        if self.v2 and match_size > 11:
+                            if match_size == _RLE_SYMBOL:
+                                rle_count = self._bit_reader.read_huffman()
+                                rle_count <<= _LEADING_RLE_HUFFMAN_BITS
+                                rle_count += self._bit_reader.read(_LEADING_RLE_HUFFMAN_BITS)
+                                rle_count += 1 + 1
+                                symbol = self._window_buffer.last_written_byte
+                                string = bytes([symbol]) * rle_count
+                                if not self._rle_last_written:
+                                    self._window_buffer.write_bytes(string[: min(rle_count, _RLE_MAX_WINDOW)])
+                                self._rle_last_written = True
+                            elif match_size == _EXTENDED_MATCH_SYMBOL:
+                                index = self._bit_reader.read(self.window_bits)
+                                match_size = self._bit_reader.read_huffman()
+                                match_size <<= _LEADING_EXTENDED_MATCH_HUFFMAN_BITS
+                                match_size += self._bit_reader.read(_LEADING_EXTENDED_MATCH_HUFFMAN_BITS)
+                                match_size += self.min_pattern_size + 11 + 1
 
-                        string = self._window_buffer.buffer[index : index + match_size]
-                        self._window_buffer.write_bytes(string)
+                                string = self._window_buffer.get(index, match_size)
 
-                        to_buf = min(len(buf) - written, match_size)
-                        buf[written : written + to_buf] = string[:to_buf]
-                        written += to_buf
-                        if to_buf < match_size:
-                            self.overflow[:] = string[to_buf:]
-                            break
+                                self._window_buffer.write_bytes(string)
+                                self._rle_last_written = False
+                            else:
+                                raise ValueError("unreachable")
+                        else:
+                            match_size += self.min_pattern_size
+                            index = self._bit_reader.read(self.window_bits)
+
+                            string = self._window_buffer.get(index, match_size)
+                            self._window_buffer.write_bytes(string)
+                            self._rle_last_written = False
+
+                    if not write_to_output(string):
+                        break
             except EOFError:
                 break
 
-        return written
+        return bytes_written
 
     def read(self, size: int = -1) -> bytearray:
         """Decompresses data to bytes.
