@@ -82,6 +82,7 @@ typedef struct TampConf {
 #define LEADING_EXTENDED_MATCH_HUFFMAN_BITS 3
 #define LEADING_RLE_HUFFMAN_BITS 4
 #define RLE_MAX_WINDOW 8
+#define RLE_MAX_SIZE ((13 << LEADING_RLE_HUFFMAN_BITS) + (1 << LEADING_RLE_HUFFMAN_BITS) + 1)
 
 /**
  * User-provied callback to be invoked after each compression cycle in the higher-level API.

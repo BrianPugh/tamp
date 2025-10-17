@@ -37,7 +37,6 @@ typedef struct TampCompressor {
     /* V2 state fields */
     uint16_t count;
     uint8_t rle_last_written;
-    uint16_t rle_max_size;
     uint8_t rle_breakeven;
     uint16_t extended_match_position;
 #if TAMP_EXTENDED_MATCH
@@ -70,7 +69,6 @@ typedef struct TampCompressor {
     /* V2 state fields - using full types for larger values */
     uint32_t rle_last_written : 1;
     uint16_t count;
-    uint16_t rle_max_size;
     uint8_t rle_breakeven;
     uint16_t extended_match_position;
     uint16_t max_pattern_size;

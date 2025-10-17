@@ -202,7 +202,6 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     if (compressor->conf_v2) {
         compressor->count = 0;
         compressor->rle_last_written = 0;
-        compressor->rle_max_size = (13 << LEADING_RLE_HUFFMAN_BITS) + (1 << LEADING_RLE_HUFFMAN_BITS) + 1;
         compressor->rle_breakeven = compute_rle_breakeven(compressor->min_pattern_size, conf->window);
         compressor->extended_match_position = 0;
     }
@@ -357,7 +356,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
 
         // Check if current byte continues RLE sequence
         unsigned char last_written = compressor->window[(compressor->window_pos - 1) & window_mask];
-        if (current_byte == last_written && compressor->count < compressor->rle_max_size) {
+        if (current_byte == last_written && compressor->count < RLE_MAX_SIZE) {
             compressor->count++;
 
             // Consume the byte
