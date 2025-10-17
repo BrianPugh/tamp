@@ -64,11 +64,19 @@ typedef struct TampConf {
     uint16_t window : 4;                 // number of window bits
     uint16_t literal : 4;                // number of literal bits
     uint16_t use_custom_dictionary : 1;  // Use a custom initialized dictionary.
+    uint16_t v2 : 1;                     // Use v2 format with RLE and extended matches
 #if TAMP_LAZY_MATCHING
     uint16_t lazy_matching : 1;  // use Lazy Matching (spend 50-75% more CPU for around 0.5-2.0% better compression.)
                                  // only effects compression operations.
 #endif
 } TampConf;
+
+/* V2 format constants */
+#define RLE_SYMBOL 12
+#define EXTENDED_MATCH_SYMBOL 13
+#define LEADING_EXTENDED_MATCH_HUFFMAN_BITS 3
+#define LEADING_RLE_HUFFMAN_BITS 4
+#define RLE_MAX_WINDOW 8
 
 /**
  * User-provied callback to be invoked after each compression cycle in the higher-level API.
