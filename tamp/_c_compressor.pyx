@@ -35,6 +35,7 @@ cdef class Compressor:
         int literal=8,
         dictionary=None,
         bool lazy_matching=False,
+        bool v2=True,  # v2 compression with RLE is now implemented (extended matches TODO)
     ):
         cdef ctamp.TampConf conf
 
@@ -52,6 +53,7 @@ cdef class Compressor:
         conf.window = window
         conf.literal = literal
         conf.use_custom_dictionary = builtins.bool(dictionary)
+        conf.v2 = v2
         # Set lazy_matching - this field is conditionally compiled based on TAMP_LAZY_MATCHING
         # The build system defines this macro, so the field should be available
         conf.lazy_matching = lazy_matching

@@ -30,6 +30,11 @@ extern "C" {
 #define TAMP_ESP32 0
 #endif
 
+/* Enable extended match support (requires multi-phase writes, may be slower) */
+#ifndef TAMP_EXTENDED_MATCH
+#define TAMP_EXTENDED_MATCH 1  // Default enabled - set to 0 to disable
+#endif
+
 /* Compiler branch optimizations */
 #if defined(__clang__) || (defined(__GNUC__) && (__GNUC__ > 2))
 #define TAMP_LIKELY(c) (__builtin_expect(!!(c), 1))

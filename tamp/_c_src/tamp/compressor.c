@@ -9,7 +9,7 @@
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2 * !!(condition)]))
 
-#define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
+#define MAX_PATTERN_SIZE (compressor->max_pattern_size)
 #define WINDOW_SIZE (1 << compressor->conf_window)
 // 0xF because sizeof(TampCompressor.input) == 16;
 #define input_add(offset) ((compressor->input_pos + offset) & 0xF)
@@ -18,14 +18,40 @@
 
 #define FLUSH_CODE (0xAB)
 
-// encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths
-static const uint8_t huffman_codes[] = {0x0, 0x3, 0x8, 0xb, 0x14, 0x24, 0x26, 0x2b, 0x4b, 0x54, 0x94, 0x95, 0xaa, 0x27};
-// These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
-static const uint8_t huffman_bits[] = {0x2, 0x3, 0x5, 0x5, 0x6, 0x7, 0x7, 0x7, 0x8, 0x8, 0x9, 0x9, 0x9, 0x7};
+// Huffman codes for encoding match sizes
+// Encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths
+// In v2: indices 12 and 13 are repurposed for RLE and extended match, index 14 is added
+static const uint8_t huffman_codes[] = {0x0,  0x3,  0x8,  0xb,  0x14, 0x24, 0x26, 0x2b,
+                                        0x4b, 0x54, 0x94, 0x95, 0xaa, 0x27, 0xab};
+// Bit lengths include the 1 bit for the 0-value is_literal flag
+static const uint8_t huffman_bits[] = {0x2, 0x3, 0x5, 0x5, 0x6, 0x7, 0x7, 0x7, 0x8, 0x8, 0x9, 0x9, 0x9, 0x7, 0x9};
 
 static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits, uint8_t n_bits) {
     compressor->bit_buffer_pos += n_bits;
     compressor->bit_buffer |= bits << (32 - compressor->bit_buffer_pos);
+}
+
+/**
+ * @brief Write extended Huffman encoded value to bit buffer.
+ *
+ * Used for v2 RLE and extended match encoding.
+ *
+ * @param[in,out] bit_buffer Pointer to the bit buffer.
+ * @param[in,out] bit_buffer_pos Pointer to current bit position in buffer.
+ * @param[in] value Value to encode.
+ * @param[in] leading_bits Number of leading bits (3 for extended match, 4 for RLE).
+ */
+static void tamp_write_extended_huffman(uint32_t *bit_buffer, uint8_t *bit_buffer_pos, uint32_t value,
+                                        uint8_t leading_bits) {
+    uint8_t mask = (1 << leading_bits) - 1;
+    uint8_t code_index = value >> leading_bits;
+    uint8_t lower_bits = value & mask;
+
+    *bit_buffer_pos += huffman_bits[code_index] - 1;
+    *bit_buffer |= huffman_codes[code_index] << (32 - *bit_buffer_pos);
+
+    *bit_buffer_pos += leading_bits;
+    *bit_buffer |= lower_bits << (32 - *bit_buffer_pos);
 }
 
 /**
@@ -112,11 +138,36 @@ static inline bool validate_no_match_overlap(uint16_t write_pos, uint16_t match_
 }
 #endif
 
+/**
+ * @brief Compute RLE breakeven point for v2 compression.
+ *
+ * Determines the pattern size at which pattern matching becomes more efficient than RLE.
+ *
+ * @param[in] min_pattern_size Minimum pattern size.
+ * @param[in] window_bits Number of window bits.
+ * @return Breakeven pattern size.
+ */
+static uint8_t compute_rle_breakeven(uint8_t min_pattern_size, uint8_t window_bits) {
+    uint8_t breakeven = 0;
+
+    for (uint8_t i = min_pattern_size; i <= min_pattern_size + 11; i++) {
+        uint8_t rle_bits = huffman_bits[(i - 1) >> LEADING_RLE_HUFFMAN_BITS] + LEADING_RLE_HUFFMAN_BITS;
+        uint8_t pattern_bits = huffman_bits[i - min_pattern_size] + window_bits;
+
+        if (pattern_bits < rle_bits) {
+            breakeven = i;
+        }
+    }
+
+    return breakeven;
+}
+
 tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window) {
     const TampConf conf_default = {
         .window = 10,
         .literal = 8,
         .use_custom_dictionary = false,
+        .v2 = true,  // v2 compression with RLE is now implemented (extended matches TODO)
 #if TAMP_LAZY_MATCHING
         .lazy_matching = false,
 #endif
@@ -131,12 +182,32 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->conf_literal = conf->literal;
     compressor->conf_window = conf->window;
     compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
+    compressor->conf_v2 = conf->v2;
 #if TAMP_LAZY_MATCHING
     compressor->conf_lazy_matching = conf->lazy_matching;
 #endif
 
     compressor->window = window;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
+
+    // Compute max pattern size based on v2
+    if (compressor->conf_v2) {
+        compressor->max_pattern_size = compressor->min_pattern_size + 11 + (13 << LEADING_EXTENDED_MATCH_HUFFMAN_BITS) +
+                                       (1 << LEADING_EXTENDED_MATCH_HUFFMAN_BITS);
+    } else {
+        compressor->max_pattern_size = compressor->min_pattern_size + 13;
+    }
+
+    // Initialize v2 fields
+    if (compressor->conf_v2) {
+        compressor->rle_count = 0;
+        compressor->rle_last_written = 0;
+        compressor->rle_max_size = (13 << LEADING_RLE_HUFFMAN_BITS) + (1 << LEADING_RLE_HUFFMAN_BITS) + 1;
+        compressor->rle_breakeven = compute_rle_breakeven(compressor->min_pattern_size, conf->window);
+        compressor->extended_match_count = 0;
+        compressor->extended_match_position = 0;
+        compressor->last_written_byte = 0;
+    }
 
 #if TAMP_LAZY_MATCHING
     compressor->cached_match_index = -1;  // Initialize cache as invalid
@@ -148,10 +219,85 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     write_to_bit_buffer(compressor, conf->window - 8, 3);
     write_to_bit_buffer(compressor, conf->literal - 5, 2);
     write_to_bit_buffer(compressor, conf->use_custom_dictionary, 1);
-    write_to_bit_buffer(compressor, 0, 1);  // Reserved
+    write_to_bit_buffer(compressor, conf->v2, 1);
     write_to_bit_buffer(compressor, 0, 1);  // No more header bytes
 
     return TAMP_OK;
+}
+
+/**
+ * @brief Write RLE token to bit buffer.
+ *
+ * @param[in,out] compressor TampCompressor object.
+ */
+__attribute__((unused)) static inline void write_rle(TampCompressor *compressor) {
+    if (compressor->rle_count == 0) {
+        return;  // Nothing to write
+    } else if (compressor->rle_count == 1) {
+        // Just write a literal
+        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | compressor->last_written_byte, compressor->conf_literal + 1);
+        compressor->window[compressor->window_pos] = compressor->last_written_byte;
+        compressor->window_pos = (compressor->window_pos + 1) & ((1 << compressor->conf_window) - 1);
+        compressor->rle_last_written = 0;
+    } else {
+        // Write RLE token (symbol 12)
+        write_to_bit_buffer(compressor, huffman_codes[RLE_SYMBOL], huffman_bits[RLE_SYMBOL]);
+
+        // Use temporary variable for bitfield compatibility
+        uint8_t temp_bit_pos = compressor->bit_buffer_pos;
+        tamp_write_extended_huffman(&compressor->bit_buffer, &temp_bit_pos, compressor->rle_count - 2,
+                                    LEADING_RLE_HUFFMAN_BITS);
+        compressor->bit_buffer_pos = temp_bit_pos;
+
+        if (!compressor->rle_last_written) {
+            // Only write up to 8 bytes to window, and only if we didn't already do this
+            uint16_t bytes_to_write = MIN(compressor->rle_count, RLE_MAX_WINDOW);
+            for (uint16_t i = 0; i < bytes_to_write; i++) {
+                compressor->window[compressor->window_pos] = compressor->last_written_byte;
+                compressor->window_pos = (compressor->window_pos + 1) & ((1 << compressor->conf_window) - 1);
+            }
+        }
+
+        compressor->rle_last_written = 1;
+    }
+
+    compressor->rle_count = 0;
+}
+
+/**
+ * @brief Write extended match token to bit buffer.
+ *
+ * @param[in,out] compressor TampCompressor object.
+ */
+__attribute__((unused)) static inline void write_extended_match(TampCompressor *compressor) {
+    // Write extended match token (symbol 13)
+    write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL], huffman_bits[EXTENDED_MATCH_SYMBOL]);
+
+    // Write match position
+    write_to_bit_buffer(compressor, compressor->extended_match_position, compressor->conf_window);
+
+    // Write extended huffman encoded match size
+    uint32_t encoded_size = compressor->extended_match_count - compressor->min_pattern_size - 11 - 1;
+
+    // Use temporary variable for bitfield compatibility
+    uint8_t temp_bit_pos = compressor->bit_buffer_pos;
+    tamp_write_extended_huffman(&compressor->bit_buffer, &temp_bit_pos, encoded_size,
+                                LEADING_EXTENDED_MATCH_HUFFMAN_BITS);
+    compressor->bit_buffer_pos = temp_bit_pos;
+
+    // Copy from window to window
+    const uint16_t window_mask = (1 << compressor->conf_window) - 1;
+    for (uint16_t i = 0; i < compressor->extended_match_count; i++) {
+        uint16_t src_pos = (compressor->extended_match_position + i) & window_mask;
+        compressor->window[compressor->window_pos] = compressor->window[src_pos];
+        compressor->last_written_byte = compressor->window[src_pos];
+        compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+    }
+
+    // Reset state
+    compressor->extended_match_count = 0;
+    compressor->extended_match_position = 0;
+    compressor->rle_last_written = 0;
 }
 
 tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
@@ -176,6 +322,58 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
     }
 
     if (TAMP_UNLIKELY(output_size == 0)) return TAMP_OUTPUT_FULL;
+
+#if TAMP_EXTENDED_MATCH
+    // V2: Resume multi-phase extended match write
+    if (compressor->conf_v2 && compressor->write_state == TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING) {
+        // Write extended huffman encoded match size
+        uint32_t encoded_size = compressor->extended_match_count - compressor->min_pattern_size - 11 - 1;
+
+        uint8_t temp_bit_pos = compressor->bit_buffer_pos;
+        tamp_write_extended_huffman(&compressor->bit_buffer, &temp_bit_pos, encoded_size,
+                                    LEADING_EXTENDED_MATCH_HUFFMAN_BITS);
+        compressor->bit_buffer_pos = temp_bit_pos;
+
+        // Copy from window to window
+        for (uint16_t i = 0; i < compressor->extended_match_count; i++) {
+            uint16_t src_pos = (compressor->extended_match_position + i) & window_mask;
+            compressor->window[compressor->window_pos] = compressor->window[src_pos];
+            compressor->last_written_byte = compressor->window[src_pos];
+            compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+        }
+
+        // Reset state
+        compressor->extended_match_count = 0;
+        compressor->extended_match_position = 0;
+        compressor->rle_last_written = 0;
+        compressor->write_state = TAMP_WRITE_STATE_NORMAL;
+
+        return TAMP_OK;
+    }
+#endif
+
+    // V2: RLE detection logic
+    if (compressor->conf_v2) {
+        unsigned char current_byte = read_input(0);
+
+        // Check if current byte continues RLE sequence
+        if (current_byte == compressor->last_written_byte && compressor->rle_count < compressor->rle_max_size) {
+            compressor->rle_count++;
+
+            // Consume the byte
+            compressor->input_pos = input_add(1);
+            compressor->input_size--;
+
+            return TAMP_OK;  // Continue accumulating RLE
+        }
+
+        // RLE sequence broken - check if we should emit accumulated RLE
+        if (compressor->rle_count >= 1) {
+            // We have pending RLE - write it (write_rle handles count==1 as a literal)
+            write_rle(compressor);
+            return TAMP_OK;
+        }
+    }
 
     uint8_t match_size = 0;
     uint16_t match_index = 0;
@@ -224,6 +422,12 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
                     return TAMP_EXCESS_BITS;
                 }
                 write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+
+                // Track last written byte for v2 RLE
+                if (compressor->conf_v2) {
+                    compressor->last_written_byte = c;
+                    compressor->rle_last_written = 0;
+                }
             } else {
                 // Use current match, clear cache
                 compressor->cached_match_index = -1;
@@ -240,12 +444,46 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
                 return TAMP_EXCESS_BITS;
             }
             write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+
+            // Track last written byte for v2 RLE
+            if (compressor->conf_v2) {
+                compressor->last_written_byte = c;
+                compressor->rle_last_written = 0;
+            }
         } else {
             // Write TOKEN
             compressor->cached_match_index = -1;  // Clear cache
-            uint8_t huffman_index = match_size - compressor->min_pattern_size;
-            write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-            write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+
+#if TAMP_EXTENDED_MATCH
+            // V2: Use extended match for large matches
+            if (compressor->conf_v2 && match_size > (compressor->min_pattern_size + 11)) {
+                // Store extended match info
+                compressor->extended_match_position = match_index;
+                compressor->extended_match_count = match_size;
+
+                // Write huffman code (symbol 13) + window offset
+                write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL],
+                                    huffman_bits[EXTENDED_MATCH_SYMBOL]);
+                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+
+                // Consume input now (window will be populated in next phase)
+                for (uint8_t i = 0; i < match_size; i++) {
+                    compressor->input_pos = input_add(1);
+                }
+                compressor->input_size -= match_size;
+
+                // Set state to resume on next poll
+                compressor->write_state = TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING;
+
+                return TAMP_OK;
+            } else
+#endif
+            {
+                // Regular v1 match or small v2 match
+                uint8_t huffman_index = match_size - compressor->min_pattern_size;
+                write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+            }
         }
     } else
 #endif
@@ -259,11 +497,45 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
                 return TAMP_EXCESS_BITS;
             }
             write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+
+            // Track last written byte for v2 RLE
+            if (compressor->conf_v2) {
+                compressor->last_written_byte = c;
+                compressor->rle_last_written = 0;
+            }
         } else {
             // Write TOKEN
-            uint8_t huffman_index = match_size - compressor->min_pattern_size;
-            write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-            write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+
+#if TAMP_EXTENDED_MATCH
+            // V2: Use extended match for large matches
+            if (compressor->conf_v2 && match_size > (compressor->min_pattern_size + 11)) {
+                // Store extended match info
+                compressor->extended_match_position = match_index;
+                compressor->extended_match_count = match_size;
+
+                // Write huffman code (symbol 13) + window offset
+                write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL],
+                                    huffman_bits[EXTENDED_MATCH_SYMBOL]);
+                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+
+                // Consume input now (window will be populated in next phase)
+                for (uint8_t i = 0; i < match_size; i++) {
+                    compressor->input_pos = input_add(1);
+                }
+                compressor->input_size -= match_size;
+
+                // Set state to resume on next poll
+                compressor->write_state = TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING;
+
+                return TAMP_OK;
+            } else
+#endif
+            {
+                // Regular v1 match or small v2 match
+                uint8_t huffman_index = match_size - compressor->min_pattern_size;
+                write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+            }
         }
     }
     // Populate Window
@@ -273,6 +545,13 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
         compressor->input_pos = input_add(1);
     }
     compressor->input_size -= match_size;
+
+    // Track last written byte for v2 RLE (window_pos was just incremented)
+    if (compressor->conf_v2 && match_size > 0) {
+        uint16_t last_pos = (compressor->window_pos - 1) & window_mask;
+        compressor->last_written_byte = compressor->window[last_pos];
+        compressor->rle_last_written = 0;
+    }
 
     return TAMP_OK;
 }
@@ -350,6 +629,18 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
         if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
         output_size -= chunk_output_written_size;
         output += chunk_output_written_size;
+    }
+
+    // Flush any pending RLE at end of stream (v2)
+    if (compressor->conf_v2 && compressor->rle_count > 0) {
+        write_rle(compressor);
+
+        // Partial flush to output the RLE token
+        res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
+        output_size -= chunk_output_written_size;
+        (*output_written_size) += chunk_output_written_size;
+        output += chunk_output_written_size;
+        if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
     }
 
     // Perform partial flush to see if we need a FLUSH token (check if output buffer in not empty),

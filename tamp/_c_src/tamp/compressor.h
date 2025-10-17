@@ -7,6 +7,11 @@ extern "C" {
 
 #include "common.h"
 
+/* V2 extended match state machine */
+#if TAMP_EXTENDED_MATCH
+enum TampWriteState { TAMP_WRITE_STATE_NORMAL = 0, TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING };
+#endif
+
 /* Externally, do not directly edit ANY of these attributes */
 typedef struct TampCompressor {
     /* nicely aligned attributes */
@@ -22,10 +27,24 @@ typedef struct TampCompressor {
     uint8_t conf_window;                 // number of window bits
     uint8_t conf_literal;                // number of literal bits
     uint8_t conf_use_custom_dictionary;  // Use a custom initialized dictionary.
+    uint8_t conf_v2;                     // Use v2 format with RLE and extended matches
 #if TAMP_LAZY_MATCHING
     uint8_t conf_lazy_matching;  // Use lazy matching for better compression
 #endif
     uint8_t min_pattern_size;
+    uint16_t max_pattern_size;
+
+    /* V2 state fields */
+    uint16_t rle_count;
+    uint8_t rle_last_written;
+    uint16_t rle_max_size;
+    uint8_t rle_breakeven;
+    uint16_t extended_match_count;
+    uint16_t extended_match_position;
+    uint8_t last_written_byte;
+#if TAMP_EXTENDED_MATCH
+    uint8_t write_state;  // Track multi-phase write state for extended matches
+#endif
 
 #if TAMP_LAZY_MATCHING
     /* Lazy matching cache */
@@ -37,6 +56,7 @@ typedef struct TampCompressor {
     uint32_t conf_window : 4;                 // number of window bits
     uint32_t conf_literal : 4;                // number of literal bits
     uint32_t conf_use_custom_dictionary : 1;  // Use a custom initialized dictionary.
+    uint32_t conf_v2 : 1;                     // Use v2 format with RLE and extended matches
 #if TAMP_LAZY_MATCHING
     uint32_t conf_lazy_matching : 1;  // Use lazy matching for better compression
 #endif
@@ -48,6 +68,19 @@ typedef struct TampCompressor {
 
     uint32_t input_size : 5;
     uint32_t input_pos : 4;
+
+    /* V2 state fields - using full types for larger values */
+    uint16_t rle_count;
+    uint8_t rle_last_written;
+    uint16_t rle_max_size;
+    uint8_t rle_breakeven;
+    uint16_t extended_match_count;
+    uint16_t extended_match_position;
+    uint8_t last_written_byte;
+    uint16_t max_pattern_size;
+#if TAMP_EXTENDED_MATCH
+    uint8_t write_state;  // Track multi-phase write state for extended matches
+#endif
 
 #if TAMP_LAZY_MATCHING
     /* Lazy matching cache */

@@ -66,9 +66,6 @@ class TestCompressorAndDecompressor(unittest.TestCase):
             kwargs = {**compressor_kwargs, "v2": v2}
 
             for Compressor, Decompressor in walk_compressors_decompressors():
-                # Skip v2 tests for C compressor until compression loop is implemented (see PLAN.md)
-                if v2 and Compressor is CCompressor:
-                    continue
                 # Compress/Decompress random data
                 with BytesIO() as f, self.subTest(
                     data="Random",
@@ -121,9 +118,6 @@ class TestCompressorAndDecompressor(unittest.TestCase):
         assert len(tale_of_two_cities) > (1 << 8)
         for v2 in (False, True):
             for Compressor, Decompressor in walk_compressors_decompressors():
-                # Skip v2 tests for C compressor until compression loop is implemented (see PLAN.md)
-                if v2 and Compressor is CCompressor:
-                    continue
                 with BytesIO() as f, self.subTest(
                     Compressor=Compressor,
                     Decompressor=Decompressor,
