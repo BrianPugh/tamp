@@ -27,8 +27,7 @@ typedef struct {
                               // output-buffer-limited decompression).
 
     /* V2 state fields */
-    uint32_t rle_last_written : 1;   // Track if last write was RLE
-    uint32_t last_written_byte : 8;  // Last byte written to window (up to 8 bits)
+    uint32_t rle_last_written : 1;  // Track if last write was RLE
 } TampDecompressor;
 
 /**

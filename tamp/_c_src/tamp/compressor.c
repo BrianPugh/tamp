@@ -206,7 +206,6 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
         compressor->rle_breakeven = compute_rle_breakeven(compressor->min_pattern_size, conf->window);
         compressor->extended_match_count = 0;
         compressor->extended_match_position = 0;
-        compressor->last_written_byte = 0;
     }
 
 #if TAMP_LAZY_MATCHING
@@ -231,13 +230,15 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  * @param[in,out] compressor TampCompressor object.
  */
 __attribute__((unused)) static inline void write_rle(TampCompressor *compressor) {
+    const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     if (compressor->rle_count == 0) {
         return;  // Nothing to write
     } else if (compressor->rle_count == 1) {
         // Just write a literal
-        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | compressor->last_written_byte, compressor->conf_literal + 1);
-        compressor->window[compressor->window_pos] = compressor->last_written_byte;
-        compressor->window_pos = (compressor->window_pos + 1) & ((1 << compressor->conf_window) - 1);
+        unsigned char rle_byte = compressor->window[(compressor->window_pos - 1) & window_mask];
+        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | rle_byte, compressor->conf_literal + 1);
+        compressor->window[compressor->window_pos] = rle_byte;
+        compressor->window_pos = (compressor->window_pos + 1) & window_mask;
         compressor->rle_last_written = 0;
     } else {
         // Write RLE token (symbol 12)
@@ -251,10 +252,11 @@ __attribute__((unused)) static inline void write_rle(TampCompressor *compressor)
 
         if (!compressor->rle_last_written) {
             // Only write up to 8 bytes to window, and only if we didn't already do this
+            unsigned char rle_byte = compressor->window[(compressor->window_pos - 1) & window_mask];
             uint16_t bytes_to_write = MIN(compressor->rle_count, RLE_MAX_WINDOW);
             for (uint16_t i = 0; i < bytes_to_write; i++) {
-                compressor->window[compressor->window_pos] = compressor->last_written_byte;
-                compressor->window_pos = (compressor->window_pos + 1) & ((1 << compressor->conf_window) - 1);
+                compressor->window[compressor->window_pos] = rle_byte;
+                compressor->window_pos = (compressor->window_pos + 1) & window_mask;
             }
         }
 
@@ -290,7 +292,6 @@ __attribute__((unused)) static inline void write_extended_match(TampCompressor *
     for (uint16_t i = 0; i < compressor->extended_match_count; i++) {
         uint16_t src_pos = (compressor->extended_match_position + i) & window_mask;
         compressor->window[compressor->window_pos] = compressor->window[src_pos];
-        compressor->last_written_byte = compressor->window[src_pos];
         compressor->window_pos = (compressor->window_pos + 1) & window_mask;
     }
 
@@ -338,7 +339,6 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
         for (uint16_t i = 0; i < compressor->extended_match_count; i++) {
             uint16_t src_pos = (compressor->extended_match_position + i) & window_mask;
             compressor->window[compressor->window_pos] = compressor->window[src_pos];
-            compressor->last_written_byte = compressor->window[src_pos];
             compressor->window_pos = (compressor->window_pos + 1) & window_mask;
         }
 
@@ -357,7 +357,8 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
         unsigned char current_byte = read_input(0);
 
         // Check if current byte continues RLE sequence
-        if (current_byte == compressor->last_written_byte && compressor->rle_count < compressor->rle_max_size) {
+        unsigned char last_written = compressor->window[(compressor->window_pos - 1) & window_mask];
+        if (current_byte == last_written && compressor->rle_count < compressor->rle_max_size) {
             compressor->rle_count++;
 
             // Consume the byte
@@ -423,9 +424,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
                 }
                 write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
 
-                // Track last written byte for v2 RLE
                 if (compressor->conf_v2) {
-                    compressor->last_written_byte = c;
                     compressor->rle_last_written = 0;
                 }
             } else {
@@ -445,9 +444,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
             }
             write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
 
-            // Track last written byte for v2 RLE
             if (compressor->conf_v2) {
-                compressor->last_written_byte = c;
                 compressor->rle_last_written = 0;
             }
         } else {
@@ -498,9 +495,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
             }
             write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
 
-            // Track last written byte for v2 RLE
             if (compressor->conf_v2) {
-                compressor->last_written_byte = c;
                 compressor->rle_last_written = 0;
             }
         } else {
@@ -546,10 +541,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
     }
     compressor->input_size -= match_size;
 
-    // Track last written byte for v2 RLE (window_pos was just incremented)
     if (compressor->conf_v2 && match_size > 0) {
-        uint16_t last_pos = (compressor->window_pos - 1) & window_mask;
-        compressor->last_written_byte = compressor->window[last_pos];
         compressor->rle_last_written = 0;
     }
 

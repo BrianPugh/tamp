@@ -41,7 +41,6 @@ typedef struct TampCompressor {
     uint8_t rle_breakeven;
     uint16_t extended_match_count;
     uint16_t extended_match_position;
-    uint8_t last_written_byte;
 #if TAMP_EXTENDED_MATCH
     uint8_t write_state;  // Track multi-phase write state for extended matches
 #endif
@@ -76,7 +75,6 @@ typedef struct TampCompressor {
     uint8_t rle_breakeven;
     uint16_t extended_match_count;
     uint16_t extended_match_position;
-    uint8_t last_written_byte;
     uint16_t max_pattern_size;
 #if TAMP_EXTENDED_MATCH
     uint8_t write_state;  // Track multi-phase write state for extended matches

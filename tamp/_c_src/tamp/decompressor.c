@@ -141,10 +141,8 @@ static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor *decompres
     decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf_window, conf_literal);
     decompressor->configured = true;
 
-    // Initialize v2 fields
     if (conf_v2) {
         decompressor->rle_last_written = 0;
-        decompressor->last_written_byte = 0;
     }
 
     return TAMP_OK;
@@ -223,9 +221,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
             decompressor->window[decompressor->window_pos] = *output;
             decompressor->window_pos = (decompressor->window_pos + 1) & window_mask;
 
-            // Update v2 state
             if (decompressor->conf_v2) {
-                decompressor->last_written_byte = *output;
                 decompressor->rle_last_written = 0;
             }
 
@@ -272,11 +268,11 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                 (*input_consumed_size) += consumed;
 
                 uint16_t rle_count = rle_value + 2;
-                unsigned char rle_byte = decompressor->last_written_byte;
+                unsigned char rle_byte = decompressor->window[(decompressor->window_pos - 1) & window_mask];
 
                 // Write RLE bytes to output
                 size_t remaining = output_end - output;
-                uint16_t bytes_to_output = MIN(rle_count, remaining);
+                uint16_t bytes_to_output = MIN((size_t)rle_count, remaining);
                 for (uint16_t i = 0; i < bytes_to_output; i++) {
                     *output++ = rle_byte;
                 }
@@ -331,7 +327,6 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                     unsigned char byte_val = decompressor->window[(window_offset + i) & window_mask];
                     *output++ = byte_val;
                     decompressor->window[decompressor->window_pos] = byte_val;
-                    decompressor->last_written_byte = byte_val;
                     decompressor->window_pos = (decompressor->window_pos + 1) & window_mask;
                 }
                 (*output_written_size) += bytes_to_output;
@@ -387,9 +382,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                     decompressor->window_pos = (decompressor->window_pos + 1) & window_mask;
                 }
 
-                // Update v2 state
                 if (decompressor->conf_v2 && match_size > 0) {
-                    decompressor->last_written_byte = tmp_buf[match_size - 1];
                     decompressor->rle_last_written = 0;
                 }
             }
