@@ -15,6 +15,7 @@ typedef struct {
     /* Conf attributes */
     uint32_t conf_window : 4;   // number of window bits
     uint32_t conf_literal : 4;  // number of literal bits
+    uint32_t conf_v2 : 1;       // Use v2 format with RLE and extended matches
     // uint32_t conf_use_custom_dictionary:1;  // Not used past initialization.
 
     uint32_t bit_buffer_pos : 6;
@@ -24,6 +25,10 @@ typedef struct {
 
     uint32_t skip_bytes : 4;  // Skip this many decompressed bytes (from previous
                               // output-buffer-limited decompression).
+
+    /* V2 state fields */
+    uint32_t rle_last_written : 1;   // Track if last write was RLE
+    uint32_t last_written_byte : 8;  // Last byte written to window (up to 8 bits)
 } TampDecompressor;
 
 /**

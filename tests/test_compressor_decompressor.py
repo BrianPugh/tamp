@@ -56,46 +56,54 @@ tale_of_two_cities = b"It was the best of times, it was the worst of times, it w
 
 
 class TestCompressorAndDecompressor(unittest.TestCase):
-    def _autotest(self, num_bytes, n_bits, compressor_kwargs=None):
+    def _autotest(self, num_bytes, n_bits, compressor_kwargs=None, v2_values=(False, True)):
         if compressor_kwargs is None:
             compressor_kwargs = {}
 
         data = bytearray(random.randint(0, (1 << n_bits) - 1) for x in range(num_bytes))
 
-        for Compressor, Decompressor in walk_compressors_decompressors():
-            # Compress/Decompress random data
-            with BytesIO() as f, self.subTest(
-                data="Random",
-                Compressor=Compressor,
-                Decompressor=Decompressor,
-            ):
-                c = Compressor(f, **compressor_kwargs)
-                c.write(data)
-                c.flush()
+        for v2 in v2_values:
+            kwargs = {**compressor_kwargs, "v2": v2}
 
-                f.seek(0)
-                d = Decompressor(f)
-                actual = d.read()
+            for Compressor, Decompressor in walk_compressors_decompressors():
+                # Skip v2 tests for C compressor until compression loop is implemented (see PLAN.md)
+                if v2 and Compressor is CCompressor:
+                    continue
+                # Compress/Decompress random data
+                with BytesIO() as f, self.subTest(
+                    data="Random",
+                    Compressor=Compressor,
+                    Decompressor=Decompressor,
+                    v2=v2,
+                ):
+                    c = Compressor(f, **kwargs)
+                    c.write(data)
+                    c.flush()
 
-                self.assertEqual(actual, data)
+                    f.seek(0)
+                    d = Decompressor(f)
+                    actual = d.read()
 
-            # Compress/Decompress
-            data = bytearray(1 for _ in range(num_bytes))
-            with BytesIO() as f, self.subTest(
-                data="Sequential",
-                Compressor=Compressor,
-                Decompressor=Decompressor,
-            ):
-                c = Compressor(f, **compressor_kwargs)
-                c.write(data)
-                c.flush()
+                    self.assertEqual(actual, data)
 
-                f.seek(0)
-                d = Decompressor(f)
-                actual = d.read()
+                # Compress/Decompress sequential data
+                data = bytearray(1 for _ in range(num_bytes))
+                with BytesIO() as f, self.subTest(
+                    data="Sequential",
+                    Compressor=Compressor,
+                    Decompressor=Decompressor,
+                    v2=v2,
+                ):
+                    c = Compressor(f, **kwargs)
+                    c.write(data)
+                    c.flush()
 
-                self.assertEqual(len(actual), len(data))
-                self.assertEqual(actual, data)
+                    f.seek(0)
+                    d = Decompressor(f)
+                    actual = d.read()
+
+                    self.assertEqual(len(actual), len(data))
+                    self.assertEqual(actual, data)
 
     def test_default(self):
         self._autotest(10_000, 8)
@@ -111,17 +119,25 @@ class TestCompressorAndDecompressor(unittest.TestCase):
 
     def test_tale_of_two_cities(self):
         assert len(tale_of_two_cities) > (1 << 8)
-        for Compressor, Decompressor in walk_compressors_decompressors():
-            with BytesIO() as f:
-                c = Compressor(f, window=8)
-                c.write(tale_of_two_cities)
-                c.flush()
+        for v2 in (False, True):
+            for Compressor, Decompressor in walk_compressors_decompressors():
+                # Skip v2 tests for C compressor until compression loop is implemented (see PLAN.md)
+                if v2 and Compressor is CCompressor:
+                    continue
+                with BytesIO() as f, self.subTest(
+                    Compressor=Compressor,
+                    Decompressor=Decompressor,
+                    v2=v2,
+                ):
+                    c = Compressor(f, window=8, v2=v2)
+                    c.write(tale_of_two_cities)
+                    c.flush()
 
-                f.seek(0)
-                d = Decompressor(f)
-                actual = d.read()
+                    f.seek(0)
+                    d = Decompressor(f)
+                    actual = d.read()
 
-                assert actual == tale_of_two_cities
+                    assert actual == tale_of_two_cities
 
 
 if __name__ == "__main__":
