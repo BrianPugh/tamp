@@ -542,6 +542,11 @@ class Compressor:
             self.flush_cb()
         while self._input_buffer:
             bytes_written += self._compress_input_buffer_single()
+
+        # Finalize any pending extended match (v2)
+        if self.v2 and self._extended_match_count:
+            bytes_written += self._write_extended_match()
+
         if self.v2 and self._rle_count:
             bytes_written += self._write_rle()
 

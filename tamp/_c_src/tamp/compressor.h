@@ -9,7 +9,11 @@ extern "C" {
 
 /* V2 extended match state machine */
 #if TAMP_EXTENDED_MATCH
-enum TampWriteState { TAMP_WRITE_STATE_NORMAL = 0, TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING };
+enum TampWriteState {
+    TAMP_WRITE_STATE_NORMAL = 0,
+    TAMP_WRITE_STATE_EXTENDING_MATCH,
+    TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING
+};
 #endif
 
 /* Externally, do not directly edit ANY of these attributes */
@@ -32,7 +36,6 @@ typedef struct TampCompressor {
     uint8_t conf_lazy_matching;  // Use lazy matching for better compression
 #endif
     uint8_t min_pattern_size;
-    uint16_t max_pattern_size;
 
     /* V2 state fields */
     uint16_t count;
@@ -71,7 +74,6 @@ typedef struct TampCompressor {
     uint16_t count;
     uint8_t rle_breakeven;
     uint16_t extended_match_position;
-    uint16_t max_pattern_size;
 #if TAMP_EXTENDED_MATCH
     uint8_t write_state;  // Track multi-phase write state for extended matches
 #endif

@@ -133,6 +133,48 @@ class TestCompressorAndDecompressor(unittest.TestCase):
 
                     assert actual == tale_of_two_cities
 
+    def test_extended_match_python_c_identical(self):
+        """Test that Python and C compressors produce identical output for extended matches."""
+        if PyCompressor is None or CCompressor is None:
+            self.skipTest("Python or C compressor not available")
+
+        # Create data that will trigger extended matches
+        # "tamp" * 1024 = 4096 bytes of repeated pattern
+        # This is much longer than min_pattern_size + 13, so it should use extended matches
+        test_data = b"tamp" * 1024
+
+        # Compress with Python compressor (v2 enabled)
+        with BytesIO() as py_f:
+            py_c = PyCompressor(py_f, v2=True)
+            py_c.write(test_data)
+            py_c.flush()
+            py_compressed = py_f.getvalue()
+
+        # Compress with C compressor (v2 enabled)
+        with BytesIO() as c_f:
+            c_c = CCompressor(c_f, v2=True)
+            c_c.write(test_data)
+            c_c.flush()
+            c_compressed = c_f.getvalue()
+
+        # Verify they produce identical output
+        self.assertEqual(
+            py_compressed,
+            c_compressed,
+            msg=f"Python and C compressors produced different output.\n"
+            f"Python: {py_compressed.hex()}\n"
+            f"C:      {c_compressed.hex()}",
+        )
+
+        # Also verify both can decompress correctly
+        with BytesIO(py_compressed) as f:
+            d = PyDecompressor(f)
+            self.assertEqual(d.read(), test_data)
+
+        with BytesIO(c_compressed) as f:
+            d = CDecompressor(f)
+            self.assertEqual(d.read(), test_data)
+
 
 if __name__ == "__main__":
     unittest.main()

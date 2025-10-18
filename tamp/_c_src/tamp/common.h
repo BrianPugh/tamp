@@ -83,6 +83,10 @@ typedef struct TampConf {
 #define LEADING_RLE_HUFFMAN_BITS 4
 #define RLE_MAX_WINDOW 8
 #define RLE_MAX_SIZE ((13 << LEADING_RLE_HUFFMAN_BITS) + (1 << LEADING_RLE_HUFFMAN_BITS) + 1)
+// Maximum extended match size = min_pattern_size + EXTENDED_MATCH_ADDITIONAL
+// This is ~125-126 bytes depending on min_pattern_size (2 or 3)
+#define EXTENDED_MATCH_ADDITIONAL \
+    (11 + (13 << LEADING_EXTENDED_MATCH_HUFFMAN_BITS) + (1 << LEADING_EXTENDED_MATCH_HUFFMAN_BITS))
 
 /**
  * User-provied callback to be invoked after each compression cycle in the higher-level API.

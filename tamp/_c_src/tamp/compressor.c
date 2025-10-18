@@ -9,7 +9,7 @@
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2 * !!(condition)]))
 
-#define MAX_PATTERN_SIZE (compressor->max_pattern_size)
+#define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
 #define WINDOW_SIZE (1 << compressor->conf_window)
 // 0xF because sizeof(TampCompressor.input) == 16;
 #define input_add(offset) ((compressor->input_pos + offset) & 0xF)
@@ -190,14 +190,6 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->window = window;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
 
-    // Compute max pattern size based on v2
-    if (compressor->conf_v2) {
-        compressor->max_pattern_size = compressor->min_pattern_size + 11 + (13 << LEADING_EXTENDED_MATCH_HUFFMAN_BITS) +
-                                       (1 << LEADING_EXTENDED_MATCH_HUFFMAN_BITS);
-    } else {
-        compressor->max_pattern_size = compressor->min_pattern_size + 13;
-    }
-
     // Initialize v2 fields
     if (compressor->conf_v2) {
         compressor->count = 0;
@@ -323,6 +315,42 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
     if (TAMP_UNLIKELY(output_size == 0)) return TAMP_OUTPUT_FULL;
 
 #if TAMP_EXTENDED_MATCH
+    // V2: Try to extend ongoing extended match
+    if (compressor->conf_v2 && compressor->write_state == TAMP_WRITE_STATE_EXTENDING_MATCH) {
+        if (TAMP_UNLIKELY(compressor->input_size == 0)) return TAMP_OK;  // Need more input to continue
+
+        unsigned char current_byte = read_input(0);
+        uint16_t next_pos = (compressor->extended_match_position + compressor->count) & window_mask;
+        uint16_t max_extended_match_size = compressor->min_pattern_size + EXTENDED_MATCH_ADDITIONAL;
+
+        // Check if current byte matches next byte in window
+        if (compressor->window[next_pos] == current_byte) {
+            // Match continues - extend it
+            compressor->count++;
+
+            // Consume input byte
+            compressor->input_pos = input_add(1);
+            compressor->input_size--;
+
+            // Check if we've hit the maximum
+            if (compressor->count >= max_extended_match_size) {
+                // Start writing the match
+                write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL],
+                                    huffman_bits[EXTENDED_MATCH_SYMBOL]);
+                write_to_bit_buffer(compressor, compressor->extended_match_position, compressor->conf_window);
+                compressor->write_state = TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING;
+            }
+
+            return TAMP_OK;
+        } else {
+            // Match ended - start writing
+            write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL], huffman_bits[EXTENDED_MATCH_SYMBOL]);
+            write_to_bit_buffer(compressor, compressor->extended_match_position, compressor->conf_window);
+            compressor->write_state = TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING;
+            return TAMP_OK;
+        }
+    }
+
     // V2: Resume multi-phase extended match write
     if (compressor->conf_v2 && compressor->write_state == TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING) {
         // Write extended huffman encoded match size
@@ -452,23 +480,18 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
 #if TAMP_EXTENDED_MATCH
             // V2: Use extended match for large matches
             if (compressor->conf_v2 && match_size > (compressor->min_pattern_size + 11)) {
-                // Store extended match info
+                // Store extended match info and enter extension mode
                 compressor->extended_match_position = match_index;
                 compressor->count = match_size;
 
-                // Write huffman code (symbol 13) + window offset
-                write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL],
-                                    huffman_bits[EXTENDED_MATCH_SYMBOL]);
-                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
-
-                // Consume input now (window will be populated in next phase)
+                // Consume the initial match from input buffer
                 for (uint8_t i = 0; i < match_size; i++) {
                     compressor->input_pos = input_add(1);
                 }
                 compressor->input_size -= match_size;
 
-                // Set state to resume on next poll
-                compressor->write_state = TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING;
+                // Enter extension mode - will try to extend on next poll
+                compressor->write_state = TAMP_WRITE_STATE_EXTENDING_MATCH;
 
                 return TAMP_OK;
             } else
@@ -502,23 +525,18 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
 #if TAMP_EXTENDED_MATCH
             // V2: Use extended match for large matches
             if (compressor->conf_v2 && match_size > (compressor->min_pattern_size + 11)) {
-                // Store extended match info
+                // Store extended match info and enter extension mode
                 compressor->extended_match_position = match_index;
                 compressor->count = match_size;
 
-                // Write huffman code (symbol 13) + window offset
-                write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL],
-                                    huffman_bits[EXTENDED_MATCH_SYMBOL]);
-                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
-
-                // Consume input now (window will be populated in next phase)
+                // Consume the initial match from input buffer
                 for (uint8_t i = 0; i < match_size; i++) {
                     compressor->input_pos = input_add(1);
                 }
                 compressor->input_size -= match_size;
 
-                // Set state to resume on next poll
-                compressor->write_state = TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING;
+                // Enter extension mode - will try to extend on next poll
+                compressor->write_state = TAMP_WRITE_STATE_EXTENDING_MATCH;
 
                 return TAMP_OK;
             } else
@@ -620,6 +638,37 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
         output_size -= chunk_output_written_size;
         output += chunk_output_written_size;
     }
+
+#if TAMP_EXTENDED_MATCH
+    // Finalize any pending extended match (v2)
+    if (compressor->conf_v2 && compressor->write_state == TAMP_WRITE_STATE_EXTENDING_MATCH) {
+        const uint16_t window_mask = (1 << compressor->conf_window) - 1;
+
+        // Write extended match token
+        write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL], huffman_bits[EXTENDED_MATCH_SYMBOL]);
+        write_to_bit_buffer(compressor, compressor->extended_match_position, compressor->conf_window);
+
+        // Write extended huffman encoded match size
+        uint32_t encoded_size = compressor->count - compressor->min_pattern_size - 11 - 1;
+        uint8_t temp_bit_pos = compressor->bit_buffer_pos;
+        tamp_write_extended_huffman(&compressor->bit_buffer, &temp_bit_pos, encoded_size,
+                                    LEADING_EXTENDED_MATCH_HUFFMAN_BITS);
+        compressor->bit_buffer_pos = temp_bit_pos;
+
+        // Copy from window to window
+        for (uint16_t i = 0; i < compressor->count; i++) {
+            uint16_t src_pos = (compressor->extended_match_position + i) & window_mask;
+            compressor->window[compressor->window_pos] = compressor->window[src_pos];
+            compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+        }
+
+        // Reset state
+        compressor->count = 0;
+        compressor->extended_match_position = 0;
+        compressor->rle_last_written = 0;
+        compressor->write_state = TAMP_WRITE_STATE_NORMAL;
+    }
+#endif
 
     // Flush any pending RLE at end of stream (v2)
     if (compressor->conf_v2 && compressor->count > 0) {
