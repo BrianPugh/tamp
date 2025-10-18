@@ -175,6 +175,32 @@ class TestCompressorAndDecompressor(unittest.TestCase):
             d = CDecompressor(f)
             self.assertEqual(d.read(), test_data)
 
+    def test_rle_at_end_python_compress_c_decompress(self):
+        """Test C decompressor with RLE sequence at the end of stream."""
+        if PyCompressor is None or CDecompressor is None:
+            self.skipTest("Python compressor or C decompressor not available")
+
+        test_cases = [
+            b"Hello World!" + b"\x00" * 500,  # Mixed + repeated bytes
+            b"X" * 2000,  # Pure RLE
+            b"ABCD" + b"Z" * 4,  # Short RLE at end
+        ]
+
+        for write_token in (True, False):
+            for test_data in test_cases:
+                with self.subTest(write_token=write_token, data_len=len(test_data)):
+                    with BytesIO() as compress_f:
+                        py_compressor = PyCompressor(compress_f, v2=True)
+                        py_compressor.write(test_data)
+                        py_compressor.flush(write_token=write_token)
+                        compressed_data = compress_f.getvalue()
+
+                    with BytesIO(compressed_data) as decompress_f:
+                        c_decompressor = CDecompressor(decompress_f)
+                        decompressed_data = c_decompressor.read()
+
+                    self.assertEqual(decompressed_data, test_data)
+
 
 if __name__ == "__main__":
     unittest.main()
