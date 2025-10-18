@@ -193,9 +193,9 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     // Initialize v2 fields
     if (compressor->conf_v2) {
         compressor->count = 0;
-        compressor->rle_last_written = 0;
         compressor->rle_breakeven = compute_rle_breakeven(compressor->min_pattern_size, conf->window);
         compressor->extended_match_position = 0;
+        compressor->write_state = TAMP_WRITE_STATE_NORMAL;
     }
 
 #if TAMP_LAZY_MATCHING
@@ -229,7 +229,7 @@ __attribute__((unused)) static inline void write_rle(TampCompressor *compressor)
         write_to_bit_buffer(compressor, IS_LITERAL_FLAG | rle_byte, compressor->conf_literal + 1);
         compressor->window[compressor->window_pos] = rle_byte;
         compressor->window_pos = (compressor->window_pos + 1) & window_mask;
-        compressor->rle_last_written = 0;
+        compressor->write_state = TAMP_WRITE_STATE_NORMAL;
     } else {
         // Write RLE token (symbol 12)
         write_to_bit_buffer(compressor, huffman_codes[RLE_SYMBOL], huffman_bits[RLE_SYMBOL]);
@@ -240,7 +240,7 @@ __attribute__((unused)) static inline void write_rle(TampCompressor *compressor)
                                     LEADING_RLE_HUFFMAN_BITS);
         compressor->bit_buffer_pos = temp_bit_pos;
 
-        if (!compressor->rle_last_written) {
+        if (compressor->write_state != TAMP_WRITE_STATE_RLE_WRITTEN) {
             // Only write up to 8 bytes to window, and only if we didn't already do this
             unsigned char rle_byte = compressor->window[(compressor->window_pos - 1) & window_mask];
             uint16_t bytes_to_write = MIN(compressor->count, RLE_MAX_WINDOW);
@@ -250,7 +250,7 @@ __attribute__((unused)) static inline void write_rle(TampCompressor *compressor)
             }
         }
 
-        compressor->rle_last_written = 1;
+        compressor->write_state = TAMP_WRITE_STATE_RLE_WRITTEN;
     }
 
     compressor->count = 0;
@@ -288,7 +288,7 @@ __attribute__((unused)) static inline void write_extended_match(TampCompressor *
     // Reset state
     compressor->count = 0;
     compressor->extended_match_position = 0;
-    compressor->rle_last_written = 0;
+    compressor->write_state = TAMP_WRITE_STATE_NORMAL;
 }
 
 tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
@@ -371,7 +371,6 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
         // Reset state
         compressor->count = 0;
         compressor->extended_match_position = 0;
-        compressor->rle_last_written = 0;
         compressor->write_state = TAMP_WRITE_STATE_NORMAL;
 
         return TAMP_OK;
@@ -451,7 +450,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
                 write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
 
                 if (compressor->conf_v2) {
-                    compressor->rle_last_written = 0;
+                    compressor->write_state = TAMP_WRITE_STATE_NORMAL;
                 }
             } else {
                 // Use current match, clear cache
@@ -471,7 +470,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
             write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
 
             if (compressor->conf_v2) {
-                compressor->rle_last_written = 0;
+                compressor->write_state = TAMP_WRITE_STATE_NORMAL;
             }
         } else {
             // Write TOKEN
@@ -517,7 +516,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
             write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
 
             if (compressor->conf_v2) {
-                compressor->rle_last_written = 0;
+                compressor->write_state = TAMP_WRITE_STATE_NORMAL;
             }
         } else {
             // Write TOKEN
@@ -558,7 +557,7 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
     compressor->input_size -= match_size;
 
     if (compressor->conf_v2 && match_size > 0) {
-        compressor->rle_last_written = 0;
+        compressor->write_state = TAMP_WRITE_STATE_NORMAL;
     }
 
     return TAMP_OK;
@@ -665,7 +664,6 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
         // Reset state
         compressor->count = 0;
         compressor->extended_match_position = 0;
-        compressor->rle_last_written = 0;
         compressor->write_state = TAMP_WRITE_STATE_NORMAL;
     }
 #endif

@@ -7,14 +7,15 @@ extern "C" {
 
 #include "common.h"
 
-/* V2 extended match state machine */
-#if TAMP_EXTENDED_MATCH
+/* V2 write state machine */
 enum TampWriteState {
     TAMP_WRITE_STATE_NORMAL = 0,
+    TAMP_WRITE_STATE_RLE_WRITTEN,
+#if TAMP_EXTENDED_MATCH
     TAMP_WRITE_STATE_EXTENDING_MATCH,
     TAMP_WRITE_STATE_EXTENDED_MATCH_PENDING
-};
 #endif
+};
 
 /* Externally, do not directly edit ANY of these attributes */
 typedef struct TampCompressor {
@@ -39,12 +40,9 @@ typedef struct TampCompressor {
 
     /* V2 state fields */
     uint8_t count;
-    uint8_t rle_last_written;
     uint8_t rle_breakeven;
+    uint8_t write_state;  // Track write state machine (RLE, extended matches)
     uint16_t extended_match_position;
-#if TAMP_EXTENDED_MATCH
-    uint8_t write_state;  // Track multi-phase write state for extended matches
-#endif
 
 #if TAMP_LAZY_MATCHING
     /* Lazy matching cache */
@@ -70,12 +68,9 @@ typedef struct TampCompressor {
     uint32_t input_pos : 4;
 
     /* V2 state fields */
-    uint32_t rle_last_written : 1;
     uint32_t rle_breakeven : 4;
+    uint32_t write_state : 2;  // Track write state machine (RLE, extended matches)
     uint32_t extended_match_position : 15;
-#if TAMP_EXTENDED_MATCH
-    uint32_t write_state : 2;  // Track multi-phase write state for extended matches
-#endif
     uint8_t count;  // RLE/Extended-match length.
 
 #if TAMP_LAZY_MATCHING
