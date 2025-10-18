@@ -69,14 +69,14 @@ typedef struct TampCompressor {
     uint32_t input_size : 5;
     uint32_t input_pos : 4;
 
-    /* V2 state fields - using full types for larger values */
+    /* V2 state fields */
     uint32_t rle_last_written : 1;
-    uint8_t count;
-    uint8_t rle_breakeven;
-    uint16_t extended_match_position;
+    uint32_t rle_breakeven : 4;
+    uint32_t extended_match_position : 15;
 #if TAMP_EXTENDED_MATCH
-    uint8_t write_state;  // Track multi-phase write state for extended matches
+    uint32_t write_state : 2;  // Track multi-phase write state for extended matches
 #endif
+    uint8_t count;  // RLE/Extended-match length.
 
 #if TAMP_LAZY_MATCHING
     /* Lazy matching cache */
