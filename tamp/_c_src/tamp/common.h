@@ -88,6 +88,16 @@ typedef struct TampConf {
 #define EXTENDED_MATCH_ADDITIONAL \
     (11 + (13 << LEADING_EXTENDED_MATCH_HUFFMAN_BITS) + (1 << LEADING_EXTENDED_MATCH_HUFFMAN_BITS))
 
+// Compile-time assertions to ensure count field can fit in uint8_t
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(RLE_MAX_SIZE <= 255, "RLE_MAX_SIZE must fit in uint8_t");
+_Static_assert(3 + EXTENDED_MATCH_ADDITIONAL <= 255, "Extended match max size must fit in uint8_t");
+#else
+// Fallback for pre-C11: compile-time assertion using array size
+typedef char tamp_static_assert_rle_max_size[(RLE_MAX_SIZE <= 255) ? 1 : -1];
+typedef char tamp_static_assert_extended_match_max_size[(3 + EXTENDED_MATCH_ADDITIONAL <= 255) ? 1 : -1];
+#endif
+
 /**
  * User-provied callback to be invoked after each compression cycle in the higher-level API.
  * @param[in,out] user_data Arbitrary user-provided data.
