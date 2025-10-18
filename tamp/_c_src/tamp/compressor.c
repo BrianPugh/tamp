@@ -139,27 +139,44 @@ static inline bool validate_no_match_overlap(uint16_t write_pos, uint16_t match_
 #endif
 
 /**
+ * @brief Nibble-packed lookup table for RLE breakeven computation.
+ *
+ * This table uses nibble-packing: each byte stores two values.
+ *   - Lower nibble: breakeven for min_pattern_size=2
+ *   - Upper nibble: breakeven for min_pattern_size=3
+ *   - Index: window_bits - 8 (for window_bits in range [8, 15])
+ *
+ * Memory savings: 8 bytes data vs ~80-120 bytes code for loop implementation.
+ * Performance: Single array lookup + nibble extraction
+ *
+ * Example: For window_bits=11, table[3]=0x32:
+ *   - min_pattern_size=2: breakeven = 0x32 & 0x0F = 2
+ *   - min_pattern_size=3: breakeven = 0x32 >> 4  = 3
+ */
+static const uint8_t rle_breakeven_lut[8] = {
+    0x05,  // window=8:  mps=2: 5, mps=3: 0
+    0x03,  // window=9:  mps=2: 3, mps=3: 0
+    0x03,  // window=10: mps=2: 3, mps=3: 0
+    0x32,  // window=11: mps=2: 2, mps=3: 3
+    0x00,  // window=12: mps=2: 0, mps=3: 0
+    0x00,  // window=13: mps=2: 0, mps=3: 0
+    0x00,  // window=14: mps=2: 0, mps=3: 0
+    0x00   // window=15: mps=2: 0, mps=3: 0
+};
+
+/**
  * @brief Compute RLE breakeven point for v2 compression.
  *
  * Determines the pattern size at which pattern matching becomes more efficient than RLE.
+ * Uses a nibble-packed lookup table optimized for embedded systems.
  *
- * @param[in] min_pattern_size Minimum pattern size.
- * @param[in] window_bits Number of window bits.
+ * @param[in] min_pattern_size Minimum pattern size (2 or 3).
+ * @param[in] window_bits Number of window bits (range: [8, 15]).
  * @return Breakeven pattern size.
  */
 static uint8_t compute_rle_breakeven(uint8_t min_pattern_size, uint8_t window_bits) {
-    uint8_t breakeven = 0;
-
-    for (uint8_t i = min_pattern_size; i <= min_pattern_size + 11; i++) {
-        uint8_t rle_bits = huffman_bits[(i - 1) >> LEADING_RLE_HUFFMAN_BITS] + LEADING_RLE_HUFFMAN_BITS;
-        uint8_t pattern_bits = huffman_bits[i - min_pattern_size] + window_bits;
-
-        if (pattern_bits < rle_bits) {
-            breakeven = i;
-        }
-    }
-
-    return breakeven;
+    uint8_t packed = rle_breakeven_lut[window_bits - 8];
+    return (min_pattern_size == 2) ? (packed & 0x0F) : (packed >> 4);
 }
 
 tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, unsigned char *window) {
