@@ -41,7 +41,8 @@ typedef struct TampCompressor {
     /* V2 state fields */
     uint8_t count;
     uint8_t rle_breakeven;
-    uint8_t write_state;  // Track write state machine (RLE, extended matches)
+    uint8_t write_state;        // Track write state machine (RLE, extended matches)
+    uint8_t pending_rle_count;  // Short RLE count (0-7) waiting for pattern-match comparison
     uint16_t extended_match_position;
 
 #if TAMP_LAZY_MATCHING
@@ -69,7 +70,8 @@ typedef struct TampCompressor {
 
     /* V2 state fields */
     uint32_t rle_breakeven : 4;
-    uint32_t write_state : 2;  // Track write state machine (RLE, extended matches)
+    uint32_t write_state : 2;        // Track write state machine (RLE, extended matches)
+    uint32_t pending_rle_count : 3;  // Short RLE count (0-7) waiting for pattern-match comparison
     uint32_t extended_match_position : 15;
     uint8_t count;  // RLE/Extended-match length.
 

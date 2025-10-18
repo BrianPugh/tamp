@@ -394,25 +394,39 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
     }
 #endif
 
-    // V2: RLE detection logic
+    // V2: RLE detection logic - detect but don't consume until we're sure RLE is better
     if (compressor->conf_v2) {
-        unsigned char current_byte = read_input(0);
-
-        // Check if current byte continues RLE sequence
         unsigned char last_written = compressor->window[(compressor->window_pos - 1) & window_mask];
-        if (current_byte == last_written && compressor->count < RLE_MAX_SIZE) {
-            compressor->count++;
 
-            // Consume the byte
-            compressor->input_pos = input_add(1);
-            compressor->input_size--;
-
-            return TAMP_OK;  // Continue accumulating RLE
+        // Count how many bytes at the start of input match the last written byte
+        uint8_t rle_count = 0;
+        while (rle_count < compressor->input_size && rle_count < RLE_MAX_SIZE &&
+               read_input(rle_count) == last_written) {
+            rle_count++;
         }
 
-        // RLE sequence broken - check if we should emit accumulated RLE
-        if (compressor->count >= 1) {
-            // We have pending RLE - write it (write_rle handles count==1 as a literal)
+        // If we have an RLE sequence
+        if (rle_count > 0) {
+            // If RLE is definitely better than pattern matching, consume and write it now
+            if (rle_count > compressor->rle_breakeven) {
+                // Consume the RLE bytes
+                compressor->count = rle_count;
+                for (uint8_t i = 0; i < rle_count; i++) {
+                    compressor->input_pos = input_add(1);
+                }
+                compressor->input_size -= rle_count;
+
+                // Write RLE token
+                write_rle(compressor);
+                return TAMP_OK;
+            } else {
+                // RLE is small (2 <= count <= rle_breakeven)
+                // Store it and let pattern matching compare
+                compressor->pending_rle_count = rle_count;
+                // Don't consume bytes - leave them in input buffer for pattern matching
+            }
+        } else if (compressor->count > 0) {
+            // We had accumulated RLE (from previous poll) that needs to be written
             write_rle(compressor);
             return TAMP_OK;
         }
@@ -420,6 +434,9 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
 
     uint8_t match_size = 0;
     uint16_t match_index = 0;
+
+    // V2: Check if we have a pending RLE to compare with pattern matching
+    uint8_t pending_rle = compressor->conf_v2 ? compressor->pending_rle_count : 0;
 
 #if TAMP_LAZY_MATCHING
     if (compressor->conf_lazy_matching) {
@@ -437,6 +454,26 @@ tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
 #else
     find_best_match(compressor, &match_index, &match_size);
 #endif
+
+    // V2: Compare pending RLE with pattern match to choose better encoding
+    if (pending_rle > 0) {
+        if (match_size < pending_rle) {
+            // RLE is better - consume RLE bytes and write RLE token
+            compressor->count = pending_rle;
+            for (uint8_t i = 0; i < pending_rle; i++) {
+                compressor->input_pos = input_add(1);
+            }
+            compressor->input_size -= pending_rle;
+            compressor->pending_rle_count = 0;
+
+            write_rle(compressor);
+            return TAMP_OK;
+        } else {
+            // Pattern match is better or equal - clear pending RLE and use pattern match
+            compressor->pending_rle_count = 0;
+            // Fall through to normal pattern match handling
+        }
+    }
 
 #if TAMP_LAZY_MATCHING
     if (compressor->conf_lazy_matching) {
@@ -686,7 +723,13 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
 #endif
 
     // Flush any pending RLE at end of stream (v2)
-    if (compressor->conf_v2 && compressor->count > 0) {
+    if (compressor->conf_v2 && (compressor->count > 0 || compressor->pending_rle_count > 0)) {
+        // If we have pending_rle_count, move it to count for writing
+        if (compressor->pending_rle_count > 0) {
+            compressor->count = compressor->pending_rle_count;
+            compressor->pending_rle_count = 0;
+        }
+
         write_rle(compressor);
 
         // Partial flush to output the RLE token
