@@ -236,7 +236,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  *
  * @param[in,out] compressor TampCompressor object.
  */
-__attribute__((unused)) static inline void write_rle(TampCompressor *compressor) {
+static inline void write_rle(TampCompressor *compressor) {
     const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     if (compressor->count == 0) {
         return;  // Nothing to write
@@ -278,7 +278,7 @@ __attribute__((unused)) static inline void write_rle(TampCompressor *compressor)
  *
  * @param[in,out] compressor TampCompressor object.
  */
-__attribute__((unused)) static inline void write_extended_match(TampCompressor *compressor) {
+static inline void write_extended_match(TampCompressor *compressor) {
     // Write extended match token (symbol 13)
     write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL], huffman_bits[EXTENDED_MATCH_SYMBOL]);
 
@@ -695,30 +695,7 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
 #if TAMP_EXTENDED_MATCH
     // Finalize any pending extended match (v2)
     if (compressor->conf_v2 && compressor->write_state == TAMP_WRITE_STATE_EXTENDING_MATCH) {
-        const uint16_t window_mask = (1 << compressor->conf_window) - 1;
-
-        // Write extended match token
-        write_to_bit_buffer(compressor, huffman_codes[EXTENDED_MATCH_SYMBOL], huffman_bits[EXTENDED_MATCH_SYMBOL]);
-        write_to_bit_buffer(compressor, compressor->extended_match_position, compressor->conf_window);
-
-        // Write extended huffman encoded match size
-        uint32_t encoded_size = compressor->count - compressor->min_pattern_size - 11 - 1;
-        uint8_t temp_bit_pos = compressor->bit_buffer_pos;
-        tamp_write_extended_huffman(&compressor->bit_buffer, &temp_bit_pos, encoded_size,
-                                    LEADING_EXTENDED_MATCH_HUFFMAN_BITS);
-        compressor->bit_buffer_pos = temp_bit_pos;
-
-        // Copy from window to window
-        for (uint16_t i = 0; i < compressor->count; i++) {
-            uint16_t src_pos = (compressor->extended_match_position + i) & window_mask;
-            compressor->window[compressor->window_pos] = compressor->window[src_pos];
-            compressor->window_pos = (compressor->window_pos + 1) & window_mask;
-        }
-
-        // Reset state
-        compressor->count = 0;
-        compressor->extended_match_position = 0;
-        compressor->write_state = TAMP_WRITE_STATE_NORMAL;
+        write_extended_match(compressor);
     }
 #endif
 
