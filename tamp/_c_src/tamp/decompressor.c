@@ -192,7 +192,13 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
             match_size += decompressor->min_pattern_size;
             window_offset = bit_buffer >> (32 - decompressor->conf_window);
 
-            if (TAMP_UNLIKELY((uint32_t)window_offset + (uint32_t)match_size > (1u << decompressor->conf_window))) {
+            // Security check: validate that the pattern reference (offset + size) does not
+            // exceed window bounds. Malicious compressed data could craft out-of-bounds
+            // references to read past the window buffer, potentially leaking memory.
+            // Cast to uint32_t prevents signed integer overflow.
+            const uint32_t window_size = (1u << decompressor->conf_window);
+            if (TAMP_UNLIKELY((uint32_t)window_offset >= window_size ||
+                              (uint32_t)window_offset + (uint32_t)match_size > window_size)) {
                 return TAMP_OOB;
             }
 

@@ -153,6 +153,8 @@ export class TampDecompressor {
    * Decompress a chunk of data
    * @param input - Compressed input data
    * @returns Promise resolving to decompressed data
+   * @throws {RangeError} When compressed data contains out-of-bounds references
+   * @throws {DecompressionError} When decompression fails
    */
   decompress(input: Uint8Array): Promise<Uint8Array>;
 
@@ -197,6 +199,8 @@ export function compress(data: Uint8Array, options?: TampCallbackOptions): Promi
  * @param data - Compressed data to decompress
  * @param options - Decompression options
  * @returns Promise resolving to decompressed data
+ * @throws {RangeError} When compressed data contains out-of-bounds references or invalid configuration
+ * @throws {DecompressionError} When decompression fails
  */
 export function decompress(data: Uint8Array, options?: TampOptions): Promise<Uint8Array>;
 

@@ -71,7 +71,7 @@ void test_decompressor_byte_by_byte(void) {
 void test_decompressor_malicious_oob(void) {
     /*****
      * Tests the decompressor if we feed in a pattern at position WINDOW_SIZE - 1.
-     * The compressor should ever generate this
+     * The compressor should never generate this.
      */
     const unsigned char compressed[] = {
         0b01011000,  // header (window_bits=10, literal_bits=8)
@@ -91,5 +91,5 @@ void test_decompressor_malicious_oob(void) {
 
     res = tamp_decompressor_decompress(&d, output_buffer, sizeof(output_buffer), &output_written_size, compressed,
                                        sizeof(compressed), NULL);
-    assert(res == TAMP_OOB);
+    TEST_ASSERT_EQUAL(res, TAMP_OOB);
 }
