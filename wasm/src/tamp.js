@@ -9,6 +9,7 @@ import TampModule from './tamp-module.mjs';
 const TAMP_ERROR = -1;
 const TAMP_EXCESS_BITS = -2;
 const TAMP_INVALID_CONF = -3;
+const TAMP_OOB = -4;
 
 class TampError extends Error {
   constructor(code, message, details = {}) {
@@ -79,6 +80,8 @@ function throwOnError(result, operation) {
         throw new ExcessBitsError(`${operation}: Symbol has more bits than configured literal size`, details);
       case TAMP_INVALID_CONF:
         throw new RangeError(`${operation}: Invalid configuration parameters`);
+      case TAMP_OOB:
+        throw new RangeError(`${operation}: Out-of-bounds access detected in compressed data`);
       case TAMP_ERROR:
       default:
         if (operation.toLowerCase().includes('compress')) {

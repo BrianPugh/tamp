@@ -16,6 +16,7 @@ int main(void) {
 
     // Decompressor tests
     RUN_TEST(test_decompressor_byte_by_byte);
+    RUN_TEST(test_decompressor_malicious_oob);
 
     // Compressor tests
     RUN_TEST(test_compressor_init);
