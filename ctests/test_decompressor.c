@@ -67,3 +67,29 @@ void test_decompressor_byte_by_byte(void) {
 
     TEST_ASSERT_EQUAL_STRING("foo foo foo", output_buffer_complete);
 }
+
+void test_decompressor_malicious_oob(void) {
+    /*****
+     * Tests the decompressor if we feed in a pattern at position WINDOW_SIZE - 1.
+     * The compressor should ever generate this
+     */
+    const unsigned char compressed[] = {
+        0b01011000,  // header (window_bits=10, literal_bits=8)
+        0b00111111,  // pattern of length 2 at WINDOW_SIZE -1
+        0b11110000,  // 4 bits of zero-padding
+    };
+
+    tamp_res res;
+    TampDecompressor d;
+    unsigned char window_buffer[1 << 10];
+
+    res = tamp_decompressor_init(&d, NULL, window_buffer);
+    TEST_ASSERT_EQUAL(res, TAMP_OK);
+
+    unsigned char output_buffer[32];
+    size_t output_written_size;
+
+    res = tamp_decompressor_decompress(&d, output_buffer, sizeof(output_buffer), &output_written_size, compressed,
+                                       sizeof(compressed), NULL);
+    assert(res == TAMP_OOB);
+}

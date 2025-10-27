@@ -57,6 +57,7 @@ enum {
     TAMP_ERROR = -1,         // Generic error
     TAMP_EXCESS_BITS = -2,   // Provided symbol has more bits than conf->literal
     TAMP_INVALID_CONF = -3,  // Invalid configuration parameters.
+    TAMP_OOB = -4,           // Out-of-bounds access detected in compressed data.
 };
 typedef int8_t tamp_res;
 

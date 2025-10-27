@@ -192,11 +192,17 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
             match_size += decompressor->min_pattern_size;
             window_offset = bit_buffer >> (32 - decompressor->conf_window);
 
+            if (TAMP_UNLIKELY((uint32_t)window_offset + (uint32_t)match_size > (1u << decompressor->conf_window))) {
+                return TAMP_OOB;
+            }
+
             // Apply skip_bytes
             match_size_skip = match_size - decompressor->skip_bytes;
             window_offset_skip = window_offset + decompressor->skip_bytes;
 
-            // Check if we are output-buffer-limited, and if so to set skip_bytes
+            // Check if we are output-buffer-limited, and if so to set skip_bytes.
+            // Next tamp_decompressor_decompress_cb we will re-decode the same
+            // token, and skip the first skip_bytes of it.
             // Otherwise, update the decompressor buffers
             size_t remaining = output_end - output;
             if (TAMP_UNLIKELY((uint8_t)match_size_skip > remaining)) {
