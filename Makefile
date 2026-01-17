@@ -1,28 +1,85 @@
-.PHONY: clean test collect-data venv
+# Default target - print help
+.PHONY: help
+help:
+	@echo "Tamp - Low-memory compression library"
+	@echo ""
+	@echo "Common targets:"
+	@echo "  make test              Run Python and MicroPython tests"
+	@echo "  make c-test            Run C unit tests"
+	@echo "  make clean             Clean all build artifacts"
+	@echo ""
+	@echo "MicroPython native module:"
+	@echo "  make mpy               Build native .mpy for RP2040 (requires MPY_DIR)"
+	@echo "  make mpy ARCH=armv7m   Build for different architecture"
+	@echo ""
+	@echo "On-device benchmarks (requires MPY_DIR and connected device):"
+	@echo "  make on-device-compression-benchmark    Run compression benchmark"
+	@echo "  make on-device-decompression-benchmark  Run decompression benchmark"
+	@echo ""
+	@echo "Other targets:"
+	@echo "  make binary-size       Show binary sizes for README table"
+	@echo "  make download-enwik8   Download enwik8 test dataset"
+	@echo "  make tamp-c-library    Build static C library"
+	@echo "  make website-build     Build website for deployment"
 
 
+###########################
+# MicroPython Native Module
+###########################
+# Build MicroPython native modules (.mpy files).
+#
+# Usage: make mpy ARCH=armv6m
+#        (requires MPY_DIR environment variable pointing to MicroPython source)
+#
+# Supported architectures:
+#     x86, x64, armv6m, armv7m, armv7emsp, armv7emdp, xtensa, xtensawin
+#
+# Options:
+#     TAMP_COMPRESSOR=0    Exclude compressor from build
+#     TAMP_DECOMPRESSOR=0  Exclude decompressor from build
+.PHONY: mpy
+
+ARCH ?= armv6m
+TAMP_COMPRESSOR ?= 1
+TAMP_DECOMPRESSOR ?= 1
+
+mpy:
+ifndef MPY_DIR
+	$(error MPY_DIR must be set to MicroPython source directory)
+endif
+# x86/x64 native modules can't be built on macOS (produces Mach-O, not ELF)
+ifneq ($(filter $(ARCH),x86 x64),)
+ifeq ($(shell uname),Darwin)
+	$(error Cannot build $(ARCH) native modules on macOS - use Linux or specify an embedded ARCH (e.g., armv6m, armv7m))
+endif
+endif
+	@$(MAKE) --no-print-directory _mpy-build \
+		ARCH=$(ARCH) \
+		TAMP_COMPRESSOR=$(TAMP_COMPRESSOR) \
+		TAMP_DECOMPRESSOR=$(TAMP_DECOMPRESSOR)
+
+# Internal: Only include dynruntime.mk when explicitly building MicroPython modules.
+# This prevents accidental builds if MPY_DIR happens to be set in the environment.
+ifeq ($(MAKECMDGOALS),_mpy-build)
 ifdef MPY_DIR
 
-# Native machine code in .mpy files
-# User can define architecture in call like "make ARCH=armv6m"
-# Options:
-#     * x86
-#     * x64
-#     * armv6m
-#     * armv7m
-#     * armv7emsp
-#     * armv7emdp
-#     * xtensa
-#     * xtensawin
-ARCH ?= x64
 MOD = tamp
 
-TAMP_COMPRESSOR ?= 1  # Include Tamp compressor in build
-TAMP_DECOMPRESSOR ?= 1  # Include Tamp decompressor in build
+# Override -Os with -O2 for better performance (last flag wins)
+CFLAGS_EXTRA = -O2
 
-CFLAGS += -Itamp/_c_src -DTAMP_COMPRESSOR=${TAMP_COMPRESSOR} -DTAMP_DECOMPRESSOR=${TAMP_DECOMPRESSOR}
-ifneq ($(CC),clang)
+CFLAGS += -Itamp/_c_src -DTAMP_COMPRESSOR=$(TAMP_COMPRESSOR) -DTAMP_DECOMPRESSOR=$(TAMP_DECOMPRESSOR)
+# Compiler-specific flags based on target architecture
+ifeq ($(filter $(ARCH),x86 x64),)
+# Cross-compiling for embedded (ARM, xtensa) - use GCC flags
 CFLAGS += -fno-tree-loop-distribute-patterns
+else
+# Native x86/x64 - check if using clang (macOS)
+ifneq ($(shell $(CC) --version 2>&1 | grep -q clang && echo clang),)
+CFLAGS += -Wno-typedef-redefinition
+else
+CFLAGS += -fno-tree-loop-distribute-patterns
+endif
 endif
 
 SRC = tamp/_c_src/tamp/common.c mpy_bindings/bindings.c mpy_bindings/bindings_common.py
@@ -38,7 +95,19 @@ endif
 MPY_CROSS_FLAGS = -s $(subst compressor,c,$(subst decompressor,d,$(subst bindings,m,$(notdir $<))))
 
 include $(MPY_DIR)/py/dynruntime.mk
-endif
+
+# _mpy-build delegates to 'all' which is defined by dynruntime.mk
+.PHONY: _mpy-build
+_mpy-build: all
+
+endif  # MPY_DIR
+endif  # MAKECMDGOALS == _mpy-build
+
+
+################
+# Common/Utility
+################
+.PHONY: venv clean-cython
 
 venv:
 	@. .venv/bin/activate
@@ -49,47 +118,61 @@ clean-cython:
 	@rm -rf tamp/_c_decompressor.c
 	@rm -rf tamp/_c_common.c
 
-clean: clean-cython
+# Only define 'clean' when not building MicroPython (dynruntime.mk has its own)
+ifneq ($(MAKECMDGOALS),_mpy-build)
+.PHONY: clean
+clean: clean-cython clean-c-test website-clean
 	@rm -rf build
 	@rm -rf dist
+	@rm -f tamp.mpy
+endif
 
-build/enwik8.zip:
-	if [ ! -f build/enwik8.zip ]; then \
-		mkdir -p build; \
-		cd build; \
-		curl -O https://mattmahoney.net/dc/enwik8.zip; \
-		cd ..; \
+
+################
+# Data Downloads
+################
+# Datasets are stored in datasets/ to persist across `make clean`
+.PHONY: download-enwik8-zip download-enwik8 download-silesia
+
+datasets/enwik8.zip:
+	@mkdir -p datasets
+	@if [ ! -f datasets/enwik8.zip ]; then \
+		curl -o datasets/enwik8.zip https://mattmahoney.net/dc/enwik8.zip; \
 	fi
 
-download-enwik8-zip: build/enwik8.zip
+download-enwik8-zip: datasets/enwik8.zip
 
-build/enwik8: build/enwik8.zip
-	if [ ! -f build/enwik8 ]; then \
-		cd build; \
-		unzip -q enwik8.zip; \
-		cd ..; \
+datasets/enwik8: datasets/enwik8.zip
+	@if [ ! -f datasets/enwik8 ]; then \
+		cd datasets && unzip -q enwik8.zip; \
 	fi
 
-download-enwik8: build/enwik8
+download-enwik8: datasets/enwik8
 
-build/silesia:
-	if [ ! -f build/silesia ]; then \
-		mkdir -p build; \
-		cd build; \
-		curl -O http://mattmahoney.net/dc/silesia.zip; \
-		mkdir silesia; \
-		unzip -q silesia.zip -d silesia; \
-		rm silesia.zip; \
-		cd ..; \
+datasets/silesia:
+	@mkdir -p datasets
+	@if [ ! -d datasets/silesia ]; then \
+		curl -o datasets/silesia.zip http://mattmahoney.net/dc/silesia.zip && \
+		mkdir -p datasets/silesia && \
+		unzip -q datasets/silesia.zip -d datasets/silesia && \
+		rm datasets/silesia.zip; \
 	fi
 
-download-silesia: build/silesia
+download-silesia: datasets/silesia
 
+# Derived test files (OK to be in build/, quick to regenerate)
 build/enwik8-100kb: download-enwik8
-	@head -c 100000 build/enwik8 > build/enwik8-100kb
+	@mkdir -p build
+	@head -c 100000 datasets/enwik8 > build/enwik8-100kb
 
 build/enwik8-100kb.tamp: build/enwik8-100kb
 	@poetry run tamp compress build/enwik8-100kb -o build/enwik8-100kb.tamp
+
+
+##################
+# Python / Testing
+##################
+.PHONY: test collect-data
 
 test: venv
 	@poetry run python build.py build_ext --inplace && python -m pytest
@@ -101,130 +184,231 @@ collect-data: venv download-enwik8
 	@python tools/collect-data.py 9
 	@python tools/collect-data.py 10
 
-on-device-compression-benchmark: venv build/enwik8-100kb build/enwik8-100kb.tamp
-	@port=$$(python -c "import os, belay; print(belay.UsbSpecifier.parse_raw(os.environ['BELAY_DEVICE']).to_port())"); \
-	echo "Using port: $$port"; \
-	mpremote connect port:$$port rm :enwik8-100kb.tamp || true; \
-	belay sync '$(BELAY_DEVICE)' build/enwik8-100kb; \
-	belay install '$(BELAY_DEVICE)' --with=dev --run tools/on-device-compression-benchmark.py; \
-	mpremote connect port:$$port cp :enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp; \
-	cmp build/enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp; \
-	echo "Success!"
 
-on-device-decompression-benchmark: venv build/enwik8-100kb.tamp
-	@port=$$(python -c "import os, belay; print(belay.UsbSpecifier.parse_raw(os.environ['BELAY_DEVICE']).to_port())"); \
-	echo "Using port: $$port"; \
-	mpremote connect port:$$port rm :enwik8-100kb-decompressed || true; \
-	belay sync '$(BELAY_DEVICE)' build/enwik8-100kb.tamp; \
-	belay install '$(BELAY_DEVICE)' --with=dev --run tools/on-device-decompression-benchmark.py; \
-	mpremote connect port:$$port cp :enwik8-100kb-decompressed build/on-device-enwik8-100kb-decompressed; \
-	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed; \
-	echo "Success!"
+#######################
+# MicroPython Utilities
+#######################
+.PHONY: on-device-compression-benchmark on-device-decompression-benchmark mpy-viper-size mpy-native-size mpy-compression-benchmark
 
-mpy-size:
-	@mpy-cross -O3 -march=armv6m tamp/__init__.py; \
-		size_init=$$(cat tamp/__init__.mpy | wc -c); \
-	    mpy-cross -O3 -march=armv6m tamp/compressor_viper.py; \
-		size_co_viper=$$(cat tamp/compressor_viper.mpy | wc -c); \
-	    mpy-cross -O3 -march=armv6m tamp/decompressor_viper.py; \
-		size_de_viper=$$(cat tamp/decompressor_viper.mpy | wc -c); \
-	    total_viper=$$((size_init + size_co_viper)); \
-	    total_de_viper=$$((size_init + size_de_viper)); \
-	    total_all=$$((size_init + size_co_viper + size_de_viper)); \
-		printf '__init__.py\t\t\t\t\t\t%s\n' $$size_init; \
-		printf 'compressor_viper.py\t\t\t\t\t%s\n' $$size_co_viper; \
-		printf 'decompressor_viper.py\t\t\t\t\t%s\n' $$size_de_viper; \
-		printf '__init__ + compressor_viper\t\t\t\t%s\n' $$total_viper; \
-		printf '__init__ + decompressor_viper\t\t\t\t%s\n' $$total_de_viper; \
-		printf '__init__ + compressor_viper + decompressor_viper\t%s\n' $$total_all
+MPREMOTE := poetry run mpremote
+
+# Helper to sync a file only if hash differs: $(call mpremote-sync,local,remote)
+define mpremote-sync
+	@local_hash=$$(shasum -a 256 $(1) | cut -d' ' -f1); \
+	remote_hash=$$($(MPREMOTE) sha256sum :$(2) 2>/dev/null | tail -1 || echo ""); \
+	if [ "$$local_hash" != "$$remote_hash" ]; then \
+		echo "Syncing $(1) -> :$(2)"; \
+		$(MPREMOTE) cp $(1) :$(2); \
+	else \
+		echo "Skipping $(1) (unchanged)"; \
+	fi
+endef
+
+on-device-compression-benchmark: mpy build/enwik8-100kb build/enwik8-100kb.tamp
+	$(MPREMOTE) rm :enwik8-100kb.tamp || true
+	@# Remove any viper implementation that may exist from previous belay syncs
+	$(MPREMOTE) rm :tamp/__init__.py :tamp/compressor_viper.py :tamp/decompressor_viper.py :tamp/compressor.py :tamp/decompressor.py :tamp/__main__.py :tamp/py.typed 2>/dev/null || true
+	$(MPREMOTE) rmdir :tamp 2>/dev/null || true
+	$(MPREMOTE) mkdir :lib || true
+	$(call mpremote-sync,tamp.mpy,lib/tamp.mpy)
+	$(call mpremote-sync,build/enwik8-100kb,enwik8-100kb)
+	$(MPREMOTE) soft-reset
+	$(MPREMOTE) run tools/on-device-compression-benchmark.py
+	$(MPREMOTE) cp :enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp
+	cmp build/enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp
+	@echo "Success!"
+
+on-device-decompression-benchmark: mpy build/enwik8-100kb.tamp
+	$(MPREMOTE) rm :enwik8-100kb-decompressed || true
+	@# Remove any viper implementation that may exist from previous belay syncs
+	$(MPREMOTE) rm :tamp/__init__.py :tamp/compressor_viper.py :tamp/decompressor_viper.py :tamp/compressor.py :tamp/decompressor.py :tamp/__main__.py :tamp/py.typed 2>/dev/null || true
+	$(MPREMOTE) rmdir :tamp 2>/dev/null || true
+	$(MPREMOTE) mkdir :lib || true
+	$(call mpremote-sync,tamp.mpy,lib/tamp.mpy)
+	$(call mpremote-sync,build/enwik8-100kb.tamp,enwik8-100kb.tamp)
+	$(MPREMOTE) soft-reset
+	$(MPREMOTE) run tools/on-device-decompression-benchmark.py
+	$(MPREMOTE) cp :enwik8-100kb-decompressed build/on-device-enwik8-100kb-decompressed
+	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed
+	@echo "Success!"
+
+mpy-viper-size:
+	@if [ -n "$(MPY_DIR)" ] && [ -x "$(MPY_DIR)/mpy-cross/build/mpy-cross" ]; then \
+		MPY_CROSS="$(MPY_DIR)/mpy-cross/build/mpy-cross"; \
+	elif command -v mpy-cross >/dev/null 2>&1; then \
+		MPY_CROSS="mpy-cross"; \
+	else \
+		echo "Error: mpy-cross not found. Either set MPY_DIR or install mpy-cross."; \
+		exit 1; \
+	fi; \
+	$$MPY_CROSS -O3 -march=armv6m -o /tmp/_tamp_init.mpy tamp/__init__.py; \
+	$$MPY_CROSS -O3 -march=armv6m -o /tmp/_tamp_comp.mpy tamp/compressor_viper.py; \
+	$$MPY_CROSS -O3 -march=armv6m -o /tmp/_tamp_decomp.mpy tamp/decompressor_viper.py; \
+	size_init=$$(wc -c < /tmp/_tamp_init.mpy | tr -d ' '); \
+	size_comp=$$(wc -c < /tmp/_tamp_comp.mpy | tr -d ' '); \
+	size_decomp=$$(wc -c < /tmp/_tamp_decomp.mpy | tr -d ' '); \
+	rm -f /tmp/_tamp_init.mpy /tmp/_tamp_comp.mpy /tmp/_tamp_decomp.mpy; \
+	printf 'Tamp (MicroPython Viper)   %d  %d  %d\n' \
+		$$((size_init + size_comp)) $$((size_init + size_decomp)) $$((size_init + size_comp + size_decomp))
+
+mpy-native-size:
+ifndef MPY_DIR
+	$(error MPY_DIR must be set for mpy-native-size)
+endif
+	@rm -rf tamp.mpy build/tamp build/mpy_bindings build/tamp.native.mpy && \
+		$(MAKE) -s _mpy-build MPY_DIR=$(MPY_DIR) ARCH=armv6m TAMP_COMPRESSOR=1 TAMP_DECOMPRESSOR=0 >/dev/null 2>&1 && \
+		size_comp=$$(wc -c < tamp.mpy | tr -d ' ') && \
+		rm -rf tamp.mpy build/tamp build/mpy_bindings build/tamp.native.mpy && \
+		$(MAKE) -s _mpy-build MPY_DIR=$(MPY_DIR) ARCH=armv6m TAMP_COMPRESSOR=0 TAMP_DECOMPRESSOR=1 >/dev/null 2>&1 && \
+		size_decomp=$$(wc -c < tamp.mpy | tr -d ' ') && \
+		rm -rf tamp.mpy build/tamp build/mpy_bindings build/tamp.native.mpy && \
+		$(MAKE) -s _mpy-build MPY_DIR=$(MPY_DIR) ARCH=armv6m TAMP_COMPRESSOR=1 TAMP_DECOMPRESSOR=1 >/dev/null 2>&1 && \
+		size_both=$$(wc -c < tamp.mpy | tr -d ' ') && \
+		printf 'Tamp (MicroPython Native)  %s  %s  %s\n' $$size_comp $$size_decomp $$size_both
 
 mpy-compression-benchmark:
 	@time belay run micropython -X heapsize=300M tools/micropython-compression-benchmark.py
 
+
+##########
+# C Tests
+##########
+# Unit tests using the Unity framework with AddressSanitizer enabled.
+.PHONY: c-test clean-c-test
+
 CTEST_CC = gcc
+CTEST_SANITIZER_FLAGS = -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g -O0
+CTEST_CFLAGS = -Ictests/Unity/src -Itamp/_c_src $(CTEST_SANITIZER_FLAGS)
+CTEST_LDFLAGS = $(CTEST_SANITIZER_FLAGS)
 
-# Always enable sanitizers for c-test
-SANITIZER_FLAGS = -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g -O0
-SANITIZER_LDFLAGS = -fsanitize=address -fsanitize=undefined
+# Tamp library objects for testing
+CTEST_TAMP_OBJS = \
+	build/ctests/common.o \
+	build/ctests/compressor.o \
+	build/ctests/decompressor.o
 
-CTEST_CFLAGS = -Ictests/Unity/src -Itamp/_c_src $(SANITIZER_FLAGS)
-CTEST_LDFLAGS = -Lctests/unity $(SANITIZER_LDFLAGS)
-CTEST_LIBS = -lunity
-
-mkdir-build:
-	mkdir -p build
-	mkdir -p build/ctests
-	mkdir -p build/unity
-
-TAMP_OBJS = \
-	build/common.o \
-	build/compressor.o \
-	build/decompressor.o
-
-CTEST_OBJS = \
+# Test framework and test runner objects
+CTEST_TEST_OBJS = \
 	build/unity/unity.o \
 	build/ctests/test_runner.o
 
-build/%.o: tamp/_c_src/tamp/%.c mkdir-build
+# Build tamp source files for testing
+build/ctests/%.o: tamp/_c_src/tamp/%.c
+	@mkdir -p build/ctests
 	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
 
-build/unity/%.o:: ctests/Unity/src/%.c ctests/Unity/src/%.h
+# Build Unity framework
+build/unity/unity.o: ctests/Unity/src/unity.c ctests/Unity/src/unity.h
+	@mkdir -p build/unity
 	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
 
-build/ctests/%.o: ctests/%.c
+# Build test runner (includes test files via #include)
+build/ctests/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
+	@mkdir -p build/ctests
 	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
 
-build/test_runner: $(TAMP_OBJS) $(CTEST_OBJS)
-	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_LDFLAGS) -o $@ $^ $(LIBS)
+# Link test executable
+build/test_runner: $(CTEST_TAMP_OBJS) $(CTEST_TEST_OBJS)
+	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
 
 c-test: build/test_runner
 	./build/test_runner
 
 clean-c-test:
-	rm -rf build/test_runner
-	rm -rf build/*.o
-	rm -rf build/ctests/*.o
-	rm -rf build/unity/*.o
+	@rm -f build/test_runner
+	@rm -f build/ctests/*.o
+	@rm -f build/unity/*.o
 
-##########
-# Website #
-##########
-
-# Build the website for deployment
-website-build:
-	cd website && npm install && npm run build
-
-# Serve website locally for development
-website-serve:
-	cd website && npm install && npm run serve
-
-# Clean website build artifacts
-website-clean:
-	rm -rf build/pages-deploy
-	rm -rf website/node_modules website/package-lock.json
 
 #############
-# C Library #
+# C Library
 #############
-# This section is primarily to build a library to check for implementation size.
-BUILDDIR = build
-SRCDIR = tamp/_c_src
-LIB_CFLAGS = -Os -Wall -I$(SRCDIR) -ffunction-sections -fdata-sections -m32
+# Build a static library to check implementation size.
+# Uses -Os for size optimization and -m32 for 32-bit target.
+.PHONY: tamp-c-library
 
-SRCS = tamp/_c_src/tamp/common.c tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c
-HEADERS = tamp/_c_src/tamp/decompressor.h tamp/_c_src/tamp/compressor.h tamp/_c_src/tamp/common.h
+LIB_CC = $(CC)
+LIB_CFLAGS = -Os -Wall -Itamp/_c_src -ffunction-sections -fdata-sections -m32
 
-# Define the object files
-OBJS = $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRCS))
+LIB_TAMP_OBJS = \
+	build/lib/common.o \
+	build/lib/compressor.o \
+	build/lib/decompressor.o
 
-# Rule to create the target
-build/tamp.a: $(OBJS)
+build/lib/%.o: tamp/_c_src/tamp/%.c
+	@mkdir -p build/lib
+	$(LIB_CC) $(LIB_CFLAGS) -c $< -o $@
+
+build/tamp.a: $(LIB_TAMP_OBJS)
 	$(AR) rcs $@ $^
 
 tamp-c-library: build/tamp.a
-.PHONY: tamp-c-library
 
-# Rule to create object files
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HEADERS)
-	@mkdir -p $(dir $@)
-	$(CC) $(LIB_CFLAGS) -c $< -o $@
+
+###############
+# Binary Sizes
+###############
+# Generate binary size information for README table (armv6m with -O3).
+.PHONY: binary-size c-size
+
+ARM_CC := arm-none-eabi-gcc
+ARM_AR := arm-none-eabi-ar
+ARM_SIZE := arm-none-eabi-size
+ARM_CFLAGS = -O3 -Wall -Itamp/_c_src -mcpu=cortex-m0plus -mthumb -ffunction-sections -fdata-sections
+
+C_SRC_COMMON = tamp/_c_src/tamp/common.c
+C_SRC_COMP = tamp/_c_src/tamp/compressor.c
+C_SRC_DECOMP = tamp/_c_src/tamp/decompressor.c
+
+# Build compressor-only library
+build/arm/tamp_comp.a: $(C_SRC_COMMON) $(C_SRC_COMP)
+	@mkdir -p build/arm
+	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -c $(C_SRC_COMMON) -o build/arm/common_c.o
+	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	$(ARM_AR) rcs $@ build/arm/common_c.o build/arm/compressor.o
+
+# Build decompressor-only library
+build/arm/tamp_decomp.a: $(C_SRC_COMMON) $(C_SRC_DECOMP)
+	@mkdir -p build/arm
+	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMMON) -o build/arm/common_d.o
+	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	$(ARM_AR) rcs $@ build/arm/common_d.o build/arm/decompressor.o
+
+# Build full library
+build/arm/tamp_full.a: $(C_SRC_COMMON) $(C_SRC_COMP) $(C_SRC_DECOMP)
+	@mkdir -p build/arm
+	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMMON) -o build/arm/common_f.o
+	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMP) -o build/arm/compressor_f.o
+	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_DECOMP) -o build/arm/decompressor_f.o
+	$(ARM_AR) rcs $@ build/arm/common_f.o build/arm/compressor_f.o build/arm/decompressor_f.o
+
+c-size: build/arm/tamp_comp.a build/arm/tamp_decomp.a build/arm/tamp_full.a
+	@size_comp=$$($(ARM_SIZE) -B --totals build/arm/tamp_comp.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_decomp=$$($(ARM_SIZE) -B --totals build/arm/tamp_decomp.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_full=$$($(ARM_SIZE) -B --totals build/arm/tamp_full.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
+	printf 'Tamp (C)                   %d  %d  %d\n' $$size_comp $$size_decomp $$size_full
+
+binary-size:
+	@echo "Binary sizes for armv6m (bytes):"
+	@echo ""
+	@printf '%-27s %-10s %-12s %s\n' "" "Compressor" "Decompressor" "Compressor + Decompressor"
+	@printf '%-27s %-10s %-12s %s\n' "---------------------------" "----------" "------------" "-------------------------"
+	@output=$$($(MAKE) -s mpy-viper-size 2>&1) && echo "$$output" || echo "Tamp (MicroPython Viper)   (requires mpy-cross)"
+	@output=$$($(MAKE) -s mpy-native-size 2>&1) && echo "$$output" || echo "Tamp (MicroPython Native)  (requires MPY_DIR)"
+	@output=$$($(MAKE) -s c-size 2>&1) && echo "$$output" || echo "Tamp (C)                   (requires arm-none-eabi-gcc)"
+
+
+##########
+# Website
+##########
+.PHONY: website-build website-serve website-clean
+
+website-build:
+	cd website && npm install && npm run build
+
+website-serve:
+	cd website && npm install && npm run serve
+
+website-clean:
+	@rm -rf build/pages-deploy
+	@rm -rf website/node_modules

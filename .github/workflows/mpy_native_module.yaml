@@ -61,7 +61,7 @@ jobs:
 
       - name: arm-none-eabi-gcc GNU Arm Embedded Toolchain
         if: startsWith(env.ARCH, 'arm')
-        uses: carlosperate/arm-none-eabi-gcc-action@v1.8.1
+        uses: carlosperate/arm-none-eabi-gcc-action@v1.12.0
 
       - name: Install Micropython Build Dependencies
         run: |
@@ -170,7 +170,7 @@ jobs:
         run: |
           echo "Building architecture $ARCH Complete"
           make clean
-          make ARCH=$ARCH
+          make mpy ARCH=$ARCH
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
             poetry run belay run micropython -X heapsize=200M -m unittest tests/test_*.py
@@ -181,7 +181,7 @@ jobs:
 
           echo "Building architecture $ARCH Compressor"
           make clean
-          make ARCH=$ARCH TAMP_DECOMPRESSOR=0
+          make mpy ARCH=$ARCH TAMP_DECOMPRESSOR=0
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
             poetry run belay run micropython -X heapsize=200M -m unittest tests/test_compressor.py
@@ -192,7 +192,7 @@ jobs:
 
           echo "Building architecture $ARCH Decompressor"
           make clean
-          make ARCH=$ARCH TAMP_COMPRESSOR=0
+          make mpy ARCH=$ARCH TAMP_COMPRESSOR=0
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
             poetry run belay run micropython -X heapsize=200M -m unittest tests/test_decompressor.py

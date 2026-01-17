@@ -1,6 +1,6 @@
 #!/bin/bash
 
-dir="build/silesia"
+dir="datasets/silesia"
 
 for file in "$dir"/*; do
     filename=$(basename "$file")

@@ -154,8 +154,8 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     return TAMP_OK;
 }
 
-tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
-                              size_t *output_written_size) {
+TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
+                                            size_t *output_written_size) {
     tamp_res res;
     const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     size_t output_written_size_proxy;

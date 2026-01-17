@@ -6,7 +6,7 @@ import { performance } from 'perf_hooks';
  * One-shot decompression and verification of enwik8 file using Tamp
  */
 async function decompressEnwik8OneShot() {
-  const originalFile = '../build/enwik8';
+  const originalFile = '../datasets/enwik8';
   const compressedFile = '../build/enwik8-oneshot.tamp';
   const reconstructedFile = '../build/enwik8-oneshot-reconstructed';
 
