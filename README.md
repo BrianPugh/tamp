@@ -368,7 +368,7 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 |                           | Compressor | Decompressor | Compressor + Decompressor |
 | ------------------------- | ---------- | ------------ | ------------------------- |
 | Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
-| Tamp (MicroPython Native) | 3896       | 4053         | 6560                      |
+| Tamp (MicroPython Native) | 3896       | 3503         | 6560                      |
 | Tamp (C)                  | 2056       | 1876         | 3812                      |
 | Heatshrink (C)            | 2956       | 3876         | 6832                      |
 | uzlib (C)                 | 2355       | 3963         | 6318                      |
