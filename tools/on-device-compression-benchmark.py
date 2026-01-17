@@ -1,30 +1,37 @@
 """Micropython code to be ran on-device.
 """
 import gc
+import io
 import time
 
 import tamp
 
 
 def main():
-    block_size = 4096
-    decompressed_len = 0
-    compressed_len = 0
-
-    # Pre-allocate buffer to reduce memory fragmentation
+    # Load input data into RAM before timing
     gc.collect()
-    chunk = bytearray(block_size)
+    print("Loading input data into RAM...")
+    with open("enwik8-100kb", "rb") as f:
+        input_data = f.read()
+    decompressed_len = len(input_data)
 
+    # Pre-allocate output buffer
+    gc.collect()
+    output_buffer = io.BytesIO()
+
+    # Time only the compression (RAM to RAM)
+    print("Compressing...")
     start_ms = time.ticks_ms()
-    with open("enwik8-100kb", "rb") as input_file, tamp.open("enwik8-100kb.tamp", "wb") as compressed_f:
-        while True:
-            n = input_file.readinto(chunk)
-            if n == 0:
-                break
-            decompressed_len += n
-            compressed_len += compressed_f.write(chunk if n == block_size else chunk[:n])
-        compressed_len += compressed_f.flush(write_token=False)
+    with tamp.open(output_buffer, "wb") as compressor:
+        compressor.write(input_data)
     elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ms)
+
+    compressed_data = output_buffer.getvalue()
+    compressed_len = len(compressed_data)
+
+    # Write to flash for verification (not timed)
+    with open("enwik8-100kb.tamp", "wb") as f:
+        f.write(compressed_data)
 
     elapsed_s = elapsed_ms / 1000
     bytes_per_sec = decompressed_len / elapsed_s if elapsed_s > 0 else 0
