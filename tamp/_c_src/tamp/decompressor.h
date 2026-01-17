@@ -11,19 +11,18 @@ extern "C" {
 typedef struct {
     unsigned char *window;
     uint32_t bit_buffer;
+    uint8_t bit_buffer_pos;  // Only needs 6 bits; kept as full byte for speed
+    uint8_t _reserved[3];    // Explicit padding for uint32_t alignment
 
-    /* Conf attributes */
-    uint32_t conf_window : 4;   // number of window bits
-    uint32_t conf_literal : 4;  // number of literal bits
-    // uint32_t conf_use_custom_dictionary:1;  // Not used past initialization.
-
-    uint32_t bit_buffer_pos : 6;
-    uint32_t min_pattern_size : 2;
+    /* Bitfields packed together (30 bits total, fits in one uint32_t).
+     * Ordered by access frequency (most accessed in LSB for faster access). */
     uint32_t window_pos : 15;
-    uint32_t configured : 1;  // Whether or not conf has been properly set
-
     uint32_t skip_bytes : 4;  // Skip this many decompressed bytes (from previous
                               // output-buffer-limited decompression).
+    uint32_t min_pattern_size : 2;
+    uint32_t conf_window : 4;   // Number of window bits (cached locally in hot loop)
+    uint32_t conf_literal : 4;  // Number of literal bits (cached locally in hot loop)
+    uint32_t configured : 1;    // Whether or not conf has been properly set
 } TampDecompressor;
 
 /**

@@ -326,15 +326,15 @@ Heatshrink.
 
 As a rough benchmark, here is the performance (in seconds) of these different
 compression algorithms on the 100MB enwik8 dataset. These tests were performed
-on an M1 Macbook Air.
+on an M3 Macbook Air.
 
-|                            | Compression (s) | Decompression (s) |
-| -------------------------- | --------------- | ----------------- |
-| Tamp (Python Reference)    | 109.5           | 76.0              |
-| Tamp (C)                   | 16.45           | 0.142             |
-| ZLib                       | 0.98            | 0.98              |
-| Heatshrink (with index)    | 6.22            | 0.82              |
-| Heatshrink (without index) | 41.73           | 0.82              |
+|                              | Compression (s) | Decompression (s) |
+| ---------------------------- | --------------- | ----------------- |
+| Tamp (Pure Python Reference) | 136.2           | 105.0             |
+| Tamp (C bindings)            | 12.48           | 0.544             |
+| ZLib                         | 3.65            | 0.578             |
+| Heatshrink (with index)      | 4.42            | 0.67              |
+| Heatshrink (without index)   | 27.40           | 0.67              |
 
 Heatshrink v0.4.1 was used in these benchmarks. When heathshrink uses an index,
 an additional `(1 << (windowBits + 1))` bytes of memory are used, resulting in
@@ -351,7 +351,7 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 25,329                | 943,400                 |
+| Tamp (Micropython Native Module) | 25,329                | 1,020,408               |
 | Tamp (C)                         | 28,500                | 1,145,488               |
 | Deflate (micropython builtin)    | 6,715                 | 146,477                 |
 
@@ -368,8 +368,8 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 |                           | Compressor | Decompressor | Compressor + Decompressor |
 | ------------------------- | ---------- | ------------ | ------------------------- |
 | Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
-| Tamp (MicroPython Native) | 3896       | 3603         | 6660                      |
-| Tamp (C)                  | 2056       | 1936         | 3872                      |
+| Tamp (MicroPython Native) | 3896       | 3559         | 6616                      |
+| Tamp (C)                  | 2056       | 2040         | 3976                      |
 | Heatshrink (C)            | 2956       | 3876         | 6832                      |
 | uzlib (C)                 | 2355       | 3963         | 6318                      |
 
