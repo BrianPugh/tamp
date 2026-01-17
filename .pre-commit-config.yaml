@@ -75,15 +75,20 @@ repos:
     hooks:
       - id: cppcheck
         exclude: ^(espidf|mpy_bindings|ctests|tools)/
-        args:
-          [
+        args: [
             '-Itamp/_c_src',
+            '-DTAMP_LAZY_MATCHING=1',
             '--inline-suppr',
             '--suppress=missingIncludeSystem',
             '--suppress=unusedFunction',
             '--suppress=useStandardLibrary',
             '--suppress=checkersReport',
             '--suppress=unmatchedSuppression',
+            # cppcheck analyzes files individually and doesn't understand that
+            # functions/members declared in headers are part of the public API
+            '--suppress=staticFunction',
+            '--suppress=unusedStructMember',
+            '--suppress=normalCheckLevelMaxBranches',
             '--error-exitcode=1',
             '--force',
           ]

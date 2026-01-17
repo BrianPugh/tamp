@@ -258,9 +258,9 @@ input data sourced from the
 [Enwik8](https://mattmahoney.net/dc/textdata.html). This should give a general
 idea of how these algorithms perform over a variety of input data types.
 
-| dataset                  | raw         | tamp           | tamp (LazyMatching) | zlib           | heatshrink |
-| ------------------------ | ----------- | -------------- | ------------------- | -------------- | ---------- |
-| enwik8                   | 100,000,000 | **51,635,633** | 51,252,113          | 56,205,166     | 56,110,394 |
+| dataset         | raw         | tamp           | tamp (LazyMatching) | zlib           | heatshrink |
+| --------------- | ----------- | -------------- | ------------------- | -------------- | ---------- |
+| enwik8          | 100,000,000 | **51,635,633** | 51,252,113          | 56,205,166     | 56,110,394 |
 | silesia/dickens | 10,192,446  | **5,546,761**  | 5,511,604           | 6,049,169      | 6,155,768  |
 | silesia/mozilla | 51,220,480  | 25,121,385     | 24,936,067          | **25,104,966** | 25,435,908 |
 | silesia/mr      | 9,970,564   | 5,027,032      | 4,886,272           | **4,864,734**  | 5,442,180  |
