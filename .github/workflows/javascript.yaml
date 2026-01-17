@@ -70,6 +70,7 @@ jobs:
 
       - name: Run enwik8 compression tests
         run: |
+          mkdir -p build
           cd wasm
           echo "Running streaming compression test..."
           npm run test:enwik8
