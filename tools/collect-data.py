@@ -26,7 +26,7 @@ def main():
 
     window_size = 1 << args.window_bits
 
-    decompressed = Path("build/enwik8").read_bytes()
+    decompressed = Path("datasets/enwik8").read_bytes()
 
     results = {
         "n_literals": 0,

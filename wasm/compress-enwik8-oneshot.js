@@ -6,7 +6,7 @@ import { performance } from 'perf_hooks';
  * One-shot compression of enwik8 file using Tamp
  */
 async function compressEnwik8OneShot() {
-  const inputFile = '../build/enwik8';
+  const inputFile = '../datasets/enwik8';
   const outputFile = '../build/enwik8-oneshot.tamp';
 
   console.log('🗜️  Tamp One-Shot Compression\n');

@@ -258,21 +258,21 @@ input data sourced from the
 [Enwik8](https://mattmahoney.net/dc/textdata.html). This should give a general
 idea of how these algorithms perform over a variety of input data types.
 
-| dataset               | raw         | tamp           | tamp (LazyMatching) | zlib           | heatshrink |
-| --------------------- | ----------- | -------------- | ------------------- | -------------- | ---------- |
-| enwik8                | 100,000,000 | **51,635,633** | 51,252,113          | 56,205,166     | 56,110,394 |
-| build/silesia/dickens | 10,192,446  | **5,546,761**  | 5,511,604           | 6,049,169      | 6,155,768  |
-| build/silesia/mozilla | 51,220,480  | 25,121,385     | 24,936,067          | **25,104,966** | 25,435,908 |
-| build/silesia/mr      | 9,970,564   | 5,027,032      | 4,886,272           | **4,864,734**  | 5,442,180  |
-| build/silesia/nci     | 33,553,445  | 8,643,610      | 8,645,299           | **5,765,521**  | 8,247,487  |
-| build/silesia/ooffice | 6,152,192   | **3,814,938**  | 3,798,261           | 4,077,277      | 3,994,589  |
-| build/silesia/osdb    | 10,085,684  | **8,520,835**  | 8,506,443           | 8,625,159      | 8,747,527  |
-| build/silesia/reymont | 6,627,202   | **2,847,981**  | 2,820,870           | 2,897,661      | 2,910,251  |
-| build/silesia/samba   | 21,606,400  | 9,102,594      | 9,060,692           | **8,862,423**  | 9,223,827  |
-| build/silesia/sao     | 7,251,944   | **6,137,755**  | 6,101,744           | 6,506,417      | 6,400,926  |
-| build/silesia/webster | 41,458,703  | **18,694,172** | 18,567,288          | 20,212,235     | 19,942,817 |
-| build/silesia/x-ray   | 8,474,240   | 7,510,606      | 7,405,814           | **7,351,750**  | 8,059,723  |
-| build/silesia/xml     | 5,345,280   | 1,681,687      | 1,672,660           | **1,586,985**  | 1,665,179  |
+| dataset                  | raw         | tamp           | tamp (LazyMatching) | zlib           | heatshrink |
+| ------------------------ | ----------- | -------------- | ------------------- | -------------- | ---------- |
+| enwik8                   | 100,000,000 | **51,635,633** | 51,252,113          | 56,205,166     | 56,110,394 |
+| silesia/dickens | 10,192,446  | **5,546,761**  | 5,511,604           | 6,049,169      | 6,155,768  |
+| silesia/mozilla | 51,220,480  | 25,121,385     | 24,936,067          | **25,104,966** | 25,435,908 |
+| silesia/mr      | 9,970,564   | 5,027,032      | 4,886,272           | **4,864,734**  | 5,442,180  |
+| silesia/nci     | 33,553,445  | 8,643,610      | 8,645,299           | **5,765,521**  | 8,247,487  |
+| silesia/ooffice | 6,152,192   | **3,814,938**  | 3,798,261           | 4,077,277      | 3,994,589  |
+| silesia/osdb    | 10,085,684  | **8,520,835**  | 8,506,443           | 8,625,159      | 8,747,527  |
+| silesia/reymont | 6,627,202   | **2,847,981**  | 2,820,870           | 2,897,661      | 2,910,251  |
+| silesia/samba   | 21,606,400  | 9,102,594      | 9,060,692           | **8,862,423**  | 9,223,827  |
+| silesia/sao     | 7,251,944   | **6,137,755**  | 6,101,744           | 6,506,417      | 6,400,926  |
+| silesia/webster | 41,458,703  | **18,694,172** | 18,567,288          | 20,212,235     | 19,942,817 |
+| silesia/x-ray   | 8,474,240   | 7,510,606      | 7,405,814           | **7,351,750**  | 8,059,723  |
+| silesia/xml     | 5,345,280   | 1,681,687      | 1,672,660           | **1,586,985**  | 1,665,179  |
 
 Tamp usually out-performs heatshrink, and is generally very competitive with
 zlib. While trying to be an apples-to-apples comparison, zlib still uses
@@ -351,7 +351,7 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 12,770                | 644,000                 |
+| Tamp (Micropython Native Module) | 24,213                | 84,388                 |
 | Tamp (C)                         | 28,500                | 1,042,524               |
 | Deflate (micropython builtin)    | 6,715                 | 146,477                 |
 

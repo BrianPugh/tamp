@@ -6,7 +6,7 @@ import { performance } from 'perf_hooks';
  * Compress enwik8 file using Tamp compression
  */
 async function compressEnwik8() {
-  const inputFile = '../build/enwik8';
+  const inputFile = '../datasets/enwik8';
   const outputFile = '../build/enwik8-js.tamp';
 
   console.log('🗜️  Tamp Compression Benchmark\n');
@@ -101,8 +101,8 @@ async function compressEnwik8() {
 
 // Alternative: Simple one-shot compression (less memory efficient for large files)
 async function compressEnwik8Simple() {
-  const inputFile = 'build/enwik8';
-  const outputFile = 'build/enwik8.tamp.simple';
+  const inputFile = '../datasets/enwik8';
+  const outputFile = '../build/enwik8.tamp.simple';
 
   console.log('🗜️  Tamp Simple Compression\n');
 

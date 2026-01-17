@@ -62,8 +62,8 @@ jobs:
       - name: Cache enwik8 dataset
         uses: actions/cache@v4
         with:
-          path: build/enwik8.zip
-          key: enwik8-dataset-${{ hashFiles('Makefile') }}
+          path: datasets/enwik8.zip
+          key: enwik8-dataset-v2
 
       - name: Download enwik8 dataset
         run: make download-enwik8

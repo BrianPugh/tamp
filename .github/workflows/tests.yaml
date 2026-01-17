@@ -112,8 +112,8 @@ jobs:
       - name: Cache enwik8 dataset
         uses: actions/cache@v4
         with:
-          path: build/enwik8.zip
-          key: enwik8-dataset-${{ hashFiles('Makefile') }}
+          path: datasets/enwik8.zip
+          key: enwik8-dataset-v2
 
       - name: Download enwik8 dataset
         run: make download-enwik8
@@ -140,10 +140,10 @@ jobs:
         run: |
           source ${{ env.ACTIVATE_PYTHON_VENV }}
           make download-enwik8
-          original_hash=$(sha256sum build/enwik8 | cut -d' ' -f1)
+          original_hash=$(sha256sum datasets/enwik8 | cut -d' ' -f1)
           # Use LD_PRELOAD for ASAN when running the CLI commands
           LIBASAN_PATH=$(gcc -print-file-name=libasan.so)
-          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress build/enwik8 | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
+          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
           if [ "$original_hash" = "$roundtrip_hash" ]; then
             echo "✓ Compression/decompression integrity verified"
             echo "Original hash: $original_hash"

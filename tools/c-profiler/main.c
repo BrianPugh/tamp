@@ -29,8 +29,8 @@ int benchmark_compressor() {
 
     if (!(compressor_buffer = malloc(1 << compressor_conf.window))) EXIT(1, "OOM");
 
-    if (!(uncompressed_file = fopen("../../build/enwik8", "rb")))
-        EXIT(1, "Unable to open uncompressed_file %s", "../../build/enwik8");
+    if (!(uncompressed_file = fopen("../../datasets/enwik8", "rb")))
+        EXIT(1, "Unable to open uncompressed_file %s", "../../datasets/enwik8");
     if (!(compressed_file = fopen("output.tamp", "wb"))) EXIT(1, "Unable to open compressed_file");
 
     fseek(uncompressed_file, 0, SEEK_END);
