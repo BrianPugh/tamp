@@ -4,8 +4,11 @@
 #include "enwik8_compressed.h"
 #include "pico/stdlib.h"
 #include "pico/time.h"
+#include "profiling.h"
 #include "tamp/compressor.h"
 #include "tamp/decompressor.h"
+
+TampProfilingStats tamp_profiling_stats;
 
 static unsigned char window_buffer[1024];
 static unsigned char output_buffer[100 << 10];
@@ -37,6 +40,25 @@ int benchmark_decompressor() {
     return output_written_size;
 }
 
+static void print_profiling_stats(void) {
+    printf("  Profiling breakdown:\n");
+    printf("    bit_buffer_fill: %llu us\n", tamp_profiling_stats.bit_buffer_fill_time_us);
+    printf("    literal:         %llu us (%lu count)\n", tamp_profiling_stats.literal_time_us,
+           tamp_profiling_stats.literal_count);
+    printf("    pattern_decode:  %llu us\n", tamp_profiling_stats.pattern_decode_time_us);
+    printf("    pattern_output:  %llu us\n", tamp_profiling_stats.pattern_output_time_us);
+    printf("    window_update:   %llu us (%lu patterns, %lu bytes avg)\n", tamp_profiling_stats.window_update_time_us,
+           tamp_profiling_stats.pattern_count,
+           tamp_profiling_stats.pattern_count
+               ? tamp_profiling_stats.pattern_bytes_total / tamp_profiling_stats.pattern_count
+               : 0);
+    printf("    overlap: %lu, non_overlap: %lu (%.1f%% overlap)\n", tamp_profiling_stats.overlap_count,
+           tamp_profiling_stats.non_overlap_count,
+           tamp_profiling_stats.pattern_count
+               ? 100.0f * tamp_profiling_stats.overlap_count / tamp_profiling_stats.pattern_count
+               : 0.0f);
+}
+
 int main() {
     // Initialise I/O
     stdio_init_all();
@@ -59,6 +81,7 @@ int main() {
         if (output_size != sizeof(ENWIK8_COMPRESSED)) printf("Unexpected compressed size: %d\n", output_size);
 
         {
+            tamp_profiling_reset();
             start_time = get_absolute_time();
             output_size = benchmark_decompressor();
             end_time = get_absolute_time();
@@ -66,6 +89,7 @@ int main() {
             elapsed_us = absolute_time_diff_us(start_time, end_time);
             bytes_per_sec = (uint32_t)((uint64_t)sizeof(ENWIK8) * 1000000 / elapsed_us);
             printf("decompression: %lld us, %lu bytes/s\n", elapsed_us, bytes_per_sec);
+            print_profiling_stats();
         }
         if (output_size != sizeof(ENWIK8)) printf("Unexpected decompressed size: %d\n", output_size);
 

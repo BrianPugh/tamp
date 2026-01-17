@@ -18,6 +18,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -ggdb -ffunction-sections -fdata-section
 file(GLOB TAMP_FILES ../../../tamp/_c_src/tamp/*.c ../../../tamp/_c_src/tamp/*.h)
 add_library(tamp ${TAMP_FILES})
 target_include_directories(tamp PUBLIC ../../../tamp/_c_src/)
+target_include_directories(tamp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(tamp PUBLIC pico_time)
 
 add_executable(tamp_benchmark main.c)
 target_link_libraries(tamp_benchmark tamp)

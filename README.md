@@ -351,8 +351,8 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 25,240                | 757,576                 |
-| Tamp (C)                         | 28,500                | 1,001,800               |
+| Tamp (Micropython Native Module) | 25,240                | 840,336                 |
+| Tamp (C)                         | 28,500                | 1,145,488               |
 | Deflate (micropython builtin)    | 6,715                 | 146,477                 |
 
 Tamp resulted in a **51637** byte archive, while Micropython's builtin `deflate`
@@ -368,8 +368,8 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 |                           | Compressor | Decompressor | Compressor + Decompressor |
 | ------------------------- | ---------- | ------------ | ------------------------- |
 | Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
-| Tamp (MicroPython Native) | 3896       | 3503         | 6560                      |
-| Tamp (C)                  | 2056       | 1876         | 3812                      |
+| Tamp (MicroPython Native) | 3896       | 3603         | 6660                      |
+| Tamp (C)                  | 2056       | 1936         | 3872                      |
 | Heatshrink (C)            | 2956       | 3876         | 6832                      |
 | uzlib (C)                 | 2355       | 3963         | 6318                      |
 
