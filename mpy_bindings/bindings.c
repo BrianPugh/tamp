@@ -9,7 +9,7 @@
  **********/
 
 #include "tamp/common.h"
-#define CHUNK_SIZE 16  // Must be <= 65535
+#define CHUNK_SIZE 32  // Must be <= 65535
 #define mp_type_bytearray (*(mp_obj_type_t *)(mp_load_global(MP_QSTR_bytearray)))
 
 static void TAMP_CHECK(tamp_res res) {

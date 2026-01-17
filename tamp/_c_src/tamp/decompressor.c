@@ -51,6 +51,35 @@ static inline int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_po
     return code & 0xF;
 }
 
+/**
+ * @brief Copy pattern from window to window, updating window_pos.
+ *
+ * Handles potential overlap between source and destination regions by
+ * using a temporary buffer when necessary. Overlap occurs when the
+ * destination would "catch up" to the source during copying.
+ */
+static inline void window_copy(unsigned char *window, uint16_t *window_pos, uint16_t window_offset, uint8_t match_size,
+                               uint16_t window_mask) {
+    const uint16_t src_to_dst = (*window_pos - window_offset) & window_mask;
+    const bool overlap = (src_to_dst < match_size) && (src_to_dst > 0);
+
+    if (TAMP_UNLIKELY(overlap)) {
+        uint8_t tmp_buf[16];
+        for (uint8_t i = 0; i < match_size; i++) {
+            tmp_buf[i] = window[window_offset + i];
+        }
+        for (uint8_t i = 0; i < match_size; i++) {
+            window[*window_pos] = tmp_buf[i];
+            *window_pos = (*window_pos + 1) & window_mask;
+        }
+    } else {
+        for (uint8_t i = 0; i < match_size; i++) {
+            window[*window_pos] = window[window_offset + i];
+            *window_pos = (*window_pos + 1) & window_mask;
+        }
+    }
+}
+
 tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *input, size_t input_size,
                                        size_t *input_consumed_size) {
     if (input_consumed_size) (*input_consumed_size) = 0;
@@ -127,7 +156,12 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
         input += header_consumed_size;
         (*input_consumed_size) += header_consumed_size;
     }
-    const uint16_t window_mask = (1 << decompressor->conf_window) - 1;
+
+    // Cache bitfield values in local variables for faster access
+    const uint8_t conf_window = decompressor->conf_window;
+    const uint8_t conf_literal = decompressor->conf_literal;
+
+    const uint16_t window_mask = (1 << conf_window) - 1;
     while (input != input_end || decompressor->bit_buffer_pos) {
         // Populate the bit buffer
         while (input != input_end && decompressor->bit_buffer_pos <= 24) {
@@ -145,14 +179,13 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
         // Hint that patterns are more likely than literals
         if (TAMP_UNLIKELY(decompressor->bit_buffer >> 31)) {
             // is literal
-            if (TAMP_UNLIKELY(decompressor->bit_buffer_pos < (1 + decompressor->conf_literal)))
-                return TAMP_INPUT_EXHAUSTED;
+            if (TAMP_UNLIKELY(decompressor->bit_buffer_pos < (1 + conf_literal))) return TAMP_INPUT_EXHAUSTED;
             decompressor->bit_buffer <<= 1;  // shift out the is_literal flag
 
             // Copy literal to output
-            *output = decompressor->bit_buffer >> (32 - decompressor->conf_literal);
-            decompressor->bit_buffer <<= decompressor->conf_literal;
-            decompressor->bit_buffer_pos -= (1 + decompressor->conf_literal);
+            *output = decompressor->bit_buffer >> (32 - conf_literal);
+            decompressor->bit_buffer <<= conf_literal;
+            decompressor->bit_buffer_pos -= (1 + conf_literal);
 
             // Update window
             decompressor->window[decompressor->window_pos] = *output;
@@ -185,18 +218,18 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                     bit_buffer_pos & ~7;  // Round bit_buffer_pos down to nearest multiple of 8.
                 continue;
             }
-            if (TAMP_UNLIKELY(bit_buffer_pos < decompressor->conf_window)) {
+            if (TAMP_UNLIKELY(bit_buffer_pos < conf_window)) {
                 // There are not enough bits to decode window offset
                 return TAMP_INPUT_EXHAUSTED;
             }
             match_size += decompressor->min_pattern_size;
-            window_offset = bit_buffer >> (32 - decompressor->conf_window);
+            window_offset = bit_buffer >> (32 - conf_window);
 
             // Security check: validate that the pattern reference (offset + size) does not
             // exceed window bounds. Malicious compressed data could craft out-of-bounds
             // references to read past the window buffer, potentially leaking memory.
             // Cast to uint32_t prevents signed integer overflow.
-            const uint32_t window_size = (1u << decompressor->conf_window);
+            const uint32_t window_size = (1u << conf_window);
             if (TAMP_UNLIKELY((uint32_t)window_offset >= window_size ||
                               (uint32_t)window_offset + (uint32_t)match_size > window_size)) {
                 return TAMP_OOB;
@@ -216,8 +249,8 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                 match_size_skip = remaining;
             } else {
                 decompressor->skip_bytes = 0;
-                decompressor->bit_buffer = bit_buffer << decompressor->conf_window;
-                decompressor->bit_buffer_pos = bit_buffer_pos - decompressor->conf_window;
+                decompressor->bit_buffer = bit_buffer << conf_window;
+                decompressor->bit_buffer_pos = bit_buffer_pos - conf_window;
             }
 
             // Copy pattern to output
@@ -227,16 +260,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
             (*output_written_size) += match_size_skip;
 
             if (TAMP_LIKELY(decompressor->skip_bytes == 0)) {
-                // Perform window update;
-                // copy to a temporary buffer in case src precedes dst, and is overlapping.
-                uint8_t tmp_buf[16];
-                for (uint8_t i = 0; i < match_size; i++) {
-                    tmp_buf[i] = decompressor->window[window_offset + i];
-                }
-                for (uint8_t i = 0; i < match_size; i++) {
-                    decompressor->window[decompressor->window_pos] = tmp_buf[i];
-                    decompressor->window_pos = (decompressor->window_pos + 1) & window_mask;
-                }
+                uint16_t wp = decompressor->window_pos;
+                window_copy(decompressor->window, &wp, window_offset, match_size, window_mask);
+                decompressor->window_pos = wp;
             }
         }
         if (TAMP_UNLIKELY(callback && (res = callback(user_data, *output_written_size, input_size))))
