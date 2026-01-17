@@ -351,7 +351,7 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 25,240                | 840,336                 |
+| Tamp (Micropython Native Module) | 25,329                | 943,400                 |
 | Tamp (C)                         | 28,500                | 1,145,488               |
 | Deflate (micropython builtin)    | 6,715                 | 146,477                 |
 
