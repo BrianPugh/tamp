@@ -255,11 +255,14 @@ mpy-native-size:
 ifndef MPY_DIR
 	$(error MPY_DIR must be set for mpy-native-size)
 endif
-	@$(MAKE) -s _mpy-build ARCH=armv6m TAMP_COMPRESSOR=1 TAMP_DECOMPRESSOR=0 >/dev/null 2>&1 && \
+	@rm -rf tamp.mpy build/tamp build/mpy_bindings && \
+		$(MAKE) -s _mpy-build MPY_DIR=$(MPY_DIR) ARCH=armv6m TAMP_COMPRESSOR=1 TAMP_DECOMPRESSOR=0 >/dev/null 2>&1 && \
 		size_comp=$$(wc -c < tamp.mpy | tr -d ' ') && \
-		$(MAKE) -s _mpy-build ARCH=armv6m TAMP_COMPRESSOR=0 TAMP_DECOMPRESSOR=1 >/dev/null 2>&1 && \
+		rm -rf tamp.mpy build/tamp build/mpy_bindings && \
+		$(MAKE) -s _mpy-build MPY_DIR=$(MPY_DIR) ARCH=armv6m TAMP_COMPRESSOR=0 TAMP_DECOMPRESSOR=1 >/dev/null 2>&1 && \
 		size_decomp=$$(wc -c < tamp.mpy | tr -d ' ') && \
-		$(MAKE) -s _mpy-build ARCH=armv6m TAMP_COMPRESSOR=1 TAMP_DECOMPRESSOR=1 >/dev/null 2>&1 && \
+		rm -rf tamp.mpy build/tamp build/mpy_bindings && \
+		$(MAKE) -s _mpy-build MPY_DIR=$(MPY_DIR) ARCH=armv6m TAMP_COMPRESSOR=1 TAMP_DECOMPRESSOR=1 >/dev/null 2>&1 && \
 		size_both=$$(wc -c < tamp.mpy | tr -d ' ') && \
 		printf 'Tamp (MicroPython Native)  %s  %s  %s\n' $$size_comp $$size_decomp $$size_both
 

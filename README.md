@@ -362,13 +362,14 @@ resulted in a larger, **59442** byte archive.
 
 To give an idea on the resulting binary sizes, Tamp and other libraries were
 compiled for the Pi Pico (`armv6m`). All libraries were compiled with `-O3`.
-Numbers reported in bytes.
+Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
+15.2.1 and MicroPython v1.27, and can be regenerated with `make binary-size`.
 
 |                           | Compressor | Decompressor | Compressor + Decompressor |
 | ------------------------- | ---------- | ------------ | ------------------------- |
-| Tamp (MicroPython Viper)  | 4429       | 4205         | 7554                      |
-| Tamp (MicroPython Native) | 3232       | 3047         | 5505                      |
-| Tamp (C)                  | 2008       | 1972         | 3864                      |
+| Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
+| Tamp (MicroPython Native) | 3896       | 4053         | 6560                      |
+| Tamp (C)                  | 2056       | 1876         | 3812                      |
 | Heatshrink (C)            | 2956       | 3876         | 6832                      |
 | uzlib (C)                 | 2355       | 3963         | 6318                      |
 
