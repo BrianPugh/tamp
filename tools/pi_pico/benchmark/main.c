@@ -18,7 +18,6 @@ int benchmark_compressor() {
 
     if (TAMP_OK != tamp_compressor_init(&compressor, &compressor_conf, window_buffer)) return -1;
 
-    printf("Beginning compressing...\n");
     if (TAMP_OK != tamp_compressor_compress_and_flush(&compressor, output_buffer, sizeof(output_buffer),
                                                       &compressed_size, ENWIK8, sizeof(ENWIK8), NULL, false))
         return -2;
@@ -45,13 +44,17 @@ int main() {
     while (true) {
         int output_size;
         absolute_time_t start_time, end_time;
+        int64_t elapsed_us;
+        uint32_t bytes_per_sec;
 
         {
             start_time = get_absolute_time();
             output_size = benchmark_compressor();
             end_time = get_absolute_time();
 
-            printf("compression: %lld us\n", absolute_time_diff_us(start_time, end_time));
+            elapsed_us = absolute_time_diff_us(start_time, end_time);
+            bytes_per_sec = (uint32_t)((uint64_t)sizeof(ENWIK8) * 1000000 / elapsed_us);
+            printf("compression: %lld us, %lu bytes/s\n", elapsed_us, bytes_per_sec);
         }
         if (output_size != sizeof(ENWIK8_COMPRESSED)) printf("Unexpected compressed size: %d\n", output_size);
 
@@ -60,8 +63,12 @@ int main() {
             output_size = benchmark_decompressor();
             end_time = get_absolute_time();
 
-            printf("decompression: %lld us\n", absolute_time_diff_us(start_time, end_time));
+            elapsed_us = absolute_time_diff_us(start_time, end_time);
+            bytes_per_sec = (uint32_t)((uint64_t)sizeof(ENWIK8) * 1000000 / elapsed_us);
+            printf("decompression: %lld us, %lu bytes/s\n", elapsed_us, bytes_per_sec);
         }
         if (output_size != sizeof(ENWIK8)) printf("Unexpected decompressed size: %d\n", output_size);
+
+        sleep_ms(1000);
     }
 }
