@@ -41,10 +41,13 @@ extern "C" {
 
 #if defined(_MSC_VER)
 #define TAMP_ALWAYS_INLINE __forceinline
+#define TAMP_NOINLINE __declspec(noinline)
 #elif defined(__GNUC__) || defined(__clang__)
 #define TAMP_ALWAYS_INLINE inline __attribute__((always_inline))
+#define TAMP_NOINLINE __attribute__((noinline))
 #else
 #define TAMP_ALWAYS_INLINE inline
+#define TAMP_NOINLINE
 #endif
 
 enum {

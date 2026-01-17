@@ -130,8 +130,8 @@ void tamp_compressor_sink(TampCompressor *compressor, const unsigned char *input
  *
  * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or TAMP_EXCESS_BITS.
  */
-__attribute__((noinline)) tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output,
-                                                        size_t output_size, size_t *output_written_size);
+TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
+                                            size_t *output_written_size);
 // backwards compatibility for old naming
 #define tamp_compressor_compress_poll tamp_compressor_poll
 
