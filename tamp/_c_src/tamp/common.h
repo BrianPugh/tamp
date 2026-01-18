@@ -50,6 +50,24 @@ extern "C" {
 #define TAMP_NOINLINE
 #endif
 
+/* Include stream API (tamp_compress_stream, tamp_decompress_stream).
+ * Enabled by default. Disable with -DTAMP_STREAM=0 to save ~2.8KB.
+ */
+#ifndef TAMP_STREAM
+#define TAMP_STREAM 1
+#endif
+
+/* Work buffer size for stream API functions.
+ * The buffer is allocated on the stack and split in half for input/output.
+ * Larger values reduce I/O callback invocations, improving decompression speed.
+ * Default of 32 bytes is safe for constrained stacks; 256+ bytes recommended
+ * for better performance when stack space permits.
+ * Override via compiler flag: -DTAMP_WORK_BUFFER_SIZE=256
+ */
+#ifndef TAMP_WORK_BUFFER_SIZE
+#define TAMP_WORK_BUFFER_SIZE 32
+#endif
+
 enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,
@@ -63,6 +81,11 @@ enum {
     TAMP_OOB = -4,           // Out-of-bounds access detected in compressed data.
                              // Indicates malicious or corrupted input data attempting to
                              // reference memory outside the decompressor window buffer.
+
+    /* Stream I/O error codes */
+    TAMP_IO_ERROR = -10,     // Generic I/O error from read/write callback
+    TAMP_READ_ERROR = -11,   // Read callback returned error
+    TAMP_WRITE_ERROR = -12,  // Write callback returned error
 };
 typedef int8_t tamp_res;
 
@@ -87,6 +110,172 @@ typedef struct TampConf {
  *         e.g. start custom error codes at 100.
  */
 typedef int (*tamp_callback_t)(void *user_data, size_t bytes_processed, size_t total_bytes);
+
+/**
+ * Stream read callback type for file/stream-based operations.
+ *
+ * Should behave like fread(): read up to `size` bytes into `buffer`.
+ * Returns plain int (not tamp_res) for compatibility with standard I/O functions.
+ * The stream API translates negative returns to TAMP_READ_ERROR.
+ *
+ * @param[in] handle User-provided handle (e.g., FILE*, lfs_file_t*, FIL*)
+ * @param[out] buffer Buffer to read data into
+ * @param[in] size Maximum number of bytes to read
+ *
+ * @return Number of bytes actually read (0 for EOF), or negative (e.g., -1) on error
+ */
+typedef int (*tamp_read_t)(void *handle, unsigned char *buffer, size_t size);
+
+/**
+ * Stream write callback type for file/stream-based operations.
+ *
+ * Should behave like fwrite(): write `size` bytes from `buffer`.
+ * Returns plain int (not tamp_res) for compatibility with standard I/O functions.
+ * The stream API translates negative returns to TAMP_WRITE_ERROR.
+ *
+ * @param[in] handle User-provided handle (e.g., FILE*, lfs_file_t*, FIL*)
+ * @param[in] buffer Buffer containing data to write
+ * @param[in] size Number of bytes to write
+ *
+ * @return Number of bytes actually written, or negative (e.g., -1) on error
+ */
+typedef int (*tamp_write_t)(void *handle, const unsigned char *buffer, size_t size);
+
+/*******************************************************************************
+ * Built-in I/O handlers for common sources/sinks.
+ *
+ * Enable the ones you need by defining the appropriate macro in your build
+ * system (e.g., -DTAMP_STDIO_STREAM=1):
+ *
+ *   - TAMP_MEMORY_STREAM  : Memory buffers (always available, no dependencies)
+ *   - TAMP_STDIO_STREAM   : Standard C FILE* (POSIX, ESP-IDF VFS, etc.)
+ *   - TAMP_LITTLEFS_STREAM: LittleFS filesystem
+ *   - TAMP_FATFS_STREAM   : FatFs (ChaN's FAT filesystem)
+ ******************************************************************************/
+
+/* Memory buffer I/O */
+#if TAMP_MEMORY_STREAM
+
+/**
+ * @brief Reader state for memory buffer input.
+ *
+ * Example:
+ * @code
+ * const unsigned char compressed_data[] = {...};
+ * TampMemReader reader = {
+ *     .data = compressed_data,
+ *     .size = sizeof(compressed_data),
+ *     .pos = 0
+ * };
+ * tamp_decompress_stream(tamp_stream_mem_read, &reader, ...);
+ * @endcode
+ */
+typedef struct TampMemReader {
+    const unsigned char *data; /**< Pointer to input data */
+    size_t size;               /**< Total size of input data */
+    size_t pos;                /**< Current read position (initialize to 0) */
+} TampMemReader;
+
+/**
+ * @brief Writer state for memory buffer output.
+ *
+ * Example:
+ * @code
+ * unsigned char output[4096];
+ * TampMemWriter writer = {
+ *     .data = output,
+ *     .capacity = sizeof(output),
+ *     .pos = 0
+ * };
+ * tamp_compress_stream(..., tamp_stream_mem_write, &writer, ...);
+ * // writer.pos contains bytes written
+ * @endcode
+ */
+typedef struct TampMemWriter {
+    unsigned char *data; /**< Pointer to output buffer */
+    size_t capacity;     /**< Total capacity of output buffer */
+    size_t pos;          /**< Current write position (initialize to 0) */
+} TampMemWriter;
+
+/**
+ * @brief Read callback for memory buffers.
+ * @param handle Pointer to TampMemReader.
+ */
+int tamp_stream_mem_read(void *handle, unsigned char *buffer, size_t size);
+
+/**
+ * @brief Write callback for memory buffers.
+ * @param handle Pointer to TampMemWriter.
+ * @return Bytes written, or -1 if buffer would overflow.
+ */
+int tamp_stream_mem_write(void *handle, const unsigned char *buffer, size_t size);
+
+#endif /* TAMP_MEMORY_STREAM */
+
+/* POSIX / Standard C stdio (FILE*) */
+#if TAMP_STDIO_STREAM
+
+/**
+ * @brief Read callback for stdio FILE*.
+ * @param handle FILE* opened for reading.
+ */
+int tamp_stream_stdio_read(void *handle, unsigned char *buffer, size_t size);
+
+/**
+ * @brief Write callback for stdio FILE*.
+ * @param handle FILE* opened for writing.
+ */
+int tamp_stream_stdio_write(void *handle, const unsigned char *buffer, size_t size);
+
+#endif /* TAMP_STDIO_STREAM */
+
+/* LittleFS */
+#if TAMP_LITTLEFS_STREAM
+
+#include "lfs.h"
+
+/**
+ * @brief Bundle struct for LittleFS file operations.
+ *
+ * LittleFS API requires both the filesystem context and file handle.
+ */
+typedef struct TampLfsFile {
+    lfs_t *lfs;       /**< Pointer to mounted LittleFS instance */
+    lfs_file_t *file; /**< Pointer to opened file handle */
+} TampLfsFile;
+
+/**
+ * @brief Read callback for LittleFS.
+ * @param handle Pointer to TampLfsFile.
+ */
+int tamp_stream_lfs_read(void *handle, unsigned char *buffer, size_t size);
+
+/**
+ * @brief Write callback for LittleFS.
+ * @param handle Pointer to TampLfsFile.
+ */
+int tamp_stream_lfs_write(void *handle, const unsigned char *buffer, size_t size);
+
+#endif /* TAMP_LITTLEFS_STREAM */
+
+/* FatFs (ChaN's FAT Filesystem) */
+#if TAMP_FATFS_STREAM
+
+#include "ff.h"
+
+/**
+ * @brief Read callback for FatFs.
+ * @param handle Pointer to FIL (FatFs file object).
+ */
+int tamp_stream_fatfs_read(void *handle, unsigned char *buffer, size_t size);
+
+/**
+ * @brief Write callback for FatFs.
+ * @param handle Pointer to FIL (FatFs file object).
+ */
+int tamp_stream_fatfs_write(void *handle, const unsigned char *buffer, size_t size);
+
+#endif /* TAMP_FATFS_STREAM */
 
 /**
  * @brief Pre-populate a window buffer with common characters.
