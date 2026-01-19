@@ -96,7 +96,7 @@ jobs:
 
   test:
     name: 'Test Python ${{ matrix.python-version }}'
-    timeout-minutes: 30
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -163,15 +163,6 @@ jobs:
           echo "ASAN_OPTIONS=detect_leaks=0" >> $GITHUB_ENV
           echo "UBSAN_OPTIONS=print_stacktrace=1" >> $GITHUB_ENV
 
-      - name: Cache enwik8 dataset
-        uses: actions/cache@v4
-        with:
-          path: datasets/enwik8.zip
-          key: enwik8-dataset-v2
-
-      - name: Download enwik8 dataset
-        run: make download-enwik8
-
       - name: Run tests with sanitizers
         run: |
           source .venv/bin/activate
@@ -181,6 +172,97 @@ jobs:
 
       - name: Run C tests
         run: make c-test
+
+      - name: Verify CLI compression/decompression integrity
+        run: |
+          source .venv/bin/activate
+          # Use a smaller test file for quick integrity check (first 1MB of random data)
+          dd if=/dev/urandom of=/tmp/test_data.bin bs=1M count=1 2>/dev/null
+          original_hash=$(sha256sum /tmp/test_data.bin | cut -d' ' -f1)
+          LIBASAN_PATH=$(gcc -print-file-name=libasan.so)
+          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress /tmp/test_data.bin | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
+          if [ "$original_hash" = "$roundtrip_hash" ]; then
+            echo "✓ Compression/decompression integrity verified"
+          else
+            echo "✗ Compression/decompression integrity check failed"
+            exit 1
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unittests
+          env_vars: PYTHON
+          name: Python ${{ matrix.python-version }}
+
+      - name: Build HTML docs
+        if: matrix.python-version == '3.13'
+        run: |
+          source .venv/bin/activate
+          LD_PRELOAD=$(gcc -print-file-name=libasan.so) sphinx-build -b html docs/source/ docs/build/html
+
+  integrity-enwik8:
+    name: 'CLI Integrity (enwik8 100MB)'
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    env:
+      POETRY_HOME: '~/poetry'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up python 3.13
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Cache Poetry Install
+        uses: actions/cache@v4
+        id: cached-poetry
+        with:
+          path: ${{ env.POETRY_HOME }}
+          key: poetry-cache-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
+
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        if: steps.cached-poetry.outputs.cache-hit != 'true'
+        with:
+          version: 1.8.5
+
+      - name: Add Poetry to PATH
+        run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
+
+      - name: Configure Poetry
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+
+      - name: Cache venv
+        uses: actions/cache@v4
+        id: cached-venv
+        with:
+          path: .venv/
+          key: venv-integrity-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install library with sanitizers
+        run: |
+          TAMP_SANITIZE=1 poetry install --no-interaction
+          echo "ASAN_OPTIONS=detect_leaks=0" >> $GITHUB_ENV
+          echo "UBSAN_OPTIONS=print_stacktrace=1" >> $GITHUB_ENV
+
+      - name: Cache enwik8 dataset
+        uses: actions/cache@v4
+        with:
+          path: datasets/enwik8.zip
+          key: enwik8-dataset-v2
+
+      - name: Download enwik8 dataset
+        run: make download-enwik8
 
       - name: Verify CLI compression/decompression integrity
         run: |
@@ -198,17 +280,3 @@ jobs:
             echo "Roundtrip hash: $roundtrip_hash"
             exit 1
           fi
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: unittests
-          env_vars: PYTHON
-          name: Python ${{ matrix.python-version }}
-
-      - name: Build HTML docs
-        if: matrix.python-version == '3.13'
-        run: |
-          source .venv/bin/activate
-          LD_PRELOAD=$(gcc -print-file-name=libasan.so) sphinx-build -b html docs/source/ docs/build/html
