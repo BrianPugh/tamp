@@ -98,8 +98,8 @@ int benchmark_decompressor() {
     rewind(input_file);
     assert(input_size == fread(input, 1, input_size, input_file));
 
-    if (TAMP_OK != tamp_decompressor_init(&decompressor, NULL, window_buffer))
-        EXIT(1, "Failed to initialize compressor");
+    if (TAMP_OK != tamp_decompressor_init(&decompressor, NULL, window_buffer, 15))
+        EXIT(1, "Failed to initialize decompressor");
 
     if (0 > tamp_decompressor_decompress(&decompressor, output, output_size, &output_written_size, input, input_size,
                                          &input_consumed_size))

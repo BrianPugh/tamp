@@ -318,7 +318,8 @@ call from input header data.
 
    // Since no TampConf is provided, the header will automatically be parsed
    // in the first tamp_decompressor_decompress call.
-   res = tamp_decompressor_init(&decompressor, NULL, window_buffer);
+   // The last parameter (10) indicates the buffer can accommodate up to a 10-bit window.
+   res = tamp_decompressor_init(&decompressor, NULL, window_buffer, 10);
 
    assert(res == TAMP_OK);
 

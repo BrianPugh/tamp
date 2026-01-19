@@ -7,22 +7,27 @@ extern "C" {
 
 #include "common.h"
 
-/* Externally, do not directly edit ANY of these attributes */
+/* Externally, do not directly edit ANY of these attributes.
+ * Fields are ordered by access frequency for cache efficiency.
+ */
 typedef struct {
-    unsigned char *window;
-    uint32_t bit_buffer;
-    uint8_t bit_buffer_pos;  // Only needs 6 bits; kept as full byte for speed
-    uint8_t _reserved[3];    // Explicit padding for uint32_t alignment
+    /* HOT: accessed every iteration of the decompression loop.
+     * Full-width types avoid bitfield access overhead. */
+    unsigned char *window;   // Pointer to window buffer
+    uint32_t bit_buffer;     // Bit buffer for reading compressed data (32 bits)
+    uint16_t window_pos;     // Current position in window (15 bits)
+    uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits)
 
-    /* Bitfields packed together (30 bits total, fits in one uint32_t).
-     * Ordered by access frequency (most accessed in LSB for faster access). */
-    uint32_t window_pos : 15;
-    uint32_t skip_bytes : 4;  // Skip this many decompressed bytes (from previous
-                              // output-buffer-limited decompression).
-    uint32_t min_pattern_size : 2;
-    uint32_t conf_window : 4;   // Number of window bits (cached locally in hot loop)
-    uint32_t conf_literal : 4;  // Number of literal bits (cached locally in hot loop)
-    uint32_t configured : 1;    // Whether or not conf has been properly set
+    /* WARM: read once at start of decompress, cached in locals */
+    uint8_t conf_window : 4;       // Window bits from config
+    uint8_t conf_literal : 4;      // Literal bits from config
+    uint8_t min_pattern_size : 2;  // Minimum pattern size, 2 or 3
+
+    /* COLD: rarely accessed (init or edge cases).
+     * Bitfields save space; add new cold fields here. */
+    uint8_t skip_bytes : 4;       // For output-buffer-limited resumption
+    uint8_t window_bits_max : 4;  // Max window bits buffer can hold
+    uint8_t configured : 1;       // Whether config has been set
 } TampDecompressor;
 
 /**
@@ -39,15 +44,18 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
 /**
  * @brief Initialize decompressor object.
  *
+ * @param[in,out] decompressor TampDecompressor object to perform decompression with.
+ * @param[in] conf Decompressor configuration. Set to NULL to perform an implicit header read.
+ * @param[in] window Pre-allocated window buffer.
+ * @param[in] window_bits Number of window bits the buffer can accommodate (8-15).
+ *                        Buffer must be at least (1 << window_bits) bytes.
+ *                        When conf is NULL (implicit header read), the header's window size
+ *                        is validated against this value.
  *
- *
- * @param[in,out] TampDecompressor object to perform decompression with.
- * @param[in] conf Compressor configuration. Set to NULL to perform an implicit header read.
- * @param[in] window Pre-allocated window buffer. Size must agree with conf->window.
- *                   If conf.use_custom_dictionary is true, then the window must be
- *                   externally initialized and be at least as big as conf->window.
+ * @return TAMP_OK on success, TAMP_INVALID_CONF if window_bits is invalid or too small.
  */
-tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window);
+tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window,
+                                uint8_t window_bits);
 
 /**
  * Callback-variant of tamp_compressor_decompress.

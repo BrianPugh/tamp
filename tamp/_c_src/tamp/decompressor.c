@@ -97,29 +97,35 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
 
 /**
  * Populate the rest of the decompressor structure after the following fields have been populated:
- *   * conf
  *   * window
+ *   * window_bits_max
  */
 static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor *decompressor, uint8_t conf_window,
                                                      uint8_t conf_literal, uint8_t conf_use_custom_dictionary) {
     if (conf_window < 8 || conf_window > 15) return TAMP_INVALID_CONF;
     if (conf_literal < 5 || conf_literal > 8) return TAMP_INVALID_CONF;
-    if (!conf_use_custom_dictionary) tamp_initialize_dictionary(decompressor->window, (1 << conf_window));
+    if (conf_window > decompressor->window_bits_max) return TAMP_INVALID_CONF;
+    if (!conf_use_custom_dictionary) tamp_initialize_dictionary(decompressor->window, (size_t)1 << conf_window);
 
     decompressor->conf_window = conf_window;
     decompressor->conf_literal = conf_literal;
-
     decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf_window, conf_literal);
     decompressor->configured = true;
 
     return TAMP_OK;
 }
 
-tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window) {
+tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window,
+                                uint8_t window_bits) {
     tamp_res res = TAMP_OK;
+
+    // Validate window_bits parameter
+    if (window_bits < 8 || window_bits > 15) return TAMP_INVALID_CONF;
+
     for (uint8_t i = 0; i < sizeof(TampDecompressor); i++)  // Zero-out the struct
         ((unsigned char *)decompressor)[i] = 0;
     decompressor->window = window;
+    decompressor->window_bits_max = window_bits;
     if (conf) {
         res = tamp_decompressor_populate_from_conf(decompressor, conf->window, conf->literal,
                                                    conf->use_custom_dictionary);
@@ -160,6 +166,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
     // Cache bitfield values in local variables for faster access
     const uint8_t conf_window = decompressor->conf_window;
     const uint8_t conf_literal = decompressor->conf_literal;
+    const uint8_t min_pattern_size = decompressor->min_pattern_size;
 
     const uint16_t window_mask = (1 << conf_window) - 1;
     while (input != input_end || decompressor->bit_buffer_pos) {
@@ -222,7 +229,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                 // There are not enough bits to decode window offset
                 return TAMP_INPUT_EXHAUSTED;
             }
-            match_size += decompressor->min_pattern_size;
+            match_size += min_pattern_size;
             window_offset = bit_buffer >> (32 - conf_window);
 
             // Security check: validate that the pattern reference (offset + size) does not

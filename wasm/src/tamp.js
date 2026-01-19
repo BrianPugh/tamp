@@ -615,8 +615,8 @@ export class TampDecompressor {
       const result = this.module.ccall(
         'tamp_decompressor_init',
         'number',
-        ['number', 'number', 'number'],
-        [this.decompressorPtr, this.confPtr, this.windowPtr]
+        ['number', 'number', 'number', 'number'],
+        [this.decompressorPtr, this.confPtr, this.windowPtr, headerWindow]
       );
 
       throwOnError(result, 'Decompressor initialization');
