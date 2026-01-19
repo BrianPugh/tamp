@@ -175,6 +175,14 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC trusted publishing
+
+    environment:
+      name: npm-publish
+      url: https://www.npmjs.com/package/@brianpugh/tamp
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -213,6 +221,4 @@ jobs:
       - name: Publish to npm
         run: |
           cd wasm
-          npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm publish --provenance --access public
