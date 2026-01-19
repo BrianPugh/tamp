@@ -1,3 +1,6 @@
 [submodule "ctests/Unity"]
 	path = ctests/Unity
 	url = https://github.com/ThrowTheSwitch/Unity.git
+[submodule "ctests/littlefs"]
+	path = ctests/littlefs
+	url = https://github.com/littlefs-project/littlefs.git

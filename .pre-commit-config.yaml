@@ -1,4 +1,4 @@
-exclude: ^(poetry.lock|package-lock.json|.idea/|.belay/)
+exclude: ^(poetry.lock|package-lock.json|.idea/|.belay/|ctests/littlefs/|ctests/fatfs/)
 repos:
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: 'v0.0.292'
@@ -80,6 +80,7 @@ repos:
             '-DTAMP_LAZY_MATCHING=1',
             '--inline-suppr',
             '--suppress=missingIncludeSystem',
+            '--suppress=missingInclude', # Optional deps (lfs.h, ff.h) behind feature flags
             '--suppress=unusedFunction',
             '--suppress=useStandardLibrary',
             '--suppress=checkersReport',

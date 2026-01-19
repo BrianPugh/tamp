@@ -80,7 +80,8 @@ cdef extern from "tamp/decompressor.h":
     tamp_res tamp_decompressor_init(
             TampDecompressor *decompressor,
             const TampConf *conf,
-            unsigned char *window
+            unsigned char *window,
+            uint8_t window_bits
     );
 
     tamp_res tamp_decompressor_decompress(

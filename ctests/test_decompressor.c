@@ -26,7 +26,7 @@ void test_decompressor_byte_by_byte(void) {
     TampDecompressor d;
     unsigned char window_buffer[1 << 10];
 
-    res = tamp_decompressor_init(&d, NULL, window_buffer);
+    res = tamp_decompressor_init(&d, NULL, window_buffer, 10);
     TEST_ASSERT_EQUAL(res, TAMP_OK);
 
     unsigned char input_byte;
@@ -83,7 +83,7 @@ void test_decompressor_malicious_oob(void) {
     TampDecompressor d;
     unsigned char window_buffer[1 << 10];
 
-    res = tamp_decompressor_init(&d, NULL, window_buffer);
+    res = tamp_decompressor_init(&d, NULL, window_buffer, 10);
     TEST_ASSERT_EQUAL(res, TAMP_OK);
 
     unsigned char output_buffer[32];

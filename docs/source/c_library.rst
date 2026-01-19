@@ -318,7 +318,8 @@ call from input header data.
 
    // Since no TampConf is provided, the header will automatically be parsed
    // in the first tamp_decompressor_decompress call.
-   res = tamp_decompressor_init(&decompressor, NULL, window_buffer);
+   // The last parameter (10) indicates the buffer can accommodate up to a 10-bit window.
+   res = tamp_decompressor_init(&decompressor, NULL, window_buffer, 10);
 
    assert(res == TAMP_OK);
 
@@ -359,4 +360,259 @@ These are the same as their non-callback variants, but they take 2 additional ar
     * ``void *user_data``, arbitrary data to be passed along to the callback.
 
 The callback can be useful for resetting a watchdog, updating a progress bar, etc.
-Compred to compression, decompression is very very fast; it is unlikely that the decompression callback feature provides significant value.
+Compared to compression, decompression is very fast; it is unlikely that the decompression callback feature provides significant value.
+
+Stream API
+^^^^^^^^^^
+Tamp provides a high-level stream API for compressing/decompressing between files, memory buffers, or **any custom source/sink**.
+Tamp is a one-shot compression algorithm: it reads input sequentially and streams output without seeking, making it suitable for non-seekable sources like UART or network sockets.
+The stream API uses **callbacks** for reading and writing, making it filesystem-agnostic.
+Built-in handlers are provided for common use cases.
+
+Callback Types
+--------------
+The stream API uses two callback types defined in ``common.h``:
+
+.. code-block:: c
+
+   // Read callback: read up to `size` bytes into `buffer`
+   // Returns bytes read (0 for EOF), or negative on error
+   typedef int (*tamp_read_t)(void *handle, unsigned char *buffer, size_t size);
+
+   // Write callback: write `size` bytes from `buffer`
+   // Returns bytes written, or negative on error
+   typedef int (*tamp_write_t)(void *handle, const unsigned char *buffer, size_t size);
+
+A negative return from the read callback is promoted to ``TAMP_READ_ERROR``.
+A return of 0 indicates EOF.
+
+A negative return or incomplete write from the write callback is promoted to ``TAMP_WRITE_ERROR``.
+Chunks are small (see `Work Buffer`_), so writing the full amount is expected.
+
+Work Buffer
+-----------
+The stream functions use an internal **stack-allocated** work buffer for intermediate I/O operations.
+This buffer is split in half internally: one half for reading input, the other for writing output.
+Larger buffers reduce the number of I/O callback invocations.
+Compression is generally CPU bound and is unaffected by the work buffer size.
+Decompression is more IO bound and benefits from a larger work buffer.
+
+The buffer size is controlled by the ``TAMP_STREAM_WORK_BUFFER_SIZE`` macro, which defaults to ``32`` bytes.
+This default is conservative and safe for constrained embedded stacks.
+The work buffer size **does not** need to be a power of 2.
+
+Benchmark results on the 100MB enwik8 dataset on an Apple M3 MacBook Air:
+
++------------------------+--------------------+---------------------+
+| Work Buffer Size (B)   | Compress Time (s)  | Decompress Time (s) |
++========================+====================+=====================+
+| 32                     | 5.554              | 0.832               |
++------------------------+--------------------+---------------------+
+| 64                     | 5.380              | 0.671               |
++------------------------+--------------------+---------------------+
+| 128                    | 5.314              | 0.580               |
++------------------------+--------------------+---------------------+
+| 256                    | 5.324              | 0.543               |
++------------------------+--------------------+---------------------+
+| 512                    | 5.261              | 0.507               |
++------------------------+--------------------+---------------------+
+| 1024                   | 5.273              | 0.514               |
++------------------------+--------------------+---------------------+
+
+Stream Compression
+------------------
+First initialize a ``TampCompressor`` with ``tamp_compressor_init``, then use ``tamp_compress_stream``:
+
+.. code-block:: c
+
+   TampCompressor compressor;
+   unsigned char window[1 << 10];
+
+   // Initialize the compressor (NULL conf for defaults)
+   tamp_compressor_init(&compressor, NULL, window);
+
+   // Compress from source to destination
+   tamp_res tamp_compress_stream(
+       TampCompressor *compressor,   // Initialized compressor
+       tamp_read_t read_cb,          // Callback to read uncompressed input
+       void *read_handle,            // Handle passed to read_cb
+       tamp_write_t write_cb,        // Callback to write compressed output
+       void *write_handle,           // Handle passed to write_cb
+       size_t *input_consumed_size,  // Output: total bytes read (may be NULL)
+       size_t *output_written_size,  // Output: total bytes written (may be NULL)
+       tamp_callback_t callback,     // Progress callback (may be NULL)
+       void *user_data               // User data for callback
+   );
+
+Stream Decompression
+--------------------
+First initialize a ``TampDecompressor`` with ``tamp_decompressor_init``, then use ``tamp_decompress_stream``:
+
+.. code-block:: c
+
+   TampDecompressor decompressor;
+   unsigned char window[1 << 10];
+
+   // Initialize the decompressor (NULL conf to read from stream header)
+   tamp_decompressor_init(&decompressor, NULL, window, 10);
+
+   // Decompress from source to destination
+   tamp_res tamp_decompress_stream(
+       TampDecompressor *decompressor,  // Initialized decompressor
+       tamp_read_t read_cb,             // Callback to read compressed input
+       void *read_handle,               // Handle passed to read_cb
+       tamp_write_t write_cb,           // Callback to write decompressed output
+       void *write_handle,              // Handle passed to write_cb
+       size_t *input_consumed_size,     // Output: total bytes read (may be NULL)
+       size_t *output_written_size,     // Output: total bytes written (may be NULL)
+       tamp_callback_t callback,        // Progress callback (may be NULL)
+       void *user_data                  // User data for callback
+   );
+
+Built-in I/O Handlers
+---------------------
+Tamp provides built-in read/write handlers for common use cases.
+The same handlers work for both compression and decompression, and can be mixed (e.g., read from memory, write to file).
+Enable them by defining the appropriate macro via compiler flags (e.g., ``-DTAMP_STREAM_STDIO=1``).
+
+TAMP_STREAM_STDIO
+~~~~~~~~~~~~~~~~~
+Standard C stdio (``FILE*``).
+Works with standard C library, ESP-IDF VFS, and any POSIX-compatible system.
+
+.. code-block:: c
+
+   // Compile with: -DTAMP_STREAM_STDIO=1
+
+   FILE *in = fopen("input.txt", "rb");
+   FILE *out = fopen("output.tamp", "wb");
+   unsigned char window[1 << 10];
+
+   TampCompressor compressor;
+   tamp_compressor_init(&compressor, NULL, window);
+
+   tamp_compress_stream(
+       &compressor,             // initialized compressor
+       tamp_stream_stdio_read,  // read callback
+       in,                      // read handle
+       tamp_stream_stdio_write, // write callback
+       out,                     // write handle
+       NULL,                    // input_consumed_size (optional)
+       NULL,                    // output_written_size (optional)
+       NULL,                    // progress callback (optional)
+       NULL                     // callback user_data (optional)
+   );
+
+   fclose(in);
+   fclose(out);
+
+TAMP_STREAM_MEMORY
+~~~~~~~~~~~~~~~~~~
+Memory buffer handlers, typically used for file-to-memory or memory-to-file operations.
+For memory-to-memory operations, use ``tamp_compressor_compress_and_flush`` or ``tamp_decompressor_decompress`` directly.
+
+.. code-block:: c
+
+   // Compile with: -DTAMP_STREAM_MEMORY=1 -DTAMP_STREAM_STDIO=1
+
+   const unsigned char input_data[] = "Data to compress...";
+   unsigned char window[1 << 10];
+
+   // Setup memory reader for input
+   TampMemReader reader = {
+       .data = input_data,
+       .size = sizeof(input_data),
+       .pos = 0
+   };
+
+   // Initialize compressor
+   TampCompressor compressor;
+   tamp_compressor_init(&compressor, NULL, window);
+
+   // Compress from memory to file
+   FILE *out = fopen("output.tamp", "wb");
+   tamp_compress_stream(
+       &compressor,             // initialized compressor
+       tamp_stream_mem_read,    // read callback (read plaintext from memory)
+       &reader,                 // read handle
+       tamp_stream_stdio_write, // write callback (write compressed data to file)
+       out,                     // write handle
+       NULL,                    // input_consumed_size (optional)
+       NULL,                    // output_written_size (optional)
+       NULL,                    // progress callback (optional)
+       NULL                     // callback user_data (optional)
+   );
+   fclose(out);
+
+TAMP_STREAM_LITTLEFS
+~~~~~~~~~~~~~~~~~~~~
+`LittleFS <https://github.com/littlefs-project/littlefs>`_ is a fail-safe filesystem designed for embedded systems.
+Unlike stdio where a single ``FILE*`` handle is sufficient, LittleFS requires both the filesystem object (``lfs_t``) and the file handle (``lfs_file_t``) for I/O operations.
+Tamp provides a ``TampLfsFile`` struct to bundle these together into a single handle.
+
+.. code-block:: c
+
+   // Compile with: -DTAMP_STREAM_LITTLEFS=1
+
+   lfs_t lfs;
+   lfs_file_t in_file, out_file;
+   // Assumes lfs_mount(&lfs, &cfg) has already been called
+   lfs_file_open(&lfs, &in_file, "data.tamp", LFS_O_RDONLY);
+   lfs_file_open(&lfs, &out_file, "data.bin", LFS_O_WRONLY | LFS_O_CREAT);
+
+   // Bundle filesystem and file handle together
+   TampLfsFile in_handle = { .lfs = &lfs, .file = &in_file };
+   TampLfsFile out_handle = { .lfs = &lfs, .file = &out_file };
+   unsigned char window[1 << 10];
+
+   // Initialize decompressor (NULL conf reads from stream header)
+   TampDecompressor decompressor;
+   tamp_decompressor_init(&decompressor, NULL, window, 10);
+
+   tamp_decompress_stream(
+       &decompressor,           // initialized decompressor
+       tamp_stream_lfs_read,    // read callback (read compressed data from file)
+       &in_handle,              // read handle
+       tamp_stream_lfs_write,   // write callback (write decompressed data to file)
+       &out_handle,             // write handle
+       NULL,                    // input_consumed_size (optional)
+       NULL,                    // output_written_size (optional)
+       NULL,                    // progress callback (optional)
+       NULL                     // callback user_data (optional)
+   );
+
+   lfs_file_close(&lfs, &in_file);
+   lfs_file_close(&lfs, &out_file);
+
+TAMP_STREAM_FATFS
+~~~~~~~~~~~~~~~~~
+`FatFs <http://elm-chan.org/fsw/ff/>`_ (ChaN's FAT filesystem) is commonly used for SD cards and USB mass storage on embedded systems.
+Unlike LittleFS, FatFs file handles (``FIL``) are self-contained and can be passed directly to the callbacks.
+
+.. code-block:: c
+
+   // Compile with: -DTAMP_STREAM_FATFS=1
+
+   FIL in_file, out_file;
+   f_open(&in_file, "data.tamp", FA_READ);
+   f_open(&out_file, "data.bin", FA_WRITE | FA_CREATE_ALWAYS);
+   unsigned char window[1 << 10];
+
+   // Initialize decompressor (NULL conf reads from stream header)
+   TampDecompressor decompressor;
+   tamp_decompressor_init(&decompressor, NULL, window, 10);
+
+   tamp_decompress_stream(
+       &decompressor,           // initialized decompressor
+       tamp_stream_fatfs_read,  // read callback
+       &in_file,                // read handle
+       tamp_stream_fatfs_write, // write callback
+       &out_file,               // write handle
+       NULL,                    // input_consumed_size (optional)
+       NULL,                    // output_written_size (optional)
+       NULL,                    // progress callback (optional)
+       NULL                     // callback user_data (optional)
+   );
+
+   f_close(&in_file);
+   f_close(&out_file);

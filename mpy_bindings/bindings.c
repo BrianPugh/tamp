@@ -188,7 +188,7 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
             mp_raise_ValueError("");
         }
 
-        TAMP_CHECK(tamp_decompressor_init(&o->d, &conf, dictionary_buffer_info.buf));
+        TAMP_CHECK(tamp_decompressor_init(&o->d, &conf, dictionary_buffer_info.buf, conf.window));
     }
 
     return MP_OBJ_FROM_PTR(o);

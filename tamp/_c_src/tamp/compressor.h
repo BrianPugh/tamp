@@ -176,8 +176,8 @@ bool tamp_compressor_full(const TampCompressor *compressor);
  * @param[in] output_size Size of the pre-allocated output buffer.
  * @param[out] output_written_size Number of bytes written to output. May be NULL.
  * @param[in] write_token Write the FLUSH token, if appropriate. Set to true if you want to continue
- * using the compressor. Set to false if you are done with the compressor, usually at the end of a
- * stream.
+ * using the compressor. Set to false if you are done with the compressor, usually at the end of
+ * compression.
  *
  * @return Tamp Status Code. Can return TAMP_OK, or TAMP_OUTPUT_FULL.
  */
@@ -249,6 +249,61 @@ TAMP_ALWAYS_INLINE tamp_res tamp_compressor_compress_and_flush(TampCompressor *c
     return tamp_compressor_compress_and_flush_cb(compressor, output, output_size, output_written_size, input,
                                                  input_size, input_consumed_size, write_token, NULL, NULL);
 }
+
+#if TAMP_STREAM
+/**
+ * @brief Compress data from input source to output destination using callbacks.
+ *
+ * High-level function that reads from an input source, compresses the data,
+ * and writes to an output destination using user-provided I/O callbacks.
+ * Works with any I/O backend (stdio, littlefs, fatfs, UART, etc.).
+ *
+ * Uses an internal **stack-allocated** work buffer sized by TAMP_STREAM_WORK_BUFFER_SIZE
+ * (default 32 bytes). For better compression performance, increase this via
+ * compiler flag: -DTAMP_STREAM_WORK_BUFFER_SIZE=256
+ *
+ * Example with stdio:
+ * @code
+ * FILE *in = fopen("input.bin", "rb");
+ * FILE *out = fopen("output.tamp", "wb");
+ * unsigned char window[1024];
+ * TampCompressor compressor;
+ * tamp_compressor_init(&compressor, NULL, window);
+ * tamp_compress_stream(
+ *     &compressor,             // compressor: initialized compressor
+ *     tamp_stream_stdio_read,  // read_cb: reads uncompressed input
+ *     in,                      // read_handle: passed to read_cb
+ *     tamp_stream_stdio_write, // write_cb: writes compressed output
+ *     out,                     // write_handle: passed to write_cb
+ *     NULL,                    // input_consumed_size: out, bytes read
+ *     NULL,                    // output_written_size: out, bytes written
+ *     NULL,                    // callback: progress callback
+ *     NULL                     // user_data: passed to callback
+ * );
+ * fclose(in);
+ * fclose(out);
+ * @endcode
+ *
+ * @param[in,out] compressor Initialized TampCompressor (via tamp_compressor_init).
+ * @param[in] read_cb Callback to read uncompressed input data.
+ * @param[in] read_handle Opaque handle passed to read_cb (e.g., input FILE*).
+ * @param[in] write_cb Callback to write compressed output data.
+ * @param[in] write_handle Opaque handle passed to write_cb (e.g., output FILE*).
+ * @param[out] input_consumed_size Total input bytes read. May be NULL.
+ * @param[out] output_written_size Total compressed bytes written. May be NULL.
+ * @param[in] callback Optional progress callback invoked periodically. May be NULL.
+ *                     Note: total_bytes passed to callback will be 0 (unknown).
+ * @param[in] user_data User data passed to progress callback.
+ *
+ * @return TAMP_OK on success, or an error code:
+ *         - TAMP_READ_ERROR: read_cb returned a negative value
+ *         - TAMP_WRITE_ERROR: write_cb returned a negative value or incomplete write
+ *         - Other tamp_res error codes from compression
+ */
+tamp_res tamp_compress_stream(TampCompressor *compressor, tamp_read_t read_cb, void *read_handle, tamp_write_t write_cb,
+                              void *write_handle, size_t *input_consumed_size, size_t *output_written_size,
+                              tamp_callback_t callback, void *user_data);
+#endif /* TAMP_STREAM */
 
 #ifdef __cplusplus
 }

@@ -97,29 +97,35 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
 
 /**
  * Populate the rest of the decompressor structure after the following fields have been populated:
- *   * conf
  *   * window
+ *   * window_bits_max
  */
 static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor *decompressor, uint8_t conf_window,
                                                      uint8_t conf_literal, uint8_t conf_use_custom_dictionary) {
     if (conf_window < 8 || conf_window > 15) return TAMP_INVALID_CONF;
     if (conf_literal < 5 || conf_literal > 8) return TAMP_INVALID_CONF;
-    if (!conf_use_custom_dictionary) tamp_initialize_dictionary(decompressor->window, (1 << conf_window));
+    if (conf_window > decompressor->window_bits_max) return TAMP_INVALID_CONF;
+    if (!conf_use_custom_dictionary) tamp_initialize_dictionary(decompressor->window, (size_t)1 << conf_window);
 
     decompressor->conf_window = conf_window;
     decompressor->conf_literal = conf_literal;
-
     decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf_window, conf_literal);
     decompressor->configured = true;
 
     return TAMP_OK;
 }
 
-tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window) {
+tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window,
+                                uint8_t window_bits) {
     tamp_res res = TAMP_OK;
+
+    // Validate window_bits parameter
+    if (window_bits < 8 || window_bits > 15) return TAMP_INVALID_CONF;
+
     for (uint8_t i = 0; i < sizeof(TampDecompressor); i++)  // Zero-out the struct
         ((unsigned char *)decompressor)[i] = 0;
     decompressor->window = window;
+    decompressor->window_bits_max = window_bits;
     if (conf) {
         res = tamp_decompressor_populate_from_conf(decompressor, conf->window, conf->literal,
                                                    conf->use_custom_dictionary);
@@ -160,6 +166,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
     // Cache bitfield values in local variables for faster access
     const uint8_t conf_window = decompressor->conf_window;
     const uint8_t conf_literal = decompressor->conf_literal;
+    const uint8_t min_pattern_size = decompressor->min_pattern_size;
 
     const uint16_t window_mask = (1 << conf_window) - 1;
     while (input != input_end || decompressor->bit_buffer_pos) {
@@ -222,7 +229,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                 // There are not enough bits to decode window offset
                 return TAMP_INPUT_EXHAUSTED;
             }
-            match_size += decompressor->min_pattern_size;
+            match_size += min_pattern_size;
             window_offset = bit_buffer >> (32 - conf_window);
 
             // Security check: validate that the pattern reference (offset + size) does not
@@ -270,3 +277,63 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
     }
     return TAMP_INPUT_EXHAUSTED;
 }
+
+#if TAMP_STREAM
+
+tamp_res tamp_decompress_stream(TampDecompressor *decompressor, tamp_read_t read_cb, void *read_handle,
+                                tamp_write_t write_cb, void *write_handle, size_t *input_consumed_size,
+                                size_t *output_written_size, tamp_callback_t callback, void *user_data) {
+    size_t input_consumed_size_proxy, output_written_size_proxy;
+    if (!input_consumed_size) input_consumed_size = &input_consumed_size_proxy;
+    if (!output_written_size) output_written_size = &output_written_size_proxy;
+    *input_consumed_size = 0;
+    *output_written_size = 0;
+
+    unsigned char input_buffer[TAMP_STREAM_WORK_BUFFER_SIZE / 2];
+    unsigned char output_buffer[TAMP_STREAM_WORK_BUFFER_SIZE / 2];
+    const size_t input_buffer_size = sizeof(input_buffer);
+    const size_t output_buffer_size = sizeof(output_buffer);
+
+    size_t input_pos = 0;
+    size_t input_available = 0;
+    bool eof_reached = false;
+
+    while (1) {
+        if (input_available == 0 && !eof_reached) {
+            int bytes_read = read_cb(read_handle, input_buffer, input_buffer_size);
+            if (TAMP_UNLIKELY(bytes_read < 0)) return TAMP_READ_ERROR;
+            eof_reached = (bytes_read == 0);
+            input_pos = 0;
+            input_available = bytes_read;
+            *input_consumed_size += bytes_read;
+        }
+
+        size_t chunk_consumed, chunk_written;
+
+        tamp_res res = tamp_decompressor_decompress(decompressor, output_buffer, output_buffer_size, &chunk_written,
+                                                    input_buffer + input_pos, input_available, &chunk_consumed);
+        if (TAMP_UNLIKELY(res < TAMP_OK)) return res;
+
+        input_pos += chunk_consumed;
+        input_available -= chunk_consumed;
+
+        if (TAMP_LIKELY(chunk_written > 0)) {
+            int bytes_written = write_cb(write_handle, output_buffer, chunk_written);
+            if (TAMP_UNLIKELY(bytes_written < 0 || (size_t)bytes_written != chunk_written)) {
+                return TAMP_WRITE_ERROR;
+            }
+            *output_written_size += chunk_written;
+        }
+
+        if (TAMP_UNLIKELY(res == TAMP_INPUT_EXHAUSTED && eof_reached)) break;
+
+        if (TAMP_UNLIKELY(callback)) {
+            int cb_res = callback(user_data, *output_written_size, 0);
+            if (TAMP_UNLIKELY(cb_res)) return (tamp_res)cb_res;
+        }
+    }
+
+    return TAMP_OK;
+}
+
+#endif /* TAMP_STREAM */

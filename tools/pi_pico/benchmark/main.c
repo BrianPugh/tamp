@@ -31,7 +31,7 @@ int benchmark_decompressor() {
     TampDecompressor decompressor;
     int output_written_size;
 
-    if (TAMP_OK != tamp_decompressor_init(&decompressor, NULL, window_buffer)) return -1;
+    if (TAMP_OK != tamp_decompressor_init(&decompressor, NULL, window_buffer, 10)) return -1;
 
     if (0 > tamp_decompressor_decompress(&decompressor, output_buffer, sizeof(output_buffer), &output_written_size,
                                          ENWIK8_COMPRESSED, sizeof(ENWIK8_COMPRESSED), NULL))

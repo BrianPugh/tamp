@@ -247,6 +247,13 @@ make website-clean         # Clean website build artifacts
    - WebAssembly npm package
 3. **CI/CD handles** cross-platform builds and testing
 
+## Documentation Style
+
+- Avoid "fake" subsections (e.g., bold text like `**Error Promotion:**` acting
+  as a heading). Either use a real RST section heading or integrate the content
+  into the surrounding prose.
+- Keep documentation terse and direct.
+
 ## Additional Notes
 
 - **Javascript library is located at `wasm/src/tamp.js`. Do not directly edit
