@@ -10,9 +10,10 @@
  *
  * Requirements:
  *   - Little-endian byte order
- *   - Efficient unaligned memory access
  *   - 64-bit compiler intrinsics (__builtin_ctzll or _BitScanForward64)
  */
+
+#include <string.h>  // for memcpy (portable unaligned loads)
 
 // MSVC compatibility for count trailing zeros
 #if defined(_MSC_VER)
@@ -40,7 +41,8 @@ static inline int tamp_ctzll(uint64_t value) {
                                                                                     \
         /* Try 8-byte comparison for bytes 2-9 using pre-computed input_word_ext */ \
         if (max_pattern_size >= 10 && (idx + 9) <= window_size_minus_1) {           \
-            uint64_t window_word = *(uint64_t *)(window + idx + 2);                 \
+            uint64_t window_word;                                                   \
+            memcpy(&window_word, window + idx + 2, sizeof(uint64_t));               \
             uint64_t diff = window_word ^ input_word_ext;                           \
             if (diff == 0) {                                                        \
                 match_len = 10;                                                     \
@@ -110,8 +112,9 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
     // Main loop: check 14 positions per iteration using two 64-bit loads
     // Uses bit manipulation to find all 2-byte matches simultaneously
     for (; window_index + 15 < window_size_minus_1; window_index += 14) {
-        uint64_t word1 = *(uint64_t *)(window + window_index);
-        uint64_t word2 = *(uint64_t *)(window + window_index + 7);
+        uint64_t word1, word2;
+        memcpy(&word1, window + window_index, sizeof(uint64_t));
+        memcpy(&word2, window + window_index + 7, sizeof(uint64_t));
 
         // Find 2-byte matches in word1 (positions 0-6)
         // XOR with broadcast patterns to find matching bytes, then detect zeros
@@ -124,7 +127,9 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
         // Note: HAS_ZERO_BYTE can have false positives, so verify before extending
         while (matches1) {
             int byte_pos = tamp_ctzll(matches1) >> 3;
-            if (TAMP_UNLIKELY(*(uint16_t *)(window + window_index + byte_pos) == first_second)) {
+            uint16_t candidate;
+            memcpy(&candidate, window + window_index + byte_pos, sizeof(uint16_t));
+            if (TAMP_UNLIKELY(candidate == first_second)) {
                 EXTEND_MATCH(window_index + byte_pos);
             }
             matches1 &= matches1 - 1;  // Clear lowest set bit
@@ -137,7 +142,9 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
         while (matches2) {
             int byte_pos = tamp_ctzll(matches2) >> 3;
-            if (TAMP_UNLIKELY(*(uint16_t *)(window + window_index + 7 + byte_pos) == first_second)) {
+            uint16_t candidate;
+            memcpy(&candidate, window + window_index + 7 + byte_pos, sizeof(uint16_t));
+            if (TAMP_UNLIKELY(candidate == first_second)) {
                 EXTEND_MATCH(window_index + 7 + byte_pos);
             }
             matches2 &= matches2 - 1;
@@ -146,7 +153,9 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
     // Handle remaining positions
     for (; window_index < window_size_minus_1; window_index++) {
-        if (TAMP_LIKELY(*(uint16_t *)(window + window_index) != first_second)) {
+        uint16_t candidate;
+        memcpy(&candidate, window + window_index, sizeof(uint16_t));
+        if (TAMP_LIKELY(candidate != first_second)) {
             continue;
         }
         EXTEND_MATCH(window_index);
