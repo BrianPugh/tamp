@@ -122,10 +122,10 @@ export class TampCompressor {
   /**
    * Compress a chunk of data
    * @param input - Input data to compress
-   * @param options - Options object with progress callback and other settings
+   * @param options - Options for progress callback and cancellation
    * @returns Promise resolving to compressed data
    */
-  compress(input: Uint8Array, options?: TampCallbackOptions): Promise<Uint8Array>;
+  compress(input: Uint8Array, options?: TampCompressOptions): Promise<Uint8Array>;
 
   /**
    * Flush any remaining data and finalize compression
@@ -137,6 +137,20 @@ export class TampCompressor {
    * Clean up allocated memory. Should be called when done with the compressor.
    */
   destroy(): void;
+}
+
+/**
+ * Options for the TampCompressor.compress() method (not the one-shot compress function)
+ */
+export interface TampCompressOptions {
+  /** Progress callback with rich progress info */
+  onPoll?: TampProgressCallback;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal;
+  /** Minimum interval between progress callbacks in milliseconds. Default: 100 */
+  pollIntervalMs?: number;
+  /** Minimum bytes processed between progress callbacks. Default: 65536 */
+  pollIntervalBytes?: number;
 }
 
 /**
