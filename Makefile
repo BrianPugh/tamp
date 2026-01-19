@@ -12,9 +12,11 @@ help:
 	@echo "  make mpy               Build native .mpy for RP2040 (requires MPY_DIR)"
 	@echo "  make mpy ARCH=armv7m   Build for different architecture"
 	@echo ""
-	@echo "On-device benchmarks (requires MPY_DIR and connected device):"
-	@echo "  make on-device-compression-benchmark    Run compression benchmark"
-	@echo "  make on-device-decompression-benchmark  Run decompression benchmark"
+	@echo "On-device benchmarks (requires connected device):"
+	@echo "  make on-device-compression-benchmark           Run Tamp compression benchmark (requires MPY_DIR)"
+	@echo "  make on-device-decompression-benchmark         Run Tamp decompression benchmark (requires MPY_DIR)"
+	@echo "  make on-device-deflate-compression-benchmark   Run MicroPython deflate compression benchmark"
+	@echo "  make on-device-deflate-decompression-benchmark Run MicroPython deflate decompression benchmark"
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make binary-size       Show binary sizes for README table"
@@ -188,7 +190,7 @@ collect-data: venv download-enwik8
 #######################
 # MicroPython Utilities
 #######################
-.PHONY: on-device-compression-benchmark on-device-decompression-benchmark mpy-viper-size mpy-native-size mpy-compression-benchmark
+.PHONY: on-device-compression-benchmark on-device-decompression-benchmark on-device-deflate-compression-benchmark on-device-deflate-decompression-benchmark mpy-viper-size mpy-native-size mpy-compression-benchmark
 
 MPREMOTE := poetry run mpremote
 
@@ -228,6 +230,27 @@ on-device-decompression-benchmark: mpy build/enwik8-100kb.tamp
 	$(call mpremote-sync,build/enwik8-100kb.tamp,enwik8-100kb.tamp)
 	$(MPREMOTE) soft-reset
 	$(MPREMOTE) run tools/on-device-decompression-benchmark.py
+	$(MPREMOTE) cp :enwik8-100kb-decompressed build/on-device-enwik8-100kb-decompressed
+	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed
+	@echo "Success!"
+
+on-device-deflate-compression-benchmark: build/enwik8-100kb
+	$(MPREMOTE) rm :enwik8-100kb.deflate || true
+	$(call mpremote-sync,build/enwik8-100kb,enwik8-100kb)
+	$(MPREMOTE) soft-reset
+	$(MPREMOTE) run tools/on-device-deflate-compression-benchmark.py
+	$(MPREMOTE) cp :enwik8-100kb.deflate build/on-device-enwik8-100kb.deflate
+	@echo "Success!"
+
+on-device-deflate-decompression-benchmark: build/enwik8-100kb
+	@# First ensure we have the deflate-compressed file on device
+	@if ! $(MPREMOTE) sha256sum :enwik8-100kb.deflate >/dev/null 2>&1; then \
+		echo "Error: enwik8-100kb.deflate not found on device. Run on-device-deflate-compression-benchmark first."; \
+		exit 1; \
+	fi
+	$(MPREMOTE) rm :enwik8-100kb-decompressed || true
+	$(MPREMOTE) soft-reset
+	$(MPREMOTE) run tools/on-device-deflate-decompression-benchmark.py
 	$(MPREMOTE) cp :enwik8-100kb-decompressed build/on-device-enwik8-100kb-decompressed
 	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed
 	@echo "Success!"

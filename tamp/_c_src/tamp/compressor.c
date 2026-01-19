@@ -46,11 +46,30 @@ inline bool tamp_compressor_full(const TampCompressor *compressor) {
     return compressor->input_size == sizeof(compressor->input);
 }
 
+/*
+ * Platform-specific find_best_match implementations:
+ *
+ * 1. TAMP_ESP32: External implementation in espidf/tamp/compressor_esp32.cpp
+ *
+ * 2. Desktop 64-bit (x86_64, aarch64, Windows 64-bit):
+ *    Included from compressor_find_match_desktop.inc - uses bit manipulation
+ *    and 64-bit loads for parallel match detection
+ *
+ * 3. Embedded/Default (Cortex-M0/M0+, other 32-bit):
+ *    Defined below - single-byte-first comparison, safe for all architectures
+ */
+
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size);
+
+#elif defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)
+#include "compressor_find_match_desktop.c"
+
 #else
 /**
  * @brief Find the best match for the current input buffer.
+ *
+ * Embedded/32-bit implementation: uses single-byte-first comparison (faster on simple cores).
  *
  * @param[in,out] compressor TampCompressor object to perform search on.
  * @param[out] match_index  If match_size is 0, this value is undefined.
@@ -61,16 +80,17 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
     if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return;
 
-    const uint16_t first_second = (read_input(0) << 8) | read_input(1);
-    const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
+    const uint8_t first_byte = read_input(0);
+    const uint8_t second_byte = read_input(1);
+    const uint32_t window_size_minus_1 = WINDOW_SIZE - 1;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
+    const unsigned char *window = compressor->window;
 
-    uint16_t window_rolling_2_byte = compressor->window[0];
-
-    for (uint16_t window_index = 0; window_index < window_size_minus_1; window_index++) {
-        window_rolling_2_byte <<= 8;
-        window_rolling_2_byte |= compressor->window[window_index + 1];
-        if (TAMP_LIKELY(window_rolling_2_byte != first_second)) {
+    for (uint32_t window_index = 0; window_index < window_size_minus_1; window_index++) {
+        if (TAMP_LIKELY(window[window_index] != first_byte)) {
+            continue;
+        }
+        if (TAMP_LIKELY(window[window_index + 1] != second_byte)) {
             continue;
         }
 
@@ -81,7 +101,7 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
         for (uint8_t i = 2; i < max_pattern_size; i++) {
             if (TAMP_UNLIKELY((window_index + i) > window_size_minus_1)) break;
 
-            if (TAMP_LIKELY(compressor->window[window_index + i] != read_input(i))) break;
+            if (TAMP_LIKELY(window[window_index + i] != read_input(i))) break;
             match_len = i + 1;
         }
 
