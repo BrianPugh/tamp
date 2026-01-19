@@ -616,27 +616,3 @@ Unlike LittleFS, FatFs file handles (``FIL``) are self-contained and can be pass
 
    f_close(&in_file);
    f_close(&out_file);
-
-Performance Considerations
---------------------------
-The stream API is a convenience layer built on top of the low-level buffer API.
-It adds some overhead:
-
-* Function pointer indirection for each read/write call
-* Internal work buffer is split in half for input/output buffering
-* Extra memory copying through the work buffer
-
-For maximum performance in memory-constrained or performance-critical applications,
-use the low-level ``tamp_compressor_compress`` and ``tamp_decompressor_decompress`` functions directly.
-
-The stream API is ideal for:
-
-* File-to-file compression/decompression
-* Applications where ease of use is more important than maximum performance
-* Mixing different I/O sources and sinks
-
-To tune performance, increase the internal work buffer size via compiler flag:
-
-.. code-block:: c
-
-   -DTAMP_STREAM_WORK_BUFFER_SIZE=256

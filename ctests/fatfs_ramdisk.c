@@ -8,8 +8,10 @@
 
 #include <string.h>
 
+// clang-format off
+#include "fatfs/source/ff.h"     // Must come first - defines BYTE, LBA_t, etc.
 #include "fatfs/source/diskio.h"
-#include "fatfs/source/ff.h"
+// clang-format on
 
 #define SECTOR_SIZE 512
 
