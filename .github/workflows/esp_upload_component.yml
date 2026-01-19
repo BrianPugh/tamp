@@ -3,9 +3,21 @@ name: Espressif Component Registry
 on:
   workflow_dispatch:
   pull_request:
+    paths:
+      - 'espidf/**'
+      - 'tamp/_c_src/**'
+      - '.github/workflows/esp_upload_component.yml'
   push:
     tags:
       - 'v*.*.*'
+    paths:
+      - 'espidf/**'
+      - 'tamp/_c_src/**'
+      - '.github/workflows/esp_upload_component.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   upload_components:
