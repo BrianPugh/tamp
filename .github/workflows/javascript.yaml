@@ -235,4 +235,4 @@ jobs:
       - name: Publish to npm
         run: |
           cd wasm
-          npm publish --provenance --access public
+          npm publish --provenance --access public --ignore-scripts
