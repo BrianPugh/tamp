@@ -63,14 +63,15 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
     const uint8_t first_byte = read_input(0);
     const uint8_t second_byte = read_input(1);
-    const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
+    const uint32_t window_size_minus_1 = WINDOW_SIZE - 1;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
+    const unsigned char *window = compressor->window;
 
-    for (uint16_t window_index = 0; window_index < window_size_minus_1; window_index++) {
-        if (TAMP_LIKELY(compressor->window[window_index] != first_byte)) {
+    for (uint32_t window_index = 0; window_index < window_size_minus_1; window_index++) {
+        if (TAMP_LIKELY(window[window_index] != first_byte)) {
             continue;
         }
-        if (TAMP_LIKELY(compressor->window[window_index + 1] != second_byte)) {
+        if (TAMP_LIKELY(window[window_index + 1] != second_byte)) {
             continue;
         }
 
@@ -81,7 +82,7 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
         for (uint8_t i = 2; i < max_pattern_size; i++) {
             if (TAMP_UNLIKELY((window_index + i) > window_size_minus_1)) break;
 
-            if (TAMP_LIKELY(compressor->window[window_index + i] != read_input(i))) break;
+            if (TAMP_LIKELY(window[window_index + i] != read_input(i))) break;
             match_len = i + 1;
         }
 
