@@ -353,10 +353,10 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
 | Tamp (Micropython Native Module) | 31,192                | 1,020,408               |
 | Tamp (C)                         | 36,127                | 1,359,600               |
-| Deflate (micropython builtin)    | 6,715                 | 146,477                 |
+| Deflate (micropython builtin)    | 6,885                 | 294,985                 |
 
-Tamp resulted in a **51637** byte archive, while Micropython's builtin `deflate`
-resulted in a larger, **59442** byte archive.
+Tamp resulted in a **51637** byte archive, while Micropython's (v1.27.0) builtin
+`deflate` resulted in a larger, **59442** byte archive.
 
 ## Binary Size
 
