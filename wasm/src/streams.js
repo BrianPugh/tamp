@@ -46,26 +46,6 @@ export class TampCompressionStream extends TransformStream {
       },
     });
   }
-
-  /**
-   * Create a ReadableStream that compresses data written to its writable side
-   * @param {TampOptions} options - Compression options
-   * @returns {ReadableStream} - Readable stream of compressed data
-   */
-  static readable(options = {}) {
-    const stream = new TampCompressionStream(options);
-    return stream.readable;
-  }
-
-  /**
-   * Create a WritableStream that compresses data and outputs to a readable stream
-   * @param {TampOptions} options - Compression options
-   * @returns {WritableStream} - Writable stream that accepts uncompressed data
-   */
-  static writable(options = {}) {
-    const stream = new TampCompressionStream(options);
-    return stream.writable;
-  }
 }
 
 /**
@@ -86,13 +66,9 @@ export class TampDecompressionStream extends TransformStream {
           const input = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
 
           // Decompress chunk directly - decompressor handles its own buffering
-          try {
-            const decompressed = await decompressor.decompress(input);
-            if (decompressed.length > 0) {
-              controller.enqueue(decompressed);
-            }
-          } catch (error) {
-            controller.error(error);
+          const decompressed = await decompressor.decompress(input);
+          if (decompressed.length > 0) {
+            controller.enqueue(decompressed);
           }
         } catch (error) {
           controller.error(error);
@@ -108,8 +84,7 @@ export class TampDecompressionStream extends TransformStream {
             controller.enqueue(decompressed);
           }
         } catch (error) {
-          // Log warning but don't fail - pending data might be incomplete
-          console.warn('Failed to process remaining buffer data during flush:', error.message);
+          controller.error(error);
         } finally {
           if (decompressor) {
             decompressor.destroy();
@@ -117,26 +92,6 @@ export class TampDecompressionStream extends TransformStream {
         }
       },
     });
-  }
-
-  /**
-   * Create a ReadableStream that decompresses data written to its writable side
-   * @param {TampOptions} options - Decompression options
-   * @returns {ReadableStream} - Readable stream of decompressed data
-   */
-  static readable(options = {}) {
-    const stream = new TampDecompressionStream(options);
-    return stream.readable;
-  }
-
-  /**
-   * Create a WritableStream that decompresses data and outputs to a readable stream
-   * @param {TampOptions} options - Decompression options
-   * @returns {WritableStream} - Writable stream that accepts compressed data
-   */
-  static writable(options = {}) {
-    const stream = new TampDecompressionStream(options);
-    return stream.writable;
   }
 }
 

@@ -89,7 +89,7 @@ poetry run pytest
 
 ```bash
 cd wasm/
-source /path/to/emsdk/emsdk_env.sh
+activate emsdk              # Activate Emscripten environment
 ```
 
 **Build and Test:**
