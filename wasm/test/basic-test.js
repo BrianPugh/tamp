@@ -189,4 +189,33 @@ describe('Tamp WebAssembly Tests', () => {
 
     assert.ok(true, 'Memory cleanup should work without errors');
   });
+
+  test('Use after destroy throws error', async () => {
+    // Verifies that using an instance after destroy() throws a clear error
+    // instead of crashing or silently misbehaving.
+    const testData = new TextEncoder().encode('Use after destroy test');
+
+    // Test compressor throws after destroy
+    const compressor = new TampCompressor();
+    await compressor.compress(testData);
+    compressor.destroy();
+
+    await assert.rejects(
+      async () => await compressor.compress(testData),
+      { message: 'Compressor has been destroyed' },
+      'Compressor should throw when used after destroy'
+    );
+
+    // Test decompressor throws after destroy
+    const compressed = await compress(testData);
+    const decompressor = new TampDecompressor();
+    await decompressor.decompress(compressed);
+    decompressor.destroy();
+
+    await assert.rejects(
+      async () => await decompressor.decompress(compressed),
+      { message: 'Decompressor has been destroyed' },
+      'Decompressor should throw when used after destroy'
+    );
+  });
 });

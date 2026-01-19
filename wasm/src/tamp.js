@@ -225,6 +225,10 @@ export class TampCompressor {
     const progressCallback = options.onPoll;
     await this.initialize();
 
+    if (!this.compressorPtr) {
+      throw new Error('Compressor has been destroyed');
+    }
+
     const CHUNK_SIZE = 1 << 20;
     const outputChunks = [];
 
@@ -421,6 +425,10 @@ export class TampCompressor {
    */
   async flush(write_token = false) {
     await this.initialize();
+
+    if (!this.compressorPtr) {
+      throw new Error('Compressor has been destroyed');
+    }
 
     // Single allocation for output buffer (32 bytes) + output size pointer (4 bytes)
     const totalAllocSize = 32 + 4;
@@ -633,6 +641,10 @@ export class TampDecompressor {
    */
   async decompress(input, options = {}) {
     await this.initialize();
+
+    if (!this.initialPtr) {
+      throw new Error('Decompressor has been destroyed');
+    }
 
     const { signal } = options;
 
