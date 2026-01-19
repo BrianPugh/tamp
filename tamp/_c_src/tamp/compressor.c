@@ -61,16 +61,16 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
     if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return;
 
-    const uint16_t first_second = (read_input(0) << 8) | read_input(1);
+    const uint8_t first_byte = read_input(0);
+    const uint8_t second_byte = read_input(1);
     const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
 
-    uint16_t window_rolling_2_byte = compressor->window[0];
-
     for (uint16_t window_index = 0; window_index < window_size_minus_1; window_index++) {
-        window_rolling_2_byte <<= 8;
-        window_rolling_2_byte |= compressor->window[window_index + 1];
-        if (TAMP_LIKELY(window_rolling_2_byte != first_second)) {
+        if (TAMP_LIKELY(compressor->window[window_index] != first_byte)) {
+            continue;
+        }
+        if (TAMP_LIKELY(compressor->window[window_index + 1] != second_byte)) {
             continue;
         }
 
