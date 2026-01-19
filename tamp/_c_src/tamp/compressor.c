@@ -439,8 +439,8 @@ tamp_res tamp_compress_stream(TampCompressor *compressor, tamp_read_t read_cb, v
     *input_consumed_size = 0;
     *output_written_size = 0;
 
-    unsigned char input_buffer[TAMP_WORK_BUFFER_SIZE / 2];
-    unsigned char output_buffer[TAMP_WORK_BUFFER_SIZE / 2];
+    unsigned char input_buffer[TAMP_STREAM_WORK_BUFFER_SIZE / 2];
+    unsigned char output_buffer[TAMP_STREAM_WORK_BUFFER_SIZE / 2];
 
     // Main compression loop
     while (1) {

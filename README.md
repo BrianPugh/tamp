@@ -369,12 +369,15 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 | ------------------------- | ---------- | ------------ | ------------------------- |
 | Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
 | Tamp (MicroPython Native) | 3896       | 3559         | 6616                      |
-| Tamp (C)                  | 2056       | 1992         | 3928                      |
+| Tamp (C, -DTAMP_STREAM=0) | 2028       | 1992         | 3900                      |
+| Tamp (C)                  | 2472       | 2444         | 4796                      |
 | Heatshrink (C)            | 2956       | 3876         | 6832                      |
 | uzlib (C)                 | 2355       | 3963         | 6318                      |
 
-Heatshrink doesn't include a high level API; in an apples-to-apples comparison
-the Tamp library would be even smaller.
+Tamp C includes a high-level stream API by default. Even with `-DTAMP_STREAM=0`,
+Tamp includes buffer-looping functions (like `tamp_compressor_compress`) that
+Heatshrink lacks (Heatshrink only provides poll/sink primitives). In an
+apples-to-apples comparison, Tamp would be even smaller.
 
 ## Acknowledgement
 

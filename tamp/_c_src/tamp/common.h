@@ -62,10 +62,10 @@ extern "C" {
  * Larger values reduce I/O callback invocations, improving decompression speed.
  * Default of 32 bytes is safe for constrained stacks; 256+ bytes recommended
  * for better performance when stack space permits.
- * Override via compiler flag: -DTAMP_WORK_BUFFER_SIZE=256
+ * Override via compiler flag: -DTAMP_STREAM_WORK_BUFFER_SIZE=256
  */
-#ifndef TAMP_WORK_BUFFER_SIZE
-#define TAMP_WORK_BUFFER_SIZE 32
+#ifndef TAMP_STREAM_WORK_BUFFER_SIZE
+#define TAMP_STREAM_WORK_BUFFER_SIZE 32
 #endif
 
 enum {
@@ -131,13 +131,15 @@ typedef int (*tamp_read_t)(void *handle, unsigned char *buffer, size_t size);
  *
  * Should behave like fwrite(): write `size` bytes from `buffer`.
  * Returns plain int (not tamp_res) for compatibility with standard I/O functions.
- * The stream API translates negative returns to TAMP_WRITE_ERROR.
+ * The stream API treats negative returns or incomplete writes (fewer bytes than requested)
+ * as TAMP_WRITE_ERROR. Chunks are small (at most TAMP_STREAM_WORK_BUFFER_SIZE/2 bytes),
+ * so writing the full amount is expected.
  *
  * @param[in] handle User-provided handle (e.g., FILE*, lfs_file_t*, FIL*)
  * @param[in] buffer Buffer containing data to write
  * @param[in] size Number of bytes to write
  *
- * @return Number of bytes actually written, or negative (e.g., -1) on error
+ * @return `size` on success, or negative (e.g., -1) on error
  */
 typedef int (*tamp_write_t)(void *handle, const unsigned char *buffer, size_t size);
 
@@ -145,16 +147,16 @@ typedef int (*tamp_write_t)(void *handle, const unsigned char *buffer, size_t si
  * Built-in I/O handlers for common sources/sinks.
  *
  * Enable the ones you need by defining the appropriate macro in your build
- * system (e.g., -DTAMP_STDIO_STREAM=1):
+ * system (e.g., -DTAMP_STREAM_STDIO=1):
  *
- *   - TAMP_MEMORY_STREAM  : Memory buffers (always available, no dependencies)
- *   - TAMP_STDIO_STREAM   : Standard C FILE* (POSIX, ESP-IDF VFS, etc.)
- *   - TAMP_LITTLEFS_STREAM: LittleFS filesystem
- *   - TAMP_FATFS_STREAM   : FatFs (ChaN's FAT filesystem)
+ *   - TAMP_STREAM_MEMORY  : Memory buffers (always available, no dependencies)
+ *   - TAMP_STREAM_STDIO   : Standard C FILE* (POSIX, ESP-IDF VFS, etc.)
+ *   - TAMP_STREAM_LITTLEFS: LittleFS filesystem
+ *   - TAMP_STREAM_FATFS   : FatFs (ChaN's FAT filesystem)
  ******************************************************************************/
 
 /* Memory buffer I/O */
-#if TAMP_MEMORY_STREAM
+#if TAMP_STREAM_MEMORY
 
 /**
  * @brief Reader state for memory buffer input.
@@ -210,10 +212,10 @@ int tamp_stream_mem_read(void *handle, unsigned char *buffer, size_t size);
  */
 int tamp_stream_mem_write(void *handle, const unsigned char *buffer, size_t size);
 
-#endif /* TAMP_MEMORY_STREAM */
+#endif /* TAMP_STREAM_MEMORY */
 
 /* POSIX / Standard C stdio (FILE*) */
-#if TAMP_STDIO_STREAM
+#if TAMP_STREAM_STDIO
 
 /**
  * @brief Read callback for stdio FILE*.
@@ -227,10 +229,10 @@ int tamp_stream_stdio_read(void *handle, unsigned char *buffer, size_t size);
  */
 int tamp_stream_stdio_write(void *handle, const unsigned char *buffer, size_t size);
 
-#endif /* TAMP_STDIO_STREAM */
+#endif /* TAMP_STREAM_STDIO */
 
 /* LittleFS */
-#if TAMP_LITTLEFS_STREAM
+#if TAMP_STREAM_LITTLEFS
 
 #include "lfs.h"
 
@@ -256,10 +258,10 @@ int tamp_stream_lfs_read(void *handle, unsigned char *buffer, size_t size);
  */
 int tamp_stream_lfs_write(void *handle, const unsigned char *buffer, size_t size);
 
-#endif /* TAMP_LITTLEFS_STREAM */
+#endif /* TAMP_STREAM_LITTLEFS */
 
 /* FatFs (ChaN's FAT Filesystem) */
-#if TAMP_FATFS_STREAM
+#if TAMP_STREAM_FATFS
 
 #include "ff.h"
 
@@ -275,7 +277,7 @@ int tamp_stream_fatfs_read(void *handle, unsigned char *buffer, size_t size);
  */
 int tamp_stream_fatfs_write(void *handle, const unsigned char *buffer, size_t size);
 
-#endif /* TAMP_FATFS_STREAM */
+#endif /* TAMP_STREAM_FATFS */
 
 /**
  * @brief Pre-populate a window buffer with common characters.

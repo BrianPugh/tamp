@@ -1,14 +1,14 @@
 #include "common.h"
 
-#if TAMP_STREAM && TAMP_WORK_BUFFER_SIZE < 4
-#error "TAMP_WORK_BUFFER_SIZE must be at least 4 bytes"
+#if TAMP_STREAM && TAMP_STREAM_WORK_BUFFER_SIZE < 4
+#error "TAMP_STREAM_WORK_BUFFER_SIZE must be at least 4 bytes"
 #endif
 
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
-#if TAMP_STDIO_STREAM
+#if TAMP_STREAM_STDIO
 #include <stdio.h>
 #endif
 
@@ -42,7 +42,7 @@ int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal) {
  * Built-in I/O handler implementations
  ******************************************************************************/
 
-#if TAMP_MEMORY_STREAM
+#if TAMP_STREAM_MEMORY
 
 int tamp_stream_mem_read(void *handle, unsigned char *buffer, size_t size) {
     TampMemReader *r = (TampMemReader *)handle;
@@ -64,9 +64,9 @@ int tamp_stream_mem_write(void *handle, const unsigned char *buffer, size_t size
     return (int)size;
 }
 
-#endif /* TAMP_MEMORY_STREAM */
+#endif /* TAMP_STREAM_MEMORY */
 
-#if TAMP_STDIO_STREAM
+#if TAMP_STREAM_STDIO
 
 int tamp_stream_stdio_read(void *handle, unsigned char *buffer, size_t size) {
     FILE *f = (FILE *)handle;
@@ -82,9 +82,9 @@ int tamp_stream_stdio_write(void *handle, const unsigned char *buffer, size_t si
     return (int)bytes_written;
 }
 
-#endif /* TAMP_STDIO_STREAM */
+#endif /* TAMP_STREAM_STDIO */
 
-#if TAMP_LITTLEFS_STREAM
+#if TAMP_STREAM_LITTLEFS
 
 int tamp_stream_lfs_read(void *handle, unsigned char *buffer, size_t size) {
     TampLfsFile *f = (TampLfsFile *)handle;
@@ -98,9 +98,9 @@ int tamp_stream_lfs_write(void *handle, const unsigned char *buffer, size_t size
     return (int)result;
 }
 
-#endif /* TAMP_LITTLEFS_STREAM */
+#endif /* TAMP_STREAM_LITTLEFS */
 
-#if TAMP_FATFS_STREAM
+#if TAMP_STREAM_FATFS
 
 int tamp_stream_fatfs_read(void *handle, unsigned char *buffer, size_t size) {
     UINT bytes_read;
@@ -116,4 +116,4 @@ int tamp_stream_fatfs_write(void *handle, const unsigned char *buffer, size_t si
     return (int)bytes_written;
 }
 
-#endif /* TAMP_FATFS_STREAM */
+#endif /* TAMP_STREAM_FATFS */

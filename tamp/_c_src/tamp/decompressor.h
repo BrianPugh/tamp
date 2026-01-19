@@ -114,9 +114,9 @@ TAMP_ALWAYS_INLINE tamp_res tamp_decompressor_decompress(TampDecompressor *decom
  * and writes to an output destination using user-provided I/O callbacks.
  * Works with any I/O backend (stdio, littlefs, fatfs, UART, etc.).
  *
- * Uses an internal **stack-allocated** work buffer sized by TAMP_WORK_BUFFER_SIZE
+ * Uses an internal **stack-allocated** work buffer sized by TAMP_STREAM_WORK_BUFFER_SIZE
  * (default 32 bytes). For better decompression performance, increase this via
- * compiler flag: -DTAMP_WORK_BUFFER_SIZE=256
+ * compiler flag: -DTAMP_STREAM_WORK_BUFFER_SIZE=256
  *
  * Example with littlefs:
  * @code
@@ -156,7 +156,7 @@ TAMP_ALWAYS_INLINE tamp_res tamp_decompressor_decompress(TampDecompressor *decom
  *
  * @return TAMP_OK on success (stream fully decompressed), or an error code:
  *         - TAMP_READ_ERROR: read_cb returned a negative value
- *         - TAMP_WRITE_ERROR: write_cb returned a negative value or short write
+ *         - TAMP_WRITE_ERROR: write_cb returned a negative value or incomplete write
  *         - TAMP_OOB: Corrupt/malicious data attempted out-of-bounds access
  *         - Other tamp_res error codes from decompression
  */

@@ -289,8 +289,8 @@ tamp_res tamp_decompress_stream(TampDecompressor *decompressor, tamp_read_t read
     *input_consumed_size = 0;
     *output_written_size = 0;
 
-    unsigned char input_buffer[TAMP_WORK_BUFFER_SIZE / 2];
-    unsigned char output_buffer[TAMP_WORK_BUFFER_SIZE / 2];
+    unsigned char input_buffer[TAMP_STREAM_WORK_BUFFER_SIZE / 2];
+    unsigned char output_buffer[TAMP_STREAM_WORK_BUFFER_SIZE / 2];
     const size_t input_buffer_size = sizeof(input_buffer);
     const size_t output_buffer_size = sizeof(output_buffer);
 
