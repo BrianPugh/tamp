@@ -427,3 +427,72 @@ tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor *compressor, unsig
 
     return TAMP_OK;
 }
+
+#if TAMP_STREAM
+
+tamp_res tamp_compress_stream(TampCompressor *compressor, tamp_read_t read_cb, void *read_handle, tamp_write_t write_cb,
+                              void *write_handle, size_t *input_consumed_size, size_t *output_written_size,
+                              tamp_callback_t callback, void *user_data) {
+    size_t input_consumed_size_proxy, output_written_size_proxy;
+    if (!input_consumed_size) input_consumed_size = &input_consumed_size_proxy;
+    if (!output_written_size) output_written_size = &output_written_size_proxy;
+    *input_consumed_size = 0;
+    *output_written_size = 0;
+
+    unsigned char input_buffer[TAMP_WORK_BUFFER_SIZE / 2];
+    unsigned char output_buffer[TAMP_WORK_BUFFER_SIZE / 2];
+
+    // Main compression loop
+    while (1) {
+        int bytes_read = read_cb(read_handle, input_buffer, sizeof(input_buffer));
+        if (TAMP_UNLIKELY(bytes_read < 0)) return TAMP_READ_ERROR;
+        if (bytes_read == 0) break;
+
+        *input_consumed_size += bytes_read;
+
+        size_t input_pos = 0;
+        while (input_pos < (size_t)bytes_read) {
+            size_t chunk_consumed, chunk_written;
+
+            tamp_res res = tamp_compressor_compress(compressor, output_buffer, sizeof(output_buffer), &chunk_written,
+                                                    input_buffer + input_pos, bytes_read - input_pos, &chunk_consumed);
+            if (TAMP_UNLIKELY(res < TAMP_OK)) return res;
+
+            input_pos += chunk_consumed;
+
+            if (TAMP_LIKELY(chunk_written > 0)) {
+                int bytes_written = write_cb(write_handle, output_buffer, chunk_written);
+                if (TAMP_UNLIKELY(bytes_written < 0 || (size_t)bytes_written != chunk_written)) {
+                    return TAMP_WRITE_ERROR;
+                }
+                *output_written_size += chunk_written;
+            }
+        }
+
+        if (TAMP_UNLIKELY(callback)) {
+            int cb_res = callback(user_data, *input_consumed_size, 0);
+            if (TAMP_UNLIKELY(cb_res)) return (tamp_res)cb_res;
+        }
+    }
+
+    // Flush remaining data
+    while (1) {
+        size_t chunk_written;
+        tamp_res res = tamp_compressor_flush(compressor, output_buffer, sizeof(output_buffer), &chunk_written, false);
+        if (TAMP_UNLIKELY(res < TAMP_OK)) return res;
+
+        if (TAMP_LIKELY(chunk_written > 0)) {
+            int bytes_written = write_cb(write_handle, output_buffer, chunk_written);
+            if (TAMP_UNLIKELY(bytes_written < 0 || (size_t)bytes_written != chunk_written)) {
+                return TAMP_WRITE_ERROR;
+            }
+            *output_written_size += chunk_written;
+        }
+
+        if (res == TAMP_OK) break;
+    }
+
+    return TAMP_OK;
+}
+
+#endif /* TAMP_STREAM */
