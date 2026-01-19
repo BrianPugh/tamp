@@ -20,8 +20,11 @@ EMCC = emcc
 SRCDIR = ../tamp/_c_src/tamp
 OUTDIR = dist
 
-# Source files
+# Source files (core library)
 SOURCES = $(SRCDIR)/common.c $(SRCDIR)/compressor.c $(SRCDIR)/decompressor.c
+
+# WASM-only source files (sizeof functions for JS interop)
+WASM_SOURCES = src/sizeof.c
 
 # Output files
 WASM_OUT = $(OUTDIR)/tamp-module.js
@@ -32,7 +35,7 @@ EMCC_FLAGS = -O3 \
 	--no-entry \
 	-s WASM=1 \
 	-s ALLOW_MEMORY_GROWTH=1 \
-	-s EXPORTED_FUNCTIONS='["_malloc", "_free", "_tamp_compressor_init", "_tamp_compressor_flush", "_tamp_compressor_sink", "_tamp_compressor_poll", "_tamp_compressor_full", "_tamp_decompressor_init", "_tamp_decompressor_decompress_cb", "_tamp_decompressor_read_header", "_tamp_compute_min_pattern_size", "_tamp_initialize_dictionary"]' \
+	-s EXPORTED_FUNCTIONS='["_malloc", "_free", "_tamp_compressor_init", "_tamp_compressor_flush", "_tamp_compressor_sink", "_tamp_compressor_poll", "_tamp_compressor_full", "_tamp_compressor_sizeof", "_tamp_decompressor_init", "_tamp_decompressor_decompress_cb", "_tamp_decompressor_read_header", "_tamp_decompressor_sizeof", "_tamp_compute_min_pattern_size", "_tamp_initialize_dictionary", "_tamp_conf_sizeof"]' \
 	-s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "getValue", "setValue", "UTF8ToString", "stringToUTF8", "addFunction", "removeFunction"]' \
 	-s MODULARIZE=1 \
 	-s EXPORT_NAME="TampModule" \
@@ -59,11 +62,11 @@ debug: all
 $(OUTDIR):
 	mkdir -p $(OUTDIR)
 
-$(WASM_OUT): $(SOURCES) | $(OUTDIR)
-	$(EMCC) $(EMCC_FLAGS) $(SOURCES) -o $@
+$(WASM_OUT): $(SOURCES) $(WASM_SOURCES) | $(OUTDIR)
+	$(EMCC) $(EMCC_FLAGS) $(SOURCES) $(WASM_SOURCES) -o $@
 
-$(MODULE_OUT): $(SOURCES) | $(OUTDIR)
-	$(EMCC) $(EMCC_FLAGS) -s EXPORT_ES6=1 $(SOURCES) -o $@
+$(MODULE_OUT): $(SOURCES) $(WASM_SOURCES) | $(OUTDIR)
+	$(EMCC) $(EMCC_FLAGS) -s EXPORT_ES6=1 $(SOURCES) $(WASM_SOURCES) -o $@
 
 clean:
 	rm -rf $(OUTDIR)
@@ -75,6 +78,6 @@ install-deps:
 	@echo "source ./emsdk_env.sh"
 
 test: all
-	node test.js
+	npm test
 
 .SECONDARY:

@@ -47,17 +47,34 @@ class DecompressionError extends TampError {
 class WasmModuleManager {
   #module = null;
   #initPromise = null;
+  #structSizes = null;
 
   async initialize() {
     if (!this.#initPromise) {
-      this.#initPromise = TampModule();
+      this.#initPromise = this.#doInitialize();
     }
-    this.#module = await this.#initPromise;
+    return await this.#initPromise;
+  }
+
+  async #doInitialize() {
+    this.#module = await TampModule();
+
+    // Query struct sizes from C code once at initialization
+    this.#structSizes = {
+      compressor: this.#module.ccall('tamp_compressor_sizeof', 'number', [], []),
+      decompressor: this.#module.ccall('tamp_decompressor_sizeof', 'number', [], []),
+      conf: this.#module.ccall('tamp_conf_sizeof', 'number', [], []),
+    };
+
     return this.#module;
   }
 
   get module() {
     return this.#module;
+  }
+
+  get structSizes() {
+    return this.#structSizes;
   }
 
   get isInitialized() {
@@ -108,6 +125,15 @@ export class TampCompressor {
       lazy_matching: false,
       ...options,
     };
+
+    // Validate window and literal ranges
+    if (this.options.window < 8 || this.options.window > 15) {
+      throw new RangeError(`window must be between 8 and 15, got ${this.options.window}`);
+    }
+    if (this.options.literal < 5 || this.options.literal > 8) {
+      throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
+    }
+
     this.initialized = false;
     this.compressorPtr = null;
     this.windowPtr = null;
@@ -128,15 +154,17 @@ export class TampCompressor {
     this.module = await initializeWasm();
     const windowSize = 1 << this.options.window;
 
+    const { compressor: compressorStructSize, conf: confStructSize } = wasmManager.structSizes;
+
     // Allocate memory for compressor struct, config struct, and window buffer in single allocation
-    const totalSize = 64 + 4 + windowSize; // TampCompressor struct + config struct + window buffer
+    const totalSize = compressorStructSize + confStructSize + windowSize;
     this.compressorPtr = this.module._malloc(totalSize);
     if (this.compressorPtr === 0) {
       throw new RangeError(`Failed to allocate memory for compressor (${totalSize} bytes)`);
     }
 
-    const confPtr = this.compressorPtr + 64;
-    this.windowPtr = confPtr + 4;
+    const confPtr = this.compressorPtr + compressorStructSize;
+    this.windowPtr = confPtr + confStructSize;
 
     // Initialize dictionary
     if (this.options.dictionary) {
@@ -453,6 +481,15 @@ export class TampDecompressor {
       lazy_matching: false,
       ...options,
     };
+
+    // Validate window and literal ranges (if provided, these are used for dictionary matching)
+    if (this.options.window < 8 || this.options.window > 15) {
+      throw new RangeError(`window must be between 8 and 15, got ${this.options.window}`);
+    }
+    if (this.options.literal < 5 || this.options.literal > 8) {
+      throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
+    }
+
     this.initialized = false;
     this.decompressorPtr = null;
     this.windowPtr = null;
@@ -480,15 +517,17 @@ export class TampDecompressor {
 
     this.module = await initializeWasm();
 
-    // Allocate memory for header processing: conf(16) + inputConsumed(4) + headerInput(1) = 21 bytes
-    const initialSize = 16 + 4 + 1;
+    const { conf: confStructSize } = wasmManager.structSizes;
+
+    // Allocate memory for header processing: conf + inputConsumed(4) + headerInput(1)
+    const initialSize = confStructSize + 4 + 1;
     this.initialPtr = this.module._malloc(initialSize);
     if (this.initialPtr === 0) {
       throw new RangeError(`Failed to allocate initial memory (${initialSize} bytes)`);
     }
 
     this.confPtr = this.initialPtr;
-    this.inputConsumedPtr = this.initialPtr + 16;
+    this.inputConsumedPtr = this.initialPtr + confStructSize;
     this.headerInputPtr = this.inputConsumedPtr + 4;
 
     this.initialized = true;
@@ -536,15 +575,16 @@ export class TampDecompressor {
 
     // Use header-derived configuration for window size
     const windowSize = 1 << headerWindow;
+    const { decompressor: decompressorStructSize } = wasmManager.structSizes;
 
     // Allocate memory for decompressor struct and window buffer in single allocation
-    const decompressorTotalSize = 32 + windowSize; // TampDecompressor struct + window buffer
-    this.decompressorPtr = this.module._malloc(decompressorTotalSize);
+    const totalSize = decompressorStructSize + windowSize;
+    this.decompressorPtr = this.module._malloc(totalSize);
     if (this.decompressorPtr === 0) {
-      throw new RangeError(`Failed to allocate memory for decompressor (${decompressorTotalSize} bytes)`);
+      throw new RangeError(`Failed to allocate memory for decompressor (${totalSize} bytes)`);
     }
 
-    this.windowPtr = this.decompressorPtr + 32; // Window buffer starts after struct
+    this.windowPtr = this.decompressorPtr + decompressorStructSize;
 
     // Initialize dictionary based on header information
     if (headerUsesCustomDict) {
@@ -587,10 +627,26 @@ export class TampDecompressor {
   /**
    * Decompress data in incremental chunks.
    * @param {Uint8Array} input - Compressed input data
+   * @param {Object} [options] - Options object
+   * @param {AbortSignal} [options.signal] - AbortSignal for cancellation
    * @returns {Promise<Uint8Array>} - Decompressed output
    */
-  async decompress(input) {
+  async decompress(input, options = {}) {
     await this.initialize();
+
+    const { signal } = options;
+
+    // Check for cancellation
+    const checkAborted = () => {
+      if (signal?.aborted) {
+        throw new DecompressionError('Decompression was aborted', {
+          aborted: true,
+          reason: signal.reason,
+        });
+      }
+    };
+
+    checkAborted(); // Check before starting
 
     // Combine any pending input with new input
     const combinedInput = new Uint8Array(this.pendingInput.length + input.length);
@@ -646,6 +702,7 @@ export class TampDecompressor {
 
       // Process data incrementally
       while (payloadSize > 0) {
+        checkAborted(); // Check for cancellation at each iteration
         const result = this.module.ccall(
           'tamp_decompressor_decompress_cb',
           'number',

@@ -140,6 +140,14 @@ export class TampCompressor {
 }
 
 /**
+ * Options for decompression operations that support cancellation
+ */
+export interface TampDecompressOptions {
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal;
+}
+
+/**
  * Tamp Decompressor class for streaming decompression
  */
 export class TampDecompressor {
@@ -152,11 +160,12 @@ export class TampDecompressor {
   /**
    * Decompress a chunk of data
    * @param input - Compressed input data
+   * @param options - Decompression options (e.g., AbortSignal for cancellation)
    * @returns Promise resolving to decompressed data
    * @throws {RangeError} When compressed data contains out-of-bounds references
-   * @throws {DecompressionError} When decompression fails
+   * @throws {DecompressionError} When decompression fails or is aborted
    */
-  decompress(input: Uint8Array): Promise<Uint8Array>;
+  decompress(input: Uint8Array, options?: TampDecompressOptions): Promise<Uint8Array>;
 
   /**
    * Clean up allocated memory. Should be called when done with the decompressor.
