@@ -277,3 +277,63 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
     }
     return TAMP_INPUT_EXHAUSTED;
 }
+
+#if TAMP_STREAM
+
+tamp_res tamp_decompress_stream(TampDecompressor *decompressor, tamp_read_t read_cb, void *read_handle,
+                                tamp_write_t write_cb, void *write_handle, size_t *input_consumed_size,
+                                size_t *output_written_size, tamp_callback_t callback, void *user_data) {
+    size_t input_consumed_size_proxy, output_written_size_proxy;
+    if (!input_consumed_size) input_consumed_size = &input_consumed_size_proxy;
+    if (!output_written_size) output_written_size = &output_written_size_proxy;
+    *input_consumed_size = 0;
+    *output_written_size = 0;
+
+    unsigned char input_buffer[TAMP_WORK_BUFFER_SIZE / 2];
+    unsigned char output_buffer[TAMP_WORK_BUFFER_SIZE / 2];
+    const size_t input_buffer_size = sizeof(input_buffer);
+    const size_t output_buffer_size = sizeof(output_buffer);
+
+    size_t input_pos = 0;
+    size_t input_available = 0;
+    bool eof_reached = false;
+
+    while (1) {
+        if (input_available == 0 && !eof_reached) {
+            int bytes_read = read_cb(read_handle, input_buffer, input_buffer_size);
+            if (TAMP_UNLIKELY(bytes_read < 0)) return TAMP_READ_ERROR;
+            eof_reached = (bytes_read == 0);
+            input_pos = 0;
+            input_available = bytes_read;
+            *input_consumed_size += bytes_read;
+        }
+
+        size_t chunk_consumed, chunk_written;
+
+        tamp_res res = tamp_decompressor_decompress(decompressor, output_buffer, output_buffer_size, &chunk_written,
+                                                    input_buffer + input_pos, input_available, &chunk_consumed);
+        if (TAMP_UNLIKELY(res < TAMP_OK)) return res;
+
+        input_pos += chunk_consumed;
+        input_available -= chunk_consumed;
+
+        if (TAMP_LIKELY(chunk_written > 0)) {
+            int bytes_written = write_cb(write_handle, output_buffer, chunk_written);
+            if (TAMP_UNLIKELY(bytes_written < 0 || (size_t)bytes_written != chunk_written)) {
+                return TAMP_WRITE_ERROR;
+            }
+            *output_written_size += chunk_written;
+        }
+
+        if (TAMP_UNLIKELY(res == TAMP_INPUT_EXHAUSTED && eof_reached)) break;
+
+        if (TAMP_UNLIKELY(callback)) {
+            int cb_res = callback(user_data, *output_written_size, 0);
+            if (TAMP_UNLIKELY(cb_res)) return (tamp_res)cb_res;
+        }
+    }
+
+    return TAMP_OK;
+}
+
+#endif /* TAMP_STREAM */
