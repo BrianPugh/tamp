@@ -3,9 +3,23 @@ name: Build Wheels
 on:
   workflow_dispatch:
   pull_request:
+    paths:
+      - 'tamp/**'
+      - 'pyproject.toml'
+      - 'build.py'
+      - '.github/workflows/build_wheels.yaml'
   push:
     tags:
       - 'v*.*.*'
+    paths:
+      - 'tamp/**'
+      - 'pyproject.toml'
+      - 'build.py'
+      - '.github/workflows/build_wheels.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build_sdist:

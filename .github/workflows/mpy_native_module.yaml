@@ -7,17 +7,31 @@ on:
       - 'v*.*.*'
     branches:
       - main
+    paths:
+      - 'mpy_bindings/**'
+      - 'tamp/_c_src/**'
+      - 'Makefile'
+      - '.github/workflows/mpy_native_module.yaml'
   pull_request:
+    paths:
+      - 'mpy_bindings/**'
+      - 'tamp/_c_src/**'
+      - 'Makefile'
+      - '.github/workflows/mpy_native_module.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    # explicitly setting due to iffy GA rollout.
-    # TODO: Revert to `ubuntu-latest` at a future date.
+    name: 'MPY ${{ matrix.micropython_version }} ${{ matrix.ARCH }}'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        micropython_version: ['1.21.0', '1.22.2', '1.23.0', '1.24.1', '1.25.0']
+        # On PRs, test oldest and newest MPY versions; on main/tags, test all versions
+        micropython_version: ${{ github.event_name == 'pull_request' && fromJSON('["1.21.0", "1.25.0"]') || fromJSON('["1.21.0", "1.22.2", "1.23.0", "1.24.1", "1.25.0"]') }}
         ARCH:
           - 'x86'
           - 'x64'
@@ -132,7 +146,7 @@ jobs:
         id: cached-poetry
         with:
           path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ env.PYTHON }}-${{ hashFiles('.github/workflows/tests.yaml') }}
+          key: poetry-cache-${{ runner.os }}-${{ hashFiles('.github/workflows/mpy_native_module.yaml') }}
 
       - name: Install poetry
         uses: snok/install-poetry@v1

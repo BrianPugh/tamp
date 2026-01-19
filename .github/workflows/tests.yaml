@@ -13,46 +13,109 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - 'wasm/**'
+      - 'website/**'
   pull_request:
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - 'wasm/**'
+      - 'website/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    timeout-minutes: 45
-    defaults:
-      run:
-        shell: bash
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+  lint:
+    name: 'Lint & Pre-commit'
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
     env:
-      OS: ${{ matrix.os }}
-      PYTHON: ${{ matrix.python-version }}
       POETRY_HOME: '~/poetry'
 
     steps:
-      - name: Set OS Environment Variables (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo 'ACTIVATE_PYTHON_VENV=.venv/scripts/activate' >> $GITHUB_ENV
-
-      - name: Set OS Environment Variables (not Windows)
-        if: runner.os != 'Windows'
-        run: |
-          echo 'ACTIVATE_PYTHON_VENV=.venv/bin/activate' >> $GITHUB_ENV
-
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Set up python 3.13
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Cache Poetry Install
+        uses: actions/cache@v4
+        id: cached-poetry
+        with:
+          path: ${{ env.POETRY_HOME }}
+          key: poetry-cache-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
+
+      - name: Install poetry
+        uses: snok/install-poetry@v1
+        if: steps.cached-poetry.outputs.cache-hit != 'true'
+        with:
+          version: 1.8.5
+
+      - name: Add Poetry to PATH
+        run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
+
+      - name: Configure Poetry
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+
+      - name: Cache venv
+        uses: actions/cache@v4
+        id: cached-venv
+        with:
+          path: .venv/
+          key: venv-lint-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install library
+        run: poetry install --no-interaction
+
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit/
+          key: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: Pre-commit run
+        run: |
+          source .venv/bin/activate
+          SKIP=wasm-eslint,wasm-npm-test,wasm-file-validation,typescript-check,package-json-lint pre-commit run --show-diff-on-failure --color=always --all-files
+
+  test:
+    name: 'Test Python ${{ matrix.python-version }}'
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+    env:
+      POETRY_HOME: '~/poetry'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up python 3.13 (for Poetry)
         id: setup-python-system
         uses: actions/setup-python@v5
         with:
-          python-version: 3.13
+          python-version: '3.13'
 
       - name: Cache Poetry Install
         uses: actions/cache@v4
@@ -67,15 +130,13 @@ jobs:
         with:
           version: 1.8.5
 
-      - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
-        run: |
-          echo "$POETRY_HOME/bin" >> $GITHUB_PATH
+      - name: Add Poetry to PATH
+        run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
 
-      - name: Configure Poetry # Needs to be separate from install-poetry because cache.
+      - name: Configure Poetry
         run: |
           poetry config virtualenvs.create true
           poetry config virtualenvs.in-project true
-          poetry config installer.parallel ${{ runner.os != 'Windows' }} # Currently there seems to be some race-condition in windows
 
       - name: Set up python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -88,7 +149,7 @@ jobs:
         id: cached-venv
         with:
           path: .venv/
-          key: venv-cache-${{ runner.os }}-${{ steps.setup-python-project.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
+          key: venv-test-${{ runner.os }}-${{ steps.setup-python-project.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
 
       - name: Install MicroPython
         uses: BrianPugh/install-micropython@v2
@@ -99,15 +160,8 @@ jobs:
         run: |
           poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
           TAMP_SANITIZE=1 poetry install --no-interaction
-          # Set ASAN options globally (won't affect non-ASAN binaries)
           echo "ASAN_OPTIONS=detect_leaks=0" >> $GITHUB_ENV
           echo "UBSAN_OPTIONS=print_stacktrace=1" >> $GITHUB_ENV
-
-      - name: Cache pre-commit
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pre-commit/
-          key: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Cache enwik8 dataset
         uses: actions/cache@v4
@@ -118,17 +172,9 @@ jobs:
       - name: Download enwik8 dataset
         run: make download-enwik8
 
-      - name: Install cppcheck
-        run: sudo apt-get update && sudo apt-get install -y cppcheck
-
-      - name: Pre-commit run
-        run: |
-          source ${{ env.ACTIVATE_PYTHON_VENV }}
-          SKIP=wasm-eslint,wasm-npm-test,wasm-file-validation,typescript-check,package-json-lint pre-commit run --show-diff-on-failure --color=always --all-files
-
       - name: Run tests with sanitizers
         run: |
-          source ${{ env.ACTIVATE_PYTHON_VENV }}
+          source .venv/bin/activate
           LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
           belay run micropython -X heapsize=200M -m unittest tests/*.py
           coverage report
@@ -138,10 +184,8 @@ jobs:
 
       - name: Verify CLI compression/decompression integrity
         run: |
-          source ${{ env.ACTIVATE_PYTHON_VENV }}
-          make download-enwik8
+          source .venv/bin/activate
           original_hash=$(sha256sum datasets/enwik8 | cut -d' ' -f1)
-          # Use LD_PRELOAD for ASAN when running the CLI commands
           LIBASAN_PATH=$(gcc -print-file-name=libasan.so)
           roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
           if [ "$original_hash" = "$roundtrip_hash" ]; then
@@ -156,18 +200,15 @@ jobs:
           fi
 
       - name: Upload coverage to Codecov
-        if: steps.check_test_files.outputs.files_exists == 'true'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: unittests
-          env_vars: OS,PYTHON
-          name: Python ${{ matrix.python-version }} on ${{ runner.os }}
+          env_vars: PYTHON
+          name: Python ${{ matrix.python-version }}
 
-      #----------------------------------------------
-      #            make sure docs build
-      #----------------------------------------------
       - name: Build HTML docs
+        if: matrix.python-version == '3.13'
         run: |
-          source ${{ env.ACTIVATE_PYTHON_VENV }}
+          source .venv/bin/activate
           LD_PRELOAD=$(gcc -print-file-name=libasan.so) sphinx-build -b html docs/source/ docs/build/html
