@@ -197,9 +197,6 @@ export class TampCompressor {
     const progressCallback = options.onPoll;
     await this.initialize();
 
-    console.log(`Starting compression of ${input.length} bytes...`);
-    const compressionStartTime = performance.now();
-
     const CHUNK_SIZE = 1 << 20;
     const outputChunks = [];
 
@@ -382,14 +379,6 @@ export class TampCompressor {
         result.set(chunk, offset);
         offset += chunk.length;
       }
-
-      const compressionEndTime = performance.now();
-      const compressionTime = compressionEndTime - compressionStartTime;
-      console.log(
-        `Compression completed in ${compressionTime.toFixed(2)}ms. Compressed ${
-          input.length
-        } bytes to ${totalSize} bytes (${((1 - totalSize / input.length) * 100).toFixed(1)}% reduction)`
-      );
 
       return result;
     } finally {
