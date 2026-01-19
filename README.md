@@ -331,7 +331,7 @@ on an M3 Macbook Air.
 |                              | Compression (s) | Decompression (s) |
 | ---------------------------- | --------------- | ----------------- |
 | Tamp (Pure Python Reference) | 136.2           | 105.0             |
-| Tamp (C bindings)            | 12.48           | 0.544             |
+| Tamp (C bindings)            | 5.56            | 0.544             |
 | ZLib                         | 3.65            | 0.578             |
 | Heatshrink (with index)      | 4.42            | 0.67              |
 | Heatshrink (without index)   | 27.40           | 0.67              |
@@ -351,9 +351,9 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 25,329                | 1,063,830               |
-| Tamp (C)                         | 28,500                | 1,401,050               |
-| Deflate (micropython builtin)    | 6,715                 | 146,477                 |
+| Tamp (Micropython Native Module) | 31,192                | 1,086,957               |
+| Tamp (C)                         | 36,127                | 1,400,600               |
+| Deflate (micropython builtin)    | 6,885                 | 294,985                 |
 
 Tamp resulted in a **51637** byte archive, while Micropython's builtin `deflate`
 resulted in a larger, **59442** byte archive.
