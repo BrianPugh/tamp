@@ -331,7 +331,7 @@ on an M3 Macbook Air.
 |                              | Compression (s) | Decompression (s) |
 | ---------------------------- | --------------- | ----------------- |
 | Tamp (Pure Python Reference) | 136.2           | 105.0             |
-| Tamp (C bindings)            | 12.48           | 0.544             |
+| Tamp (C bindings)            | 5.40            | 0.544             |
 | ZLib                         | 3.65            | 0.578             |
 | Heatshrink (with index)      | 4.42            | 0.67              |
 | Heatshrink (without index)   | 27.40           | 0.67              |
@@ -351,8 +351,8 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 25,329                | 1,020,408               |
-| Tamp (C)                         | 28,500                | 1,145,488               |
+| Tamp (Micropython Native Module) | 31,192                | 1,020,408               |
+| Tamp (C)                         | 36,127                | 1,359,600               |
 | Deflate (micropython builtin)    | 6,715                 | 146,477                 |
 
 Tamp resulted in a **51637** byte archive, while Micropython's builtin `deflate`
@@ -368,8 +368,8 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 |                           | Compressor | Decompressor | Compressor + Decompressor |
 | ------------------------- | ---------- | ------------ | ------------------------- |
 | Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
-| Tamp (MicroPython Native) | 3896       | 3559         | 6616                      |
-| Tamp (C)                  | 2056       | 2040         | 3976                      |
+| Tamp (MicroPython Native) | 3856       | 3559         | 6576                      |
+| Tamp (C)                  | 2028       | 2040         | 3948                      |
 | Heatshrink (C)            | 2956       | 3876         | 6832                      |
 | uzlib (C)                 | 2355       | 3963         | 6318                      |
 
