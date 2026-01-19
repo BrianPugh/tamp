@@ -6,6 +6,7 @@ help:
 	@echo "Common targets:"
 	@echo "  make test              Run Python and MicroPython tests"
 	@echo "  make c-test            Run C unit tests"
+	@echo "  make c-test-embedded   Run C unit tests with embedded find_best_match"
 	@echo "  make clean             Clean all build artifacts"
 	@echo ""
 	@echo "MicroPython native module:"
@@ -339,8 +340,36 @@ c-test: build/test_runner
 
 clean-c-test:
 	@rm -f build/test_runner
+	@rm -f build/test_runner_embedded
 	@rm -f build/ctests/*.o
+	@rm -f build/ctests-embedded/*.o
 	@rm -f build/unity/*.o
+
+# Embedded implementation tests (forces embedded find_best_match on desktop)
+.PHONY: c-test-embedded
+
+CTEST_EMBEDDED_TAMP_OBJS = \
+	build/ctests-embedded/common.o \
+	build/ctests-embedded/compressor.o \
+	build/ctests-embedded/decompressor.o
+
+CTEST_EMBEDDED_TEST_OBJS = \
+	build/unity/unity.o \
+	build/ctests-embedded/test_runner.o
+
+build/ctests-embedded/%.o: tamp/_c_src/tamp/%.c
+	@mkdir -p build/ctests-embedded
+	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
+
+build/ctests-embedded/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
+	@mkdir -p build/ctests-embedded
+	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
+
+build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OBJS)
+	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
+
+c-test-embedded: build/test_runner_embedded
+	./build/test_runner_embedded
 
 
 #############

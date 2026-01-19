@@ -52,17 +52,20 @@ inline bool tamp_compressor_full(const TampCompressor *compressor) {
  * 1. TAMP_ESP32: External implementation in espidf/tamp/compressor_esp32.cpp
  *
  * 2. Desktop 64-bit (x86_64, aarch64, Windows 64-bit):
- *    Included from compressor_find_match_desktop.inc - uses bit manipulation
+ *    Included from compressor_find_match_desktop.c - uses bit manipulation
  *    and 64-bit loads for parallel match detection
  *
  * 3. Embedded/Default (Cortex-M0/M0+, other 32-bit):
  *    Defined below - single-byte-first comparison, safe for all architectures
+ *
+ * Set TAMP_USE_EMBEDDED_MATCH=1 to force the embedded implementation on desktop
+ * (useful for testing the embedded code path on CI).
  */
 
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size);
 
-#elif defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)
+#elif (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)) && !TAMP_USE_EMBEDDED_MATCH
 #include "compressor_find_match_desktop.c"
 
 #else

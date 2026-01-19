@@ -264,18 +264,55 @@ jobs:
       - name: Download enwik8 dataset
         run: make download-enwik8
 
-      - name: Verify CLI compression/decompression integrity
+      - name: Verify CLI compression/decompression integrity (desktop implementation)
         run: |
           source .venv/bin/activate
           original_hash=$(sha256sum datasets/enwik8 | cut -d' ' -f1)
           LIBASAN_PATH=$(gcc -print-file-name=libasan.so)
+
+          # Save compressed output hash for comparison with embedded implementation
+          desktop_compressed_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 | sha256sum | cut -d' ' -f1)
+          echo "desktop_compressed_hash=$desktop_compressed_hash" >> $GITHUB_ENV
+          echo "Desktop compressed hash: $desktop_compressed_hash"
+
           roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
           if [ "$original_hash" = "$roundtrip_hash" ]; then
-            echo "✓ Compression/decompression integrity verified"
+            echo "✓ Desktop: Compression/decompression integrity verified"
+          else
+            echo "✗ Desktop: Compression/decompression integrity check failed"
             echo "Original hash: $original_hash"
             echo "Roundtrip hash: $roundtrip_hash"
+            exit 1
+          fi
+
+      - name: Rebuild with embedded find_best_match implementation
+        run: |
+          rm -rf .venv/
+          TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 poetry install --no-interaction
+
+      - name: Verify CLI compression/decompression integrity (embedded implementation)
+        run: |
+          source .venv/bin/activate
+          original_hash=$(sha256sum datasets/enwik8 | cut -d' ' -f1)
+          LIBASAN_PATH=$(gcc -print-file-name=libasan.so)
+
+          # Verify compressed output matches desktop implementation
+          embedded_compressed_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 | sha256sum | cut -d' ' -f1)
+          echo "Embedded compressed hash: $embedded_compressed_hash"
+          if [ "${{ env.desktop_compressed_hash }}" = "$embedded_compressed_hash" ]; then
+            echo "✓ Embedded implementation produces identical compressed output"
           else
-            echo "✗ Compression/decompression integrity check failed"
+            echo "✗ Embedded implementation produces different compressed output!"
+            echo "Desktop hash: ${{ env.desktop_compressed_hash }}"
+            echo "Embedded hash: $embedded_compressed_hash"
+            exit 1
+          fi
+
+          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
+          if [ "$original_hash" = "$roundtrip_hash" ]; then
+            echo "✓ Embedded: Compression/decompression integrity verified"
+          else
+            echo "✗ Embedded: Compression/decompression integrity check failed"
             echo "Original hash: $original_hash"
             echo "Roundtrip hash: $roundtrip_hash"
             exit 1
