@@ -4,29 +4,39 @@ import '../css/styles.css';
 // Import assets to ensure they're bundled
 import logoSvg from '../../assets/logo-compressed.svg';
 
-// Set the logo source after DOM loads
-document.addEventListener('DOMContentLoaded', () => {
-  const logoImg = document.querySelector('img[alt="Tamp Logo"]');
-  if (logoImg) {
-    logoImg.src = logoSvg;
-  }
-
-  // Show a loading indicator until WASM is ready
-  const actionBtn = document.getElementById('actionBtn');
-  if (actionBtn && !wasmInitialized) {
-    actionBtn.textContent = 'Loading...';
-    actionBtn.disabled = true;
-  }
-});
-
 // Import Tamp module
-import { compress, decompress, TampError, initialize, initializeDictionary } from '../../wasm/dist/index.mjs';
+import { compress, decompress, initialize, initializeDictionary } from '../../wasm/dist/index.mjs';
 
 // Global state
 let currentOperation = 'compress';
 let selectedFiles = [];
 let processedData = null;
 let wasmInitialized = false;
+
+// DOM elements (initialized in DOMContentLoaded)
+let dropZone,
+  fileInput,
+  fileInfo,
+  actionBtn,
+  loading,
+  results,
+  compressionOptions,
+  textMode,
+  windowBitsSelect,
+  lazyMatchingCheckbox,
+  textWindowBitsSelect,
+  textLazyMatchingCheckbox,
+  plainTextArea,
+  compressedTextArea,
+  textStats,
+  textStatsTitle,
+  textStatsContent,
+  progressBarFill,
+  progressText,
+  customDictionaryTextArea,
+  dictionaryError,
+  toggleDictionaryBtn,
+  customDictionarySection;
 
 // Initialize WASM module eagerly on page load
 let wasmInitPromise = null;
@@ -37,15 +47,13 @@ async function initializeWasm() {
     .then(() => {
       wasmInitialized = true;
       // Update UI when WASM is ready
-      const actionBtn = document.getElementById('actionBtn');
       if (actionBtn && actionBtn.textContent === 'Loading...') {
         actionBtn.textContent = currentOperation === 'compress' ? 'Compress' : 'Decompress';
         actionBtn.disabled = false;
       }
     })
-    .catch(error => {
+    .catch(() => {
       wasmInitialized = false;
-      const actionBtn = document.getElementById('actionBtn');
       if (actionBtn) {
         actionBtn.textContent = 'Error loading';
         actionBtn.disabled = true;
@@ -58,40 +66,112 @@ async function initializeWasm() {
 // Start preloading immediately
 initializeWasm();
 
-// Make functions available globally
-window.setOperation = setOperation;
-window.processFiles = processFiles;
-window.downloadResult = downloadResult;
-window.compressTextContent = compressTextContent;
-window.decompressTextContent = decompressTextContent;
-window.toggleCustomDictionary = toggleCustomDictionary;
+// Initialize DOM elements and event listeners after DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  // Set logo source
+  const logoImg = document.querySelector('img[alt="Tamp Logo"]');
+  if (logoImg) {
+    logoImg.src = logoSvg;
+  }
 
-// DOM elements
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const fileInfo = document.getElementById('fileInfo');
-const actionBtn = document.getElementById('actionBtn');
-const loading = document.getElementById('loading');
-const results = document.getElementById('results');
-const compressionOptions = document.getElementById('compressionOptions');
-const textMode = document.getElementById('textMode');
-const windowBitsSelect = document.getElementById('windowBits');
-const lazyMatchingCheckbox = document.getElementById('lazyMatching');
-const textWindowBitsSelect = document.getElementById('textWindowBits');
-const textLazyMatchingCheckbox = document.getElementById('textLazyMatching');
-const plainTextArea = document.getElementById('plainText');
-const compressedTextArea = document.getElementById('compressedText');
-const textStats = document.getElementById('textStats');
-const textStatsTitle = document.getElementById('textStatsTitle');
-const textStatsContent = document.getElementById('textStatsContent');
-const progressContainer = document.getElementById('progressContainer');
-const progressBar = document.getElementById('progressBar');
-const progressBarFill = document.getElementById('progressBarFill');
-const progressText = document.getElementById('progressText');
-const customDictionaryTextArea = document.getElementById('customDictionary');
-const dictionaryError = document.getElementById('dictionaryError');
-const toggleDictionaryBtn = document.getElementById('toggleDictionaryBtn');
-const customDictionarySection = document.getElementById('customDictionarySection');
+  // Query DOM elements
+  dropZone = document.getElementById('dropZone');
+  fileInput = document.getElementById('fileInput');
+  fileInfo = document.getElementById('fileInfo');
+  actionBtn = document.getElementById('actionBtn');
+  loading = document.getElementById('loading');
+  results = document.getElementById('results');
+  compressionOptions = document.getElementById('compressionOptions');
+  textMode = document.getElementById('textMode');
+  windowBitsSelect = document.getElementById('windowBits');
+  lazyMatchingCheckbox = document.getElementById('lazyMatching');
+  textWindowBitsSelect = document.getElementById('textWindowBits');
+  textLazyMatchingCheckbox = document.getElementById('textLazyMatching');
+  plainTextArea = document.getElementById('plainText');
+  compressedTextArea = document.getElementById('compressedText');
+  textStats = document.getElementById('textStats');
+  textStatsTitle = document.getElementById('textStatsTitle');
+  textStatsContent = document.getElementById('textStatsContent');
+  progressBarFill = document.getElementById('progressBarFill');
+  progressText = document.getElementById('progressText');
+  customDictionaryTextArea = document.getElementById('customDictionary');
+  dictionaryError = document.getElementById('dictionaryError');
+  toggleDictionaryBtn = document.getElementById('toggleDictionaryBtn');
+  customDictionarySection = document.getElementById('customDictionarySection');
+
+  // Show loading indicator until WASM is ready
+  if (actionBtn && !wasmInitialized) {
+    actionBtn.textContent = 'Loading...';
+    actionBtn.disabled = true;
+  }
+
+  // Add event listeners for toggle buttons
+  document.getElementById('compressToggle').addEventListener('click', () => setOperation('compress'));
+  document.getElementById('decompressToggle').addEventListener('click', () => setOperation('decompress'));
+  document.getElementById('textToggle').addEventListener('click', () => setOperation('text'));
+
+  // Add event listeners for action buttons
+  actionBtn.addEventListener('click', processFiles);
+  document.getElementById('downloadBtn').addEventListener('click', downloadResult);
+  document.getElementById('compressTextBtn').addEventListener('click', compressTextContent);
+  document.getElementById('decompressTextBtn').addEventListener('click', decompressTextContent);
+  toggleDictionaryBtn.addEventListener('click', toggleCustomDictionary);
+
+  // Drag and drop event handlers
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', e => {
+    e.preventDefault();
+    if (!dropZone.contains(e.relatedTarget)) {
+      dropZone.classList.remove('drag-over');
+    }
+  });
+
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    handleFileSelection(Array.from(e.dataTransfer.files));
+  });
+
+  // File input handler
+  fileInput.addEventListener('change', e => {
+    handleFileSelection(Array.from(e.target.files));
+  });
+
+  // Browse button handler
+  document.querySelector('.browse-btn').addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  // Dictionary validation on input change
+  customDictionaryTextArea.addEventListener('input', () => {
+    if (!customDictionarySection.classList.contains('hidden')) {
+      const windowBits = parseInt(textWindowBitsSelect.value);
+      const validation = validateCustomDictionary(customDictionaryTextArea.value, windowBits);
+      if (!validation.isValid) {
+        showDictionaryError(validation.error);
+      } else {
+        hideDictionaryError();
+      }
+    }
+  });
+
+  // Validate dictionary when window size changes
+  textWindowBitsSelect.addEventListener('change', () => {
+    if (!customDictionarySection.classList.contains('hidden')) {
+      const windowBits = parseInt(textWindowBitsSelect.value);
+      const validation = validateCustomDictionary(customDictionaryTextArea.value, windowBits);
+      if (!validation.isValid) {
+        showDictionaryError(validation.error);
+      } else {
+        hideDictionaryError();
+      }
+    }
+  });
+});
 
 function setOperation(operation) {
   currentOperation = operation;
@@ -375,80 +455,10 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-// Drag and drop event handlers
-dropZone.addEventListener('dragover', e => {
-  e.preventDefault();
-  dropZone.classList.add('drag-over');
-});
-
-dropZone.addEventListener('dragleave', e => {
-  e.preventDefault();
-  if (!dropZone.contains(e.relatedTarget)) {
-    dropZone.classList.remove('drag-over');
-  }
-});
-
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('drag-over');
-
-  const files = Array.from(e.dataTransfer.files);
-  handleFileSelection(files);
-});
-
-// File input handler
-fileInput.addEventListener('change', e => {
-  const files = Array.from(e.target.files);
-  handleFileSelection(files);
-});
-
-// Browse button handler
-const browseBtn = document.querySelector('.browse-btn');
-browseBtn.addEventListener('click', () => {
-  fileInput.click();
-});
-
 function handleFileSelection(files) {
-  if (currentOperation === 'decompress') {
-    // For decompression, allow any files (not just .tamp)
-    selectedFiles = files;
-  } else {
-    // For compression, allow all file types
-    selectedFiles = files;
-  }
-
+  selectedFiles = files;
   updateFileInfo();
 }
-
-// Add dictionary validation on input change
-customDictionaryTextArea.addEventListener('input', () => {
-  // Only validate if dictionary section is visible
-  if (!customDictionarySection.classList.contains('hidden')) {
-    const windowBits = parseInt(textWindowBitsSelect.value);
-    const dictionaryValidation = validateCustomDictionary(customDictionaryTextArea.value, windowBits);
-
-    if (!dictionaryValidation.isValid) {
-      showDictionaryError(dictionaryValidation.error);
-    } else {
-      hideDictionaryError();
-    }
-  }
-});
-
-// Also validate when window size changes
-textWindowBitsSelect.addEventListener('change', () => {
-  // Only validate if dictionary section is visible
-  if (!customDictionarySection.classList.contains('hidden')) {
-    const windowBits = parseInt(textWindowBitsSelect.value);
-    const dictionaryValidation = validateCustomDictionary(customDictionaryTextArea.value, windowBits);
-
-    if (!dictionaryValidation.isValid) {
-      showDictionaryError(dictionaryValidation.error);
-    } else {
-      hideDictionaryError();
-    }
-  }
-});
 
 function showTextStats(title, stats) {
   textStatsTitle.textContent = title;
@@ -695,7 +705,7 @@ async function decompressTextContent() {
       { label: 'Uncompressed Size', value: `${decompressed.length.toLocaleString()} bytes` },
       { label: 'Compressed Size', value: `${compressed.length.toLocaleString()} bytes` },
       { label: 'Compression Ratio', value: `${ratio}:1` },
-      { label: 'Space Saved', value: `${sizeChange}%` },
+      { label: 'Size Increase', value: `${sizeChange}%` },
       { label: 'Time', value: `${decompressionTime.toFixed(2)} ms` },
       { label: 'ASCII Optimized', value: isAscii ? 'Yes' : 'No' },
     ];
