@@ -173,10 +173,7 @@ export class TampCompressor {
       if (dictData.length !== windowSize) {
         throw new RangeError(`Dictionary size (${dictData.length}) must match window size (${windowSize})`);
       }
-      // Copy dictionary data byte by byte using setValue
-      for (let i = 0; i < dictData.length; i++) {
-        this.module.setValue(this.windowPtr + i, dictData[i], 'i8');
-      }
+      this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
       // Use default dictionary initialization
       this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
@@ -276,10 +273,8 @@ export class TampCompressor {
         checkAborted(); // Check for cancellation at start of each chunk
         const currentInputSize = Math.min(inputRemaining, CHUNK_SIZE);
 
-        // Copy current input chunk to WASM memory
-        for (let i = 0; i < currentInputSize; i++) {
-          this.module.setValue(inputPtr + i, input[inputOffset + i], 'i8');
-        }
+        // Copy input chunk to WASM memory
+        this.module.HEAPU8.set(input.subarray(inputOffset, inputOffset + currentInputSize), inputPtr);
 
         // Use lower-level API instead of tamp_compressor_compress_cb
         // This is a translation of the C implementation
@@ -381,12 +376,8 @@ export class TampCompressor {
         this.module.setValue(outputSizePtr, chunkOutputWritten, 'i32');
         this.module.setValue(inputConsumedPtr, chunkInputConsumed, 'i32');
 
-        // Copy output chunk
         if (chunkOutputWritten > 0) {
-          const outputChunk = new Uint8Array(chunkOutputWritten);
-          for (let i = 0; i < chunkOutputWritten; i++) {
-            outputChunk[i] = this.module.getValue(outputPtr + i, 'i8');
-          }
+          const outputChunk = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, chunkOutputWritten).slice();
           outputChunks.push(outputChunk);
         }
 
@@ -451,12 +442,7 @@ export class TampCompressor {
       throwOnError(result, 'Flush');
 
       const outputSize = this.module.getValue(outputSizePtr, 'i32');
-      const flushed = new Uint8Array(outputSize);
-      // Copy output data byte by byte using getValue
-      for (let i = 0; i < outputSize; i++) {
-        flushed[i] = this.module.getValue(outputPtr + i, 'i8');
-      }
-
+      const flushed = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, outputSize).slice();
       return flushed;
     } finally {
       this.module._free(basePtr);
@@ -601,10 +587,7 @@ export class TampDecompressor {
       if (dictData.length !== windowSize) {
         throw new RangeError(`Dictionary size (${dictData.length}) must match header window size (${windowSize})`);
       }
-      // Copy dictionary data byte by byte using setValue
-      for (let i = 0; i < dictData.length; i++) {
-        this.module.setValue(this.windowPtr + i, dictData[i], 'i8');
-      }
+      this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
       // Use default dictionary initialization
       this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
@@ -704,10 +687,7 @@ export class TampDecompressor {
     const outputPtr = inputPtr + payloadData.length;
 
     try {
-      // Copy payload data to WASM memory
-      for (let i = 0; i < payloadData.length; i++) {
-        this.module.setValue(inputPtr + i, payloadData[i], 'i8');
-      }
+      this.module.HEAPU8.set(payloadData, inputPtr);
 
       let payloadOffset = 0;
       let payloadSize = payloadData.length;
@@ -738,12 +718,8 @@ export class TampDecompressor {
         payloadSize -= inputConsumed;
         payloadOffset += inputConsumed;
 
-        // Copy output chunk if any data was produced
         if (outputSize > 0) {
-          const outputChunk = new Uint8Array(outputSize);
-          for (let i = 0; i < outputSize; i++) {
-            outputChunk[i] = this.module.getValue(outputPtr + i, 'i8');
-          }
+          const outputChunk = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, outputSize).slice();
           outputChunks.push(outputChunk);
         }
 
@@ -896,12 +872,7 @@ export async function initializeDictionary(size) {
     // Call the C function to initialize the dictionary
     module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [bufferPtr, size]);
 
-    // Copy the initialized data back to JavaScript byte by byte
-    const dictionary = new Uint8Array(size);
-    for (let i = 0; i < size; i++) {
-      dictionary[i] = module.getValue(bufferPtr + i, 'i8');
-    }
-
+    const dictionary = new Uint8Array(module.HEAPU8.buffer, bufferPtr, size).slice();
     return dictionary;
   } finally {
     module._free(bufferPtr);
