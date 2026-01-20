@@ -36,10 +36,6 @@ jobs:
         run: |
           pip install "idf-component-manager~=1.3"
 
-      - name: Copy source into espidf
-        run: |
-          cp -r tamp/_c_src/* espidf/
-
       - name: Build package
         working-directory: ./espidf/tamp
         run: |
