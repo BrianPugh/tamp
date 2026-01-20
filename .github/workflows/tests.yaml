@@ -252,15 +252,19 @@ jobs:
         id: cached-venv
         with:
           path: .venv/
-          key: venv-integrity-${{ matrix.implementation }}-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+          key: venv-integrity-${{ matrix.implementation }}-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'build.py', 'tamp/_c_src/**', 'tamp/*.pyx') }}
 
       - name: Install library with sanitizers
+        if: steps.cached-venv.outputs.cache-hit != 'true'
         run: |
           if [ "${{ matrix.implementation }}" = "embedded" ]; then
-            TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 poetry install --no-interaction
+            TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 poetry install --only main --no-interaction
           else
-            TAMP_SANITIZE=1 poetry install --no-interaction
+            TAMP_SANITIZE=1 poetry install --only main --no-interaction
           fi
+
+      - name: Set sanitizer environment variables
+        run: |
           echo "ASAN_OPTIONS=detect_leaks=0" >> $GITHUB_ENV
           echo "UBSAN_OPTIONS=print_stacktrace=1" >> $GITHUB_ENV
 
