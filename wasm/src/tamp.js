@@ -134,7 +134,6 @@ export class TampCompressor {
       throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
     }
 
-    this.initialized = false;
     this.compressorPtr = null;
     this.windowPtr = null;
     this.module = null;
@@ -149,8 +148,6 @@ export class TampCompressor {
   }
 
   async _doInitialize() {
-    if (this.initialized) return;
-
     this.module = await initializeWasm();
     const windowSize = 1 << this.options.window;
 
@@ -204,8 +201,6 @@ export class TampCompressor {
       this.windowPtr = null;
       throw error;
     }
-
-    this.initialized = true;
   }
 
   /**
@@ -459,7 +454,6 @@ export class TampCompressor {
       this.compressorPtr = null;
       this.windowPtr = null; // Don't free separately - part of same allocation
     }
-    this.initialized = false;
   }
 }
 
@@ -484,7 +478,6 @@ export class TampDecompressor {
       throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
     }
 
-    this.initialized = false;
     this.decompressorPtr = null;
     this.windowPtr = null;
     this.module = null;
@@ -507,8 +500,6 @@ export class TampDecompressor {
   }
 
   async _doInitialize() {
-    if (this.initialized) return;
-
     this.module = await initializeWasm();
 
     const { conf: confStructSize } = wasmManager.structSizes;
@@ -523,8 +514,6 @@ export class TampDecompressor {
     this.confPtr = this.initialPtr;
     this.inputConsumedPtr = this.initialPtr + confStructSize;
     this.headerInputPtr = this.inputConsumedPtr + 4;
-
-    this.initialized = true;
   }
 
   /**
@@ -779,7 +768,6 @@ export class TampDecompressor {
       this.inputConsumedPtr = null;
       this.headerInputPtr = null;
     }
-    this.initialized = false;
     this.headerRead = false;
     this.decompressorInitialized = false;
     this.pendingInput = new Uint8Array(0);
