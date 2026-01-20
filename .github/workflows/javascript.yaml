@@ -2,6 +2,11 @@ name: JavaScript Package CI/CD
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.11.1). Leave empty to skip publishing.'
+        required: false
+        type: string
   push:
     branches:
       - main
@@ -171,7 +176,7 @@ jobs:
     name: 'Publish to npm'
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.version != ''
 
     permissions:
       contents: read
@@ -197,14 +202,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
           cache-dependency-path: './wasm/package-lock.json'
 
-      - name: Set package version from git tag
+      - name: Set package version
         run: |
           cd wasm
-          npm version from-git --no-git-tag-version
+          if [ -n "${{ inputs.version }}" ]; then
+            npm version "${{ inputs.version }}" --no-git-tag-version
+          else
+            npm version from-git --no-git-tag-version
+          fi
 
       - name: Publish to npm
         run: |
