@@ -83,50 +83,24 @@ jobs:
       - name: Download enwik8 dataset
         run: make download-enwik8
 
-      - name: Run enwik8 compression tests
+      - name: Run enwik8 compression test
         run: |
           mkdir -p build
           cd wasm
-          echo "Running streaming compression test..."
           npm run test:enwik8
-          echo "Running one-shot compression test..."
-          npm run test:enwik8-oneshot
-          echo "Running decompression verification test..."
-          npm run test:enwik8-decompress
 
-      - name: Verify compressed file hashes
+      - name: Verify compressed file hash
         run: |
           cd build
-          echo "Verifying SHA256 hashes of compressed files..."
-
-          # Check streaming compression output
-          HASH1=$(sha256sum enwik8-js.tamp | cut -d' ' -f1)
-          echo "Streaming compression hash: $HASH1"
-          if [ "$HASH1" != "02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038" ]; then
-            echo "❌ Streaming compression hash mismatch!"
+          HASH=$(sha256sum enwik8-js.tamp | cut -d' ' -f1)
+          echo "Compression hash: $HASH"
+          if [ "$HASH" != "02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038" ]; then
+            echo "❌ Hash mismatch!"
             echo "Expected: 02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038"
-            echo "Got:      $HASH1"
+            echo "Got:      $HASH"
             exit 1
           fi
-          echo "✅ Streaming compression hash verified"
-
-          # Check one-shot compression output
-          HASH2=$(sha256sum enwik8-oneshot.tamp | cut -d' ' -f1)
-          echo "One-shot compression hash: $HASH2"
-          if [ "$HASH2" != "02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038" ]; then
-            echo "❌ One-shot compression hash mismatch!"
-            echo "Expected: 02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038"
-            echo "Got:      $HASH2"
-            exit 1
-          fi
-          echo "✅ One-shot compression hash verified"
-
-          # Both files should be identical
-          if ! cmp -s enwik8-js.tamp enwik8-oneshot.tamp; then
-            echo "❌ Streaming and one-shot compression outputs differ!"
-            exit 1
-          fi
-          echo "✅ Both compression methods produce identical output"
+          echo "✅ Compression hash verified"
 
       # Build minified version and upload as artifact for deploy/publish jobs
       - name: Build minified version

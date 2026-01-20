@@ -134,7 +134,6 @@ export class TampCompressor {
       throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
     }
 
-    this.initialized = false;
     this.compressorPtr = null;
     this.windowPtr = null;
     this.module = null;
@@ -149,10 +148,14 @@ export class TampCompressor {
   }
 
   async _doInitialize() {
-    if (this.initialized) return;
-
     this.module = await initializeWasm();
     const windowSize = 1 << this.options.window;
+
+    // Validate dictionary size before allocating
+    const dictData = this.options.dictionary ? new Uint8Array(this.options.dictionary) : null;
+    if (dictData && dictData.length !== windowSize) {
+      throw new RangeError(`Dictionary size (${dictData.length}) must match window size (${windowSize})`);
+    }
 
     const { compressor: compressorStructSize, conf: confStructSize } = wasmManager.structSizes;
 
@@ -167,18 +170,9 @@ export class TampCompressor {
     this.windowPtr = confPtr + confStructSize;
 
     // Initialize dictionary
-    if (this.options.dictionary) {
-      // Use provided custom dictionary
-      const dictData = new Uint8Array(this.options.dictionary);
-      if (dictData.length !== windowSize) {
-        throw new RangeError(`Dictionary size (${dictData.length}) must match window size (${windowSize})`);
-      }
-      // Copy dictionary data byte by byte using setValue
-      for (let i = 0; i < dictData.length; i++) {
-        this.module.setValue(this.windowPtr + i, dictData[i], 'i8');
-      }
+    if (dictData) {
+      this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
-      // Use default dictionary initialization
       this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
     }
 
@@ -207,8 +201,6 @@ export class TampCompressor {
       this.windowPtr = null;
       throw error;
     }
-
-    this.initialized = true;
   }
 
   /**
@@ -276,10 +268,8 @@ export class TampCompressor {
         checkAborted(); // Check for cancellation at start of each chunk
         const currentInputSize = Math.min(inputRemaining, CHUNK_SIZE);
 
-        // Copy current input chunk to WASM memory
-        for (let i = 0; i < currentInputSize; i++) {
-          this.module.setValue(inputPtr + i, input[inputOffset + i], 'i8');
-        }
+        // Copy input chunk to WASM memory
+        this.module.HEAPU8.set(input.subarray(inputOffset, inputOffset + currentInputSize), inputPtr);
 
         // Use lower-level API instead of tamp_compressor_compress_cb
         // This is a translation of the C implementation
@@ -381,12 +371,8 @@ export class TampCompressor {
         this.module.setValue(outputSizePtr, chunkOutputWritten, 'i32');
         this.module.setValue(inputConsumedPtr, chunkInputConsumed, 'i32');
 
-        // Copy output chunk
         if (chunkOutputWritten > 0) {
-          const outputChunk = new Uint8Array(chunkOutputWritten);
-          for (let i = 0; i < chunkOutputWritten; i++) {
-            outputChunk[i] = this.module.getValue(outputPtr + i, 'i8');
-          }
+          const outputChunk = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, chunkOutputWritten).slice();
           outputChunks.push(outputChunk);
         }
 
@@ -451,12 +437,7 @@ export class TampCompressor {
       throwOnError(result, 'Flush');
 
       const outputSize = this.module.getValue(outputSizePtr, 'i32');
-      const flushed = new Uint8Array(outputSize);
-      // Copy output data byte by byte using getValue
-      for (let i = 0; i < outputSize; i++) {
-        flushed[i] = this.module.getValue(outputPtr + i, 'i8');
-      }
-
+      const flushed = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, outputSize).slice();
       return flushed;
     } finally {
       this.module._free(basePtr);
@@ -473,7 +454,6 @@ export class TampCompressor {
       this.compressorPtr = null;
       this.windowPtr = null; // Don't free separately - part of same allocation
     }
-    this.initialized = false;
   }
 }
 
@@ -498,7 +478,6 @@ export class TampDecompressor {
       throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
     }
 
-    this.initialized = false;
     this.decompressorPtr = null;
     this.windowPtr = null;
     this.module = null;
@@ -521,8 +500,6 @@ export class TampDecompressor {
   }
 
   async _doInitialize() {
-    if (this.initialized) return;
-
     this.module = await initializeWasm();
 
     const { conf: confStructSize } = wasmManager.structSizes;
@@ -537,8 +514,6 @@ export class TampDecompressor {
     this.confPtr = this.initialPtr;
     this.inputConsumedPtr = this.initialPtr + confStructSize;
     this.headerInputPtr = this.inputConsumedPtr + 4;
-
-    this.initialized = true;
   }
 
   /**
@@ -583,6 +558,13 @@ export class TampDecompressor {
 
     // Use header-derived configuration for window size
     const windowSize = 1 << headerWindow;
+
+    // Validate dictionary size before allocating
+    const dictData = headerUsesCustomDict ? new Uint8Array(this.options.dictionary) : null;
+    if (dictData && dictData.length !== windowSize) {
+      throw new RangeError(`Dictionary size (${dictData.length}) must match header window size (${windowSize})`);
+    }
+
     const { decompressor: decompressorStructSize } = wasmManager.structSizes;
 
     // Allocate memory for decompressor struct and window buffer in single allocation
@@ -594,19 +576,10 @@ export class TampDecompressor {
 
     this.windowPtr = this.decompressorPtr + decompressorStructSize;
 
-    // Initialize dictionary based on header information
-    if (headerUsesCustomDict) {
-      // Use provided custom dictionary
-      const dictData = new Uint8Array(this.options.dictionary);
-      if (dictData.length !== windowSize) {
-        throw new RangeError(`Dictionary size (${dictData.length}) must match header window size (${windowSize})`);
-      }
-      // Copy dictionary data byte by byte using setValue
-      for (let i = 0; i < dictData.length; i++) {
-        this.module.setValue(this.windowPtr + i, dictData[i], 'i8');
-      }
+    // Initialize dictionary
+    if (dictData) {
+      this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
-      // Use default dictionary initialization
       this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
     }
 
@@ -704,10 +677,7 @@ export class TampDecompressor {
     const outputPtr = inputPtr + payloadData.length;
 
     try {
-      // Copy payload data to WASM memory
-      for (let i = 0; i < payloadData.length; i++) {
-        this.module.setValue(inputPtr + i, payloadData[i], 'i8');
-      }
+      this.module.HEAPU8.set(payloadData, inputPtr);
 
       let payloadOffset = 0;
       let payloadSize = payloadData.length;
@@ -738,12 +708,8 @@ export class TampDecompressor {
         payloadSize -= inputConsumed;
         payloadOffset += inputConsumed;
 
-        // Copy output chunk if any data was produced
         if (outputSize > 0) {
-          const outputChunk = new Uint8Array(outputSize);
-          for (let i = 0; i < outputSize; i++) {
-            outputChunk[i] = this.module.getValue(outputPtr + i, 'i8');
-          }
+          const outputChunk = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, outputSize).slice();
           outputChunks.push(outputChunk);
         }
 
@@ -802,7 +768,6 @@ export class TampDecompressor {
       this.inputConsumedPtr = null;
       this.headerInputPtr = null;
     }
-    this.initialized = false;
     this.headerRead = false;
     this.decompressorInitialized = false;
     this.pendingInput = new Uint8Array(0);
@@ -896,12 +861,7 @@ export async function initializeDictionary(size) {
     // Call the C function to initialize the dictionary
     module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [bufferPtr, size]);
 
-    // Copy the initialized data back to JavaScript byte by byte
-    const dictionary = new Uint8Array(size);
-    for (let i = 0; i < size; i++) {
-      dictionary[i] = module.getValue(bufferPtr + i, 'i8');
-    }
-
+    const dictionary = new Uint8Array(module.HEAPU8.buffer, bufferPtr, size).slice();
     return dictionary;
   } finally {
     module._free(bufferPtr);

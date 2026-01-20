@@ -110,13 +110,13 @@
     </div>
     
     <div class="toggle">
-        <button class="toggle-btn active" id="compressToggle" onclick="setOperation('compress')">
+        <button class="toggle-btn active" id="compressToggle">
             Compress
         </button>
-        <button class="toggle-btn" id="decompressToggle" onclick="setOperation('decompress')">
+        <button class="toggle-btn" id="decompressToggle">
             Decompress
         </button>
-        <button class="toggle-btn" id="textToggle" onclick="setOperation('text')">
+        <button class="toggle-btn" id="textToggle">
             Text
         </button>
     </div>
@@ -197,7 +197,7 @@
             
             <div class="option-group">
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                    <button type="button" class="toggle-dictionary-btn" id="toggleDictionaryBtn" onclick="toggleCustomDictionary()">
+                    <button type="button" class="toggle-dictionary-btn" id="toggleDictionaryBtn">
                         + Use Custom Dictionary
                     </button>
                     <div class="help-tooltip">
@@ -221,14 +221,20 @@
         </div>
 
         <div class="text-buttons">
-            <button class="btn text-btn" id="compressTextBtn" onclick="compressTextContent()">Compress ↓</button>
-            <button class="btn text-btn" id="decompressTextBtn" onclick="decompressTextContent()">Decompress ↑</button>
+            <button class="btn text-btn" id="compressTextBtn">Compress ↓</button>
+            <button class="btn text-btn" id="decompressTextBtn">Decompress ↑</button>
         </div>
 
         <div class="text-container">
             <label class="text-label" for="compressedText">Compressed Data (Base64):</label>
             <textarea class="text-area" id="compressedText" placeholder="Compressed data will appear here..."></textarea>
         </div>
+
+        <div class="text-buttons">
+            <button class="btn text-btn" id="uploadCompressedBtn">Upload .tamp</button>
+            <button class="btn text-btn" id="downloadCompressedBtn">Download .tamp</button>
+        </div>
+        <input type="file" id="compressedFileInput" accept=".tamp" style="display: none;">
 
         <div class="text-stats hidden" id="textStats">
             <h4 id="textStatsTitle">Statistics</h4>
@@ -247,7 +253,7 @@
         <div class="file-size" id="fileSize"></div>
     </div>
 
-    <button class="btn action-btn" id="actionBtn" onclick="processFiles()" disabled>
+    <button class="btn action-btn" id="actionBtn" disabled>
         Compress
     </button>
 
@@ -264,7 +270,7 @@
     <div class="results hidden" id="results">
         <div class="result-title" id="resultTitle">Results</div>
         <div class="result-stats" id="resultStats"></div>
-        <button class="btn" id="downloadBtn" onclick="downloadResult()">
+        <button class="btn" id="downloadBtn">
             Download
         </button>
     </div>
