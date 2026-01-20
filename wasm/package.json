@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "Tamp compression library for JavaScript/TypeScript using WebAssembly",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/index.cjs",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "publishConfig": {
@@ -13,12 +13,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "require": "./dist/index.cjs"
     },
     "./streams": {
       "types": "./dist/streams.d.ts",
       "import": "./dist/streams.mjs",
-      "require": "./dist/streams.js"
+      "require": "./dist/streams.cjs"
     }
   },
   "files": [
@@ -28,8 +28,8 @@
   ],
   "scripts": {
     "build": "make all && npm run build:js",
-    "build:js": "node scripts/build.js",
-    "build:minified": "make all && npm run build:js -- --minify",
+    "build:js": "tsup",
+    "build:minified": "make all && tsup --minify",
     "build:debug": "make debug && npm run build:js",
     "clean": "make clean && rm -rf dist",
     "test": "node --test test/*.js",
@@ -37,11 +37,12 @@
     "test:basic": "node --test test/basic-test.js",
     "benchmark": "node benchmark.js",
     "benchmark:verify": "node benchmark.js --verify --iterations 1",
-    "format": "prettier --write src/ test/ scripts/ *.md *.json",
+    "test:enwik8": "node benchmark.js --output ../build/enwik8-js.tamp --verify --iterations 1",
+    "format": "prettier --write src/ test/ *.md *.json *.config.js",
     "lint": "eslint src/ test/ --fix",
     "format-and-lint": "npm run format && npm run lint",
     "type-check": "tsc --noEmit --skipLibCheck src/*.d.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build:minified"
   },
   "keywords": [
     "compression",
@@ -74,7 +75,7 @@
     "eslint": "^8.57.0",
     "html-minifier-terser": "^7.2.0",
     "prettier": "^3.1.0",
-    "terser": "^5.24.0",
+    "tsup": "^8.5.1",
     "typescript": "^5.0.0"
   }
 }
