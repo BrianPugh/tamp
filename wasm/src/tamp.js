@@ -154,6 +154,12 @@ export class TampCompressor {
     this.module = await initializeWasm();
     const windowSize = 1 << this.options.window;
 
+    // Validate dictionary size before allocating
+    const dictData = this.options.dictionary ? new Uint8Array(this.options.dictionary) : null;
+    if (dictData && dictData.length !== windowSize) {
+      throw new RangeError(`Dictionary size (${dictData.length}) must match window size (${windowSize})`);
+    }
+
     const { compressor: compressorStructSize, conf: confStructSize } = wasmManager.structSizes;
 
     // Allocate memory for compressor struct, config struct, and window buffer in single allocation
@@ -167,15 +173,9 @@ export class TampCompressor {
     this.windowPtr = confPtr + confStructSize;
 
     // Initialize dictionary
-    if (this.options.dictionary) {
-      // Use provided custom dictionary
-      const dictData = new Uint8Array(this.options.dictionary);
-      if (dictData.length !== windowSize) {
-        throw new RangeError(`Dictionary size (${dictData.length}) must match window size (${windowSize})`);
-      }
+    if (dictData) {
       this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
-      // Use default dictionary initialization
       this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
     }
 
@@ -569,6 +569,13 @@ export class TampDecompressor {
 
     // Use header-derived configuration for window size
     const windowSize = 1 << headerWindow;
+
+    // Validate dictionary size before allocating
+    const dictData = headerUsesCustomDict ? new Uint8Array(this.options.dictionary) : null;
+    if (dictData && dictData.length !== windowSize) {
+      throw new RangeError(`Dictionary size (${dictData.length}) must match header window size (${windowSize})`);
+    }
+
     const { decompressor: decompressorStructSize } = wasmManager.structSizes;
 
     // Allocate memory for decompressor struct and window buffer in single allocation
@@ -580,16 +587,10 @@ export class TampDecompressor {
 
     this.windowPtr = this.decompressorPtr + decompressorStructSize;
 
-    // Initialize dictionary based on header information
-    if (headerUsesCustomDict) {
-      // Use provided custom dictionary
-      const dictData = new Uint8Array(this.options.dictionary);
-      if (dictData.length !== windowSize) {
-        throw new RangeError(`Dictionary size (${dictData.length}) must match header window size (${windowSize})`);
-      }
+    // Initialize dictionary
+    if (dictData) {
       this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
-      // Use default dictionary initialization
       this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
     }
 
