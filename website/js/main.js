@@ -36,7 +36,10 @@ let dropZone,
   customDictionaryTextArea,
   dictionaryError,
   toggleDictionaryBtn,
-  customDictionarySection;
+  customDictionarySection,
+  compressedFileInput,
+  uploadCompressedBtn,
+  downloadCompressedBtn;
 
 // Initialize WASM module eagerly on page load
 let wasmInitPromise = null;
@@ -98,6 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
   dictionaryError = document.getElementById('dictionaryError');
   toggleDictionaryBtn = document.getElementById('toggleDictionaryBtn');
   customDictionarySection = document.getElementById('customDictionarySection');
+  compressedFileInput = document.getElementById('compressedFileInput');
+  uploadCompressedBtn = document.getElementById('uploadCompressedBtn');
+  downloadCompressedBtn = document.getElementById('downloadCompressedBtn');
 
   // Show loading indicator until WASM is ready
   if (actionBtn && !wasmInitialized) {
@@ -116,6 +122,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('compressTextBtn').addEventListener('click', compressTextContent);
   document.getElementById('decompressTextBtn').addEventListener('click', decompressTextContent);
   toggleDictionaryBtn.addEventListener('click', toggleCustomDictionary);
+  uploadCompressedBtn.addEventListener('click', () => compressedFileInput.click());
+  compressedFileInput.addEventListener('change', handleCompressedFileUpload);
+  downloadCompressedBtn.addEventListener('click', downloadCompressedData);
 
   // Drag and drop event handlers
   dropZone.addEventListener('dragover', e => {
@@ -642,7 +651,7 @@ async function decompressTextContent() {
   const compressedBase64 = compressedTextArea.value;
 
   if (!compressedBase64.trim()) {
-    alert('Enter base64-encoded tamp compressed data to decompress.');
+    alert('Enter base64 data or upload a .tamp file to decompress.');
     return;
   }
 
@@ -714,5 +723,42 @@ async function decompressTextContent() {
   } catch (error) {
     alert('Decompression error: ' + error.message);
     hideTextStats();
+  }
+}
+
+function handleCompressedFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = event => {
+    const bytes = new Uint8Array(event.target.result);
+    const base64 = btoa(String.fromCharCode(...bytes));
+    compressedTextArea.value = base64;
+  };
+  reader.readAsArrayBuffer(file);
+
+  // Reset input so same file can be selected again
+  e.target.value = '';
+}
+
+function downloadCompressedData() {
+  const base64 = compressedTextArea.value.trim();
+  if (!base64) {
+    alert('No compressed data to download.');
+    return;
+  }
+
+  try {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+    downloadBlob(blob, 'compressed.tamp');
+  } catch (error) {
+    alert('Invalid base64 data: ' + error.message);
   }
 }
