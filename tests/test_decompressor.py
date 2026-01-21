@@ -111,12 +111,12 @@ class TestDecompressor(unittest.TestCase):
 
     def test_decompressor_missing_dict(self):
         for Decompressor in Decompressors:
-            with (
-                self.subTest(Decompressor=Decompressor),
-                self.assertRaises(ValueError),
-                BytesIO(bytes([0b000_10_1_0_0])) as f,
-            ):
+            # fmt: off
+            with self.subTest(Decompressor=Decompressor), \
+                 self.assertRaises(ValueError), \
+                 BytesIO(bytes([0b000_10_1_0_0])) as f:
                 Decompressor(f)
+            # fmt: on
 
     def test_decompressor_full_output_dst_immediately_after_src(self):
         # Decompressor's perspective of window

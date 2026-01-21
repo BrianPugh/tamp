@@ -64,14 +64,10 @@ class TestCompressorAndDecompressor(unittest.TestCase):
 
         for Compressor, Decompressor in walk_compressors_decompressors():
             # Compress/Decompress random data
-            with (
-                BytesIO() as f,
-                self.subTest(
-                    data="Random",
-                    Compressor=Compressor,
-                    Decompressor=Decompressor,
-                ),
-            ):
+            # fmt: off
+            with BytesIO() as f, \
+                 self.subTest(data="Random", Compressor=Compressor, Decompressor=Decompressor):
+                # fmt: on
                 c = Compressor(f, **compressor_kwargs)
                 c.write(data)
                 c.flush()
@@ -84,14 +80,10 @@ class TestCompressorAndDecompressor(unittest.TestCase):
 
             # Compress/Decompress
             data = bytearray(1 for _ in range(num_bytes))
-            with (
-                BytesIO() as f,
-                self.subTest(
-                    data="Sequential",
-                    Compressor=Compressor,
-                    Decompressor=Decompressor,
-                ),
-            ):
+            # fmt: off
+            with BytesIO() as f, \
+                 self.subTest(data="Sequential", Compressor=Compressor, Decompressor=Decompressor):
+                # fmt: on
                 c = Compressor(f, **compressor_kwargs)
                 c.write(data)
                 c.flush()
