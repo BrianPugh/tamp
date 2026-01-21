@@ -1,4 +1,5 @@
 """Micropython code to benchmark builtin deflate decompression on-device."""
+
 import gc
 import io
 import time
@@ -35,9 +36,10 @@ def main():
 
     # Second pass: decompress and write to disk for verification (not timed)
     print("Writing to disk for verification...")
-    with deflate.DeflateIO(io.BytesIO(compressed_data), deflate.RAW, 10) as decompressor, open(
-        "enwik8-100kb-decompressed", "wb"
-    ) as f:
+    with (
+        deflate.DeflateIO(io.BytesIO(compressed_data), deflate.RAW, 10) as decompressor,
+        open("enwik8-100kb-decompressed", "wb") as f,
+    ):
         while True:
             n = decompressor.readinto(chunk)
             if n == 0:

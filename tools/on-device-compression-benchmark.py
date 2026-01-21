@@ -1,5 +1,5 @@
-"""Micropython code to be ran on-device.
-"""
+"""Micropython code to be ran on-device."""
+
 import gc
 import io
 import time

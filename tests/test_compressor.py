@@ -78,16 +78,16 @@ class TestCompressor(unittest.TestCase):
                     # fmt: off
                     [
                         0b010_11_0_0_0,  # header (window_bits=10, literal_bits=8)
-                        0b1_0110011,    # literal "f"
+                        0b1_0110011,  # literal "f"
                         0b0_0_0_00100,  # the pre-init buffer contains "oo" at index 131
-                                        # size=2 -> 0b0
-                                        # 131 -> 0b0010000011
-                        0b00011_1_00,   # literal " "
-                        0b100000_0_1,   # There is now "foo " at index 0
-                        0b000_00000,    # size=4 -> 0b1000
-                        0b00000_0_11,   # Just "foo" at index 0; size=3 -> 0b11
-                        0b00000000,     # index 0 -> 0b0000000000
-                        0b00_000000,    # 6 bits of zero-padding
+                        # size=2 -> 0b0
+                        # 131 -> 0b0010000011
+                        0b00011_1_00,  # literal " "
+                        0b100000_0_1,  # There is now "foo " at index 0
+                        0b000_00000,  # size=4 -> 0b1000
+                        0b00000_0_11,  # Just "foo" at index 0; size=3 -> 0b11
+                        0b00000000,  # index 0 -> 0b0000000000
+                        0b00_000000,  # 6 bits of zero-padding
                     ]
                     # fmt: on
                 )
@@ -122,16 +122,16 @@ class TestCompressor(unittest.TestCase):
                     # fmt: off
                     [
                         0b010_11_0_0_0,  # header (window_bits=10, literal_bits=8)
-                        0b1_0110011,    # literal "f"
+                        0b1_0110011,  # literal "f"
                         0b0_0_0_00100,  # the pre-init buffer contains "oo" at index 131
-                                        # size=2 -> 0b0
-                                        # 131 -> 0b0010000011
-                        0b00011_1_00,   # literal " "
-                        0b100000_0_1,   # There is now "foo " at index 0
-                        0b000_00000,    # size=4 -> 0b1000
-                        0b00000_0_11,   # Just "foo" at index 0; size=3 -> 0b11
-                        0b00000000,     # index 0 -> 0b0000000000
-                        0b00_000000,    # 6 bits of zero-padding
+                        # size=2 -> 0b0
+                        # 131 -> 0b0010000011
+                        0b00011_1_00,  # literal " "
+                        0b100000_0_1,  # There is now "foo " at index 0
+                        0b000_00000,  # size=4 -> 0b1000
+                        0b00000_0_11,  # Just "foo" at index 0; size=3 -> 0b11
+                        0b00000000,  # index 0 -> 0b0000000000
+                        0b00_000000,  # 6 bits of zero-padding
                     ]
                     # fmt: on
                 )
@@ -157,15 +157,15 @@ class TestCompressor(unittest.TestCase):
                     # fmt: off
                     [
                         0b010_10_0_0_0,  # header (window_bits=10, literal_bits=7)
-                        0b1_1100110,    # literal "f"
-                        0b0_0_001000,   # the pre-init buffer contains "oo " at index 131
-                                        # size=2 -> 0b0
-                                        # 131 -> 0b0010000011
-                        0b0011_1_010,   # literal " "
-                        0b0000_0_100,   # size=4 -> 0b1000
+                        0b1_1100110,  # literal "f"
+                        0b0_0_001000,  # the pre-init buffer contains "oo " at index 131
+                        # size=2 -> 0b0
+                        # 131 -> 0b0010000011
+                        0b0011_1_010,  # literal " "
+                        0b0000_0_100,  # size=4 -> 0b1000
                         0b0_0000000,
                         0b000_0_11_00,  # Just "foo" at index 0; size=3 -> 0b11
-                        0b000000000,    # index 0 -> 0b0000000000
+                        0b000000000,  # index 0 -> 0b0000000000
                         # no padding!
                     ]
                     # fmt: on
@@ -192,8 +192,8 @@ class TestCompressor(unittest.TestCase):
                     # fmt: off
                     [
                         0b000_10_1_0_0,  # header (window_bits=8, literal_bits=7, dictionary provided)
-                        0b0_1010100,     # match-size 11
-                        0b00000000,      # At index 0
+                        0b0_1010100,  # match-size 11
+                        0b00000000,  # At index 0
                         # no padding!
                     ]
                     # fmt: on
@@ -248,7 +248,7 @@ class TestCompressor(unittest.TestCase):
                 compressor = Compressor(f, literal=7)
 
                 with self.assertRaises((ExcessBitsError, NativeExcessBitsError)):
-                    compressor.write(b"\xFF")
+                    compressor.write(b"\xff")
                     compressor.flush()
 
     def test_single_shot_compress_text(self):
@@ -258,16 +258,16 @@ class TestCompressor(unittest.TestCase):
                     # fmt: off
                     [
                         0b010_11_0_0_0,  # header (window_bits=10, literal_bits=8)
-                        0b1_0110011,    # literal "f"
+                        0b1_0110011,  # literal "f"
                         0b0_0_0_00100,  # the pre-init buffer contains "oo" at index 131
-                                        # size=2 -> 0b0
-                                        # 131 -> 0b0010000011
-                        0b00011_1_00,   # literal " "
-                        0b100000_0_1,   # There is now "foo " at index 0
-                        0b000_00000,    # size=4 -> 0b1000
-                        0b00000_0_11,   # Just "foo" at index 0; size=3 -> 0b11
-                        0b00000000,     # index 0 -> 0b0000000000
-                        0b00_000000,    # 6 bits of zero-padding
+                        # size=2 -> 0b0
+                        # 131 -> 0b0010000011
+                        0b00011_1_00,  # literal " "
+                        0b100000_0_1,  # There is now "foo " at index 0
+                        0b000_00000,  # size=4 -> 0b1000
+                        0b00000_0_11,  # Just "foo" at index 0; size=3 -> 0b11
+                        0b00000000,  # index 0 -> 0b0000000000
+                        0b00_000000,  # 6 bits of zero-padding
                     ]
                     # fmt: on
                 )
@@ -280,16 +280,16 @@ class TestCompressor(unittest.TestCase):
                     # fmt: off
                     [
                         0b010_11_0_0_0,  # header (window_bits=10, literal_bits=8)
-                        0b1_0110011,    # literal "f"
+                        0b1_0110011,  # literal "f"
                         0b0_0_0_00100,  # the pre-init buffer contains "oo" at index 131
-                                        # size=2 -> 0b0
-                                        # 131 -> 0b0010000011
-                        0b00011_1_00,   # literal " "
-                        0b100000_0_1,   # There is now "foo " at index 0
-                        0b000_00000,    # size=4 -> 0b1000
-                        0b00000_0_11,   # Just "foo" at index 0; size=3 -> 0b11
-                        0b00000000,     # index 0 -> 0b0000000000
-                        0b00_000000,    # 6 bits of zero-padding
+                        # size=2 -> 0b0
+                        # 131 -> 0b0010000011
+                        0b00011_1_00,  # literal " "
+                        0b100000_0_1,  # There is now "foo " at index 0
+                        0b000_00000,  # size=4 -> 0b1000
+                        0b00000_0_11,  # Just "foo" at index 0; size=3 -> 0b11
+                        0b00000000,  # index 0 -> 0b0000000000
+                        0b00_000000,  # 6 bits of zero-padding
                     ]
                     # fmt: on
                 )

@@ -1,4 +1,5 @@
 """Micropython code to benchmark builtin deflate compression on-device."""
+
 import gc
 import io
 import time

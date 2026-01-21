@@ -55,8 +55,9 @@ class TestCli(unittest.TestCase):
                 mock_stdout.assert_called_once_with(compressed_foo_foo_foo)
 
     def test_compress_stdin_to_stdout(self):
-        with patch("sys.stdout.buffer.write") as mock_stdout, patch(
-            "sys.stdin.buffer.read", return_value="foo foo foo"
+        with (
+            patch("sys.stdout.buffer.write") as mock_stdout,
+            patch("sys.stdin.buffer.read", return_value="foo foo foo"),
         ):
             app("compress", **_app_kwargs)
             mock_stdout.assert_called_once_with(compressed_foo_foo_foo)
@@ -71,8 +72,9 @@ class TestCli(unittest.TestCase):
                 mock_stdout.assert_called_once_with(b"foo foo foo")
 
     def test_decompress_stdin_to_stdout(self):
-        with patch("sys.stdout.buffer.write") as mock_stdout, patch(
-            "sys.stdin.buffer.read", return_value=compressed_foo_foo_foo
+        with (
+            patch("sys.stdout.buffer.write") as mock_stdout,
+            patch("sys.stdin.buffer.read", return_value=compressed_foo_foo_foo),
         ):
             app("decompress", **_app_kwargs)
             mock_stdout.assert_called_once_with(b"foo foo foo")
