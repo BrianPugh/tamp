@@ -283,7 +283,10 @@ jobs:
           original_hash=$(sha256sum datasets/enwik8 | cut -d' ' -f1)
           LIBASAN_PATH=$(gcc -print-file-name=libasan.so)
 
-          compressed_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 | sha256sum | cut -d' ' -f1)
+          # Compress once and save to file (avoids compressing twice)
+          LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 -o /tmp/enwik8.tamp
+
+          compressed_hash=$(sha256sum /tmp/enwik8.tamp | cut -d' ' -f1)
           echo "Compressed hash: $compressed_hash"
           if [ "$compressed_hash" = "$EXPECTED_COMPRESSED_HASH" ]; then
             echo "✓ Compressed output hash verified"
@@ -294,7 +297,7 @@ jobs:
             exit 1
           fi
 
-          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp compress datasets/enwik8 | LD_PRELOAD="$LIBASAN_PATH" tamp decompress | sha256sum | cut -d' ' -f1)
+          roundtrip_hash=$(LD_PRELOAD="$LIBASAN_PATH" tamp decompress /tmp/enwik8.tamp | sha256sum | cut -d' ' -f1)
           if [ "$original_hash" = "$roundtrip_hash" ]; then
             echo "✓ Compression/decompression roundtrip verified"
           else
