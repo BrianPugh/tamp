@@ -17,17 +17,29 @@ typedef struct {
     uint32_t bit_buffer;     // Bit buffer for reading compressed data (32 bits)
     uint16_t window_pos;     // Current position in window (15 bits)
     uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits)
+#if TAMP_V2_DECOMPRESS
+    uint8_t pending_symbol;          // State machine: 0=none, 12=RLE, 13=ext match need window,
+                                     // 14=ext match need length, 15=ext match need raw bits
+    uint16_t pending_window_offset;  // Saved window_offset for extended match resume
+    uint8_t pending_ext_huffman;     // Saved ext_huffman for extended match resume (state 15)
+#endif
 
     /* WARM: read once at start of decompress, cached in locals */
     uint8_t conf_window : 4;       // Window bits from config
     uint8_t conf_literal : 4;      // Literal bits from config
     uint8_t min_pattern_size : 2;  // Minimum pattern size, 2 or 3
+#if TAMP_V2_DECOMPRESS
+    uint8_t conf_v2 : 1;  // v2 format enabled (from header)
+#endif
 
     /* COLD: rarely accessed (init or edge cases).
      * Bitfields save space; add new cold fields here. */
     uint8_t skip_bytes : 4;       // For output-buffer-limited resumption
     uint8_t window_bits_max : 4;  // Max window bits buffer can hold
     uint8_t configured : 1;       // Whether config has been set
+#if TAMP_V2_DECOMPRESS
+    uint8_t rle_last_written : 1;  // Previous write was RLE (skip window re-write)
+#endif
 } TampDecompressor;
 
 /**

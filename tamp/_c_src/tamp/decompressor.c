@@ -7,6 +7,23 @@
 
 #define FLUSH 15
 
+#if TAMP_V2_DECOMPRESS
+/* Pending symbol states for v2 decode suspend/resume.
+ * - 0: No pending operation
+ * - 12: RLE - pending_ext_huffman holds partial huffman result or 0xFF for fresh/output-resume
+ * - 13: Extended match - fresh (need window_offset)
+ * - 14: Extended match - have window_offset in pending_window_offset (need huffman+trailing)
+ * - 15: Extended match - have window_offset and huffman (need trailing only)
+ * When skip_bytes > 0, we're resuming after output-full with full decode saved.
+ */
+#define PENDING_NONE 0
+#define PENDING_RLE 12
+#define PENDING_EXT_FRESH 13
+#define PENDING_EXT_HAVE_OFFSET 14
+#define PENDING_EXT_HAVE_HUFFMAN 15
+#define PARTIAL_STATE_NONE 0xFF
+#endif
+
 /**
  * This array was generated with tools/huffman_jump_table.py
  *
@@ -51,6 +68,197 @@ static inline int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_po
     return code & 0xF;
 }
 
+#if TAMP_V2_DECOMPRESS
+/**
+ * @brief Decode huffman symbol + trailing bits from bit buffer.
+ *
+ * Shared helper for RLE and extended match decoding.
+ * Uses pending_ext_huffman to track partial decode state.
+ *
+ * @param d Decompressor state
+ * @param trailing_bits Number of trailing bits to read (3 or 4)
+ * @param result Output: (huffman << trailing_bits) + trailing
+ * @return TAMP_OK on success, TAMP_INPUT_EXHAUSTED if more bits needed
+ */
+static tamp_res decode_huffman_trailing(TampDecompressor *d, uint8_t trailing_bits, uint16_t *result) {
+    uint32_t bit_buffer = d->bit_buffer;
+    uint8_t bit_buffer_pos = d->bit_buffer_pos;
+    int8_t huffman_value;
+
+    if (d->pending_ext_huffman != PARTIAL_STATE_NONE) {
+        huffman_value = d->pending_ext_huffman;
+    } else {
+        if (TAMP_UNLIKELY(bit_buffer_pos < 1)) return TAMP_INPUT_EXHAUSTED;
+        huffman_value = huffman_decode(&bit_buffer, &bit_buffer_pos);
+    }
+
+    if (TAMP_UNLIKELY(bit_buffer_pos < trailing_bits)) {
+        d->bit_buffer = bit_buffer;
+        d->bit_buffer_pos = bit_buffer_pos;
+        d->pending_ext_huffman = huffman_value;
+        return TAMP_INPUT_EXHAUSTED;
+    }
+
+    uint8_t trailing = bit_buffer >> (32 - trailing_bits);
+    bit_buffer <<= trailing_bits;
+    bit_buffer_pos -= trailing_bits;
+
+    *result = (huffman_value << trailing_bits) + trailing;
+
+    d->bit_buffer = bit_buffer;
+    d->bit_buffer_pos = bit_buffer_pos;
+    d->pending_ext_huffman = PARTIAL_STATE_NONE;
+
+    return TAMP_OK;
+}
+
+/**
+ * @brief Decode RLE token and write repeated bytes to output.
+ */
+static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
+                           size_t *output_written_size, uint16_t window_mask) {
+    uint16_t rle_count;
+    uint16_t skip = d->skip_bytes;
+
+    if (skip > 0) {
+        rle_count = d->pending_window_offset;
+    } else {
+        uint16_t raw;
+        tamp_res res = decode_huffman_trailing(d, TAMP_LEADING_RLE_BITS, &raw);
+        if (res != TAMP_OK) return res;
+        rle_count = raw + 2;
+    }
+
+    /* Get the byte to repeat (last written byte) */
+    uint16_t prev_pos = (d->window_pos == 0) ? window_mask : (d->window_pos - 1);
+    uint8_t symbol = d->window[prev_pos];
+
+    /* Calculate how many to write this call */
+    uint16_t remaining_count = rle_count - skip;
+    size_t output_space = output_end - *output;
+    uint16_t to_write;
+
+    if (TAMP_UNLIKELY(remaining_count > output_space)) {
+        /* Partial write */
+        to_write = output_space;
+        d->skip_bytes = skip + output_space;
+        d->pending_symbol = PENDING_RLE;
+        d->pending_window_offset = rle_count;
+    } else {
+        /* Complete write */
+        to_write = remaining_count;
+        d->skip_bytes = 0;
+        d->pending_symbol = PENDING_NONE;
+    }
+
+    /* Write repeated bytes to output */
+    for (uint16_t i = 0; i < to_write; i++) {
+        *(*output)++ = symbol;
+    }
+    *output_written_size += to_write;
+
+    /* Update window only on first chunk (skip==0) and not after another RLE */
+    if (skip == 0 && !d->rle_last_written) {
+        uint16_t window_write = (rle_count < TAMP_RLE_MAX_WINDOW) ? rle_count : TAMP_RLE_MAX_WINDOW;
+        for (uint16_t i = 0; i < window_write; i++) {
+            d->window[d->window_pos] = symbol;
+            d->window_pos = (d->window_pos + 1) & window_mask;
+        }
+    }
+    d->rle_last_written = 1;
+
+    return (d->pending_symbol == PENDING_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
+}
+
+/**
+ * @brief Decode extended match token and copy from window to output.
+ */
+static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
+                                      size_t *output_written_size, uint8_t conf_window, uint8_t min_pattern_size,
+                                      uint16_t window_mask) {
+    uint16_t window_offset;
+    uint16_t match_size;
+    uint16_t skip = d->skip_bytes;
+    uint8_t pending = d->pending_symbol;
+
+    if (skip > 0) {
+        /* Resume from output-full: window_offset and match_size already saved */
+        window_offset = d->pending_window_offset;
+        match_size = d->pending_ext_huffman;
+    } else {
+        /* Step 1: Get window_offset (saved or decode fresh) */
+        if (pending >= PENDING_EXT_HAVE_OFFSET) {
+            window_offset = d->pending_window_offset;
+        } else {
+            if (TAMP_UNLIKELY(d->bit_buffer_pos < conf_window)) return TAMP_INPUT_EXHAUSTED;
+            window_offset = d->bit_buffer >> (32 - conf_window);
+            d->bit_buffer <<= conf_window;
+            d->bit_buffer_pos -= conf_window;
+            /* Save window_offset in case huffman+trailing needs more input */
+            d->pending_window_offset = window_offset;
+        }
+
+        /* Step 2: Decode huffman + trailing bits */
+        uint16_t raw;
+        tamp_res res = decode_huffman_trailing(d, TAMP_LEADING_EXTENDED_MATCH_BITS, &raw);
+        if (res != TAMP_OK) {
+            /* Update pending_symbol based on where we stopped */
+            d->pending_symbol =
+                (d->pending_ext_huffman != PARTIAL_STATE_NONE) ? PENDING_EXT_HAVE_HUFFMAN : PENDING_EXT_HAVE_OFFSET;
+            return res;
+        }
+
+        match_size = raw + min_pattern_size + 12;
+    }
+
+    /* Security check: validate window bounds */
+    const uint32_t window_size = (1u << conf_window);
+    if (TAMP_UNLIKELY((uint32_t)window_offset >= window_size ||
+                      (uint32_t)window_offset + (uint32_t)match_size > window_size)) {
+        return TAMP_OOB;
+    }
+
+    /* Calculate how many to write this call */
+    uint16_t remaining_count = match_size - skip;
+    size_t output_space = output_end - *output;
+    uint16_t to_write;
+
+    if (TAMP_UNLIKELY(remaining_count > output_space)) {
+        /* Partial write */
+        to_write = output_space;
+        d->skip_bytes = skip + output_space;
+        d->pending_symbol = PENDING_EXT_FRESH;
+        d->pending_window_offset = window_offset;
+        d->pending_ext_huffman = match_size;
+    } else {
+        /* Complete write */
+        to_write = remaining_count;
+        d->skip_bytes = 0;
+        d->pending_symbol = PENDING_NONE;
+    }
+
+    /* Copy from window to output */
+    uint16_t src_offset = window_offset + skip;
+    for (uint16_t i = 0; i < to_write; i++) {
+        *(*output)++ = d->window[src_offset + i];
+    }
+    *output_written_size += to_write;
+
+    /* Update window only on complete decode */
+    if (d->pending_symbol == PENDING_NONE) {
+        uint16_t wp = d->window_pos;
+        for (uint16_t i = 0; i < match_size; i++) {
+            d->window[wp] = d->window[(window_offset + i) & window_mask];
+            wp = (wp + 1) & window_mask;
+        }
+        d->window_pos = wp;
+        d->rle_last_written = 0;
+    }
+
+    return (d->pending_symbol == PENDING_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
+}
+#endif /* TAMP_V2_DECOMPRESS */
+
 /**
  * @brief Copy pattern from window to window, updating window_pos.
  *
@@ -84,13 +292,13 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
                                        size_t *input_consumed_size) {
     if (input_consumed_size) (*input_consumed_size) = 0;
     if (input_size == 0) return TAMP_INPUT_EXHAUSTED;
-    if (input[0] & 0x2) return TAMP_INVALID_CONF;  // Reserved
     if (input[0] & 0x1) return TAMP_INVALID_CONF;  // Currently only a single header byte is supported.
     if (input_consumed_size) (*input_consumed_size)++;
 
     conf->window = ((input[0] >> 5) & 0x7) + 8;
     conf->literal = ((input[0] >> 3) & 0x3) + 5;
     conf->use_custom_dictionary = ((input[0] >> 2) & 0x1);
+    conf->v2 = ((input[0] >> 1) & 0x1);
 
     return TAMP_OK;
 }
@@ -101,7 +309,8 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
  *   * window_bits_max
  */
 static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor *decompressor, uint8_t conf_window,
-                                                     uint8_t conf_literal, uint8_t conf_use_custom_dictionary) {
+                                                     uint8_t conf_literal, uint8_t conf_use_custom_dictionary,
+                                                     uint8_t conf_v2) {
     if (conf_window < 8 || conf_window > 15) return TAMP_INVALID_CONF;
     if (conf_literal < 5 || conf_literal > 8) return TAMP_INVALID_CONF;
     if (conf_window > decompressor->window_bits_max) return TAMP_INVALID_CONF;
@@ -111,6 +320,11 @@ static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor *decompres
     decompressor->conf_literal = conf_literal;
     decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf_window, conf_literal);
     decompressor->configured = true;
+#if TAMP_V2_DECOMPRESS
+    decompressor->conf_v2 = conf_v2;
+#else
+    (void)conf_v2;
+#endif
 
     return TAMP_OK;
 }
@@ -128,7 +342,7 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
     decompressor->window_bits_max = window_bits;
     if (conf) {
         res = tamp_decompressor_populate_from_conf(decompressor, conf->window, conf->literal,
-                                                   conf->use_custom_dictionary);
+                                                   conf->use_custom_dictionary, conf->v2);
     }
 
     return res;
@@ -156,7 +370,8 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
         res = tamp_decompressor_read_header(&conf, input, input_end - input, &header_consumed_size);
         if (res != TAMP_OK) return res;
 
-        res = tamp_decompressor_populate_from_conf(decompressor, conf.window, conf.literal, conf.use_custom_dictionary);
+        res = tamp_decompressor_populate_from_conf(decompressor, conf.window, conf.literal, conf.use_custom_dictionary,
+                                                   conf.v2);
         if (res != TAMP_OK) return res;
 
         input += header_consumed_size;
@@ -169,15 +384,48 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
     const uint8_t min_pattern_size = decompressor->min_pattern_size;
 
     const uint16_t window_mask = (1 << conf_window) - 1;
-    while (input != input_end || decompressor->bit_buffer_pos) {
+#if TAMP_V2_DECOMPRESS
+    const bool v2_enabled = decompressor->conf_v2;
+#endif
+
+/* Macro to refill bit buffer from input. Used before returning TAMP_INPUT_EXHAUSTED
+ * to ensure we consume all available input first. */
+#define REFILL()                                                                               \
+    while (input != input_end && decompressor->bit_buffer_pos <= 24) {                         \
+        decompressor->bit_buffer_pos += 8;                                                     \
+        decompressor->bit_buffer |= (uint32_t) * input << (32 - decompressor->bit_buffer_pos); \
+        input++;                                                                               \
+        (*input_consumed_size)++;                                                              \
+    }
+
+    while (input != input_end || decompressor->bit_buffer_pos
+#if TAMP_V2_DECOMPRESS
+           || decompressor->pending_symbol
+#endif
+    ) {
         // Populate the bit buffer
-        while (input != input_end && decompressor->bit_buffer_pos <= 24) {
-            uint32_t t = *input;
-            decompressor->bit_buffer_pos += 8;
-            decompressor->bit_buffer |= t << (32 - decompressor->bit_buffer_pos);
-            input++;
-            (*input_consumed_size)++;
+        REFILL();
+
+#if TAMP_V2_DECOMPRESS
+        /* Resume pending v2 operation. Retry after refill if helper needs more bits. */
+        if (TAMP_UNLIKELY(decompressor->pending_symbol)) {
+            if (TAMP_UNLIKELY(output == output_end)) return TAMP_OUTPUT_FULL;
+            tamp_res v2_res;
+            if (decompressor->pending_symbol == PENDING_RLE) {
+                v2_res = decode_rle(decompressor, &output, output_end, output_written_size, window_mask);
+            } else {
+                v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size, conf_window,
+                                               min_pattern_size, window_mask);
+            }
+            if (v2_res == TAMP_INPUT_EXHAUSTED) {
+                REFILL();
+                if (input == input_end) return TAMP_INPUT_EXHAUSTED;
+                continue; /* Retry with refilled buffer */
+            }
+            if (v2_res != TAMP_OK) return v2_res;
+            continue;
         }
+#endif
 
         if (TAMP_UNLIKELY(decompressor->bit_buffer_pos == 0)) return TAMP_INPUT_EXHAUSTED;
 
@@ -200,6 +448,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 
             output++;
             (*output_written_size)++;
+#if TAMP_V2_DECOMPRESS
+            decompressor->rle_last_written = 0;
+#endif
         } else {
             // is token; attempt a decode
             /* copy the bit buffers so that we can abort at any time */
@@ -225,6 +476,39 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                     bit_buffer_pos & ~7;  // Round bit_buffer_pos down to nearest multiple of 8.
                 continue;
             }
+
+#if TAMP_V2_DECOMPRESS
+            /* Check for v2 symbols */
+            if (TAMP_UNLIKELY(v2_enabled && match_size >= TAMP_RLE_SYMBOL)) {
+                /* Commit bit buffer and set pending symbol before calling helper.
+                 * Initialize partial state fields to indicate fresh decode. */
+                decompressor->bit_buffer = bit_buffer;
+                decompressor->bit_buffer_pos = bit_buffer_pos;
+                decompressor->pending_window_offset = 0;
+                decompressor->pending_ext_huffman = PARTIAL_STATE_NONE;
+
+                tamp_res v2_res;
+                if (match_size == TAMP_RLE_SYMBOL) {
+                    decompressor->pending_symbol = PENDING_RLE;
+                    v2_res = decode_rle(decompressor, &output, output_end, output_written_size, window_mask);
+                } else if (match_size == TAMP_EXTENDED_MATCH_SYMBOL) {
+                    decompressor->pending_symbol = PENDING_EXT_FRESH;
+                    v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size, conf_window,
+                                                   min_pattern_size, window_mask);
+                } else {
+                    return TAMP_ERROR; /* Invalid v2 symbol */
+                }
+                /* On success, helper clears pending_symbol; on error, it stays set for resume */
+                if (v2_res == TAMP_INPUT_EXHAUSTED) {
+                    REFILL();
+                    if (input == input_end) return TAMP_INPUT_EXHAUSTED;
+                    continue; /* Retry with refilled buffer */
+                }
+                if (v2_res != TAMP_OK) return v2_res;
+                continue;
+            }
+#endif
+
             if (TAMP_UNLIKELY(bit_buffer_pos < conf_window)) {
                 // There are not enough bits to decode window offset
                 return TAMP_INPUT_EXHAUSTED;
@@ -270,6 +554,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                 uint16_t wp = decompressor->window_pos;
                 window_copy(decompressor->window, &wp, window_offset, match_size, window_mask);
                 decompressor->window_pos = wp;
+#if TAMP_V2_DECOMPRESS
+                decompressor->rle_last_written = 0;
+#endif
             }
         }
         if (TAMP_UNLIKELY(callback && (res = callback(user_data, *output_written_size, input_size))))
