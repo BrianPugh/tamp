@@ -68,6 +68,26 @@ extern "C" {
 #define TAMP_STREAM_WORK_BUFFER_SIZE 32
 #endif
 
+/* V2 format support (RLE, extended match).
+ * Enabled by default. Disable to save code size on minimal builds.
+ * Separate flags allow decompressor-only or compressor-only v2 support.
+ */
+#ifndef TAMP_V2_DECOMPRESS
+#define TAMP_V2_DECOMPRESS 1
+#endif
+#ifndef TAMP_V2_COMPRESS
+#define TAMP_V2_COMPRESS 1
+#endif
+
+/* V2 encoding constants */
+#if TAMP_V2_DECOMPRESS || TAMP_V2_COMPRESS
+#define TAMP_RLE_SYMBOL 12
+#define TAMP_EXTENDED_MATCH_SYMBOL 13
+#define TAMP_LEADING_EXTENDED_MATCH_BITS 3
+#define TAMP_LEADING_RLE_BITS 4
+#define TAMP_RLE_MAX_WINDOW 8
+#endif
+
 enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,
@@ -93,6 +113,7 @@ typedef struct TampConf {
     uint16_t window : 4;                 // number of window bits
     uint16_t literal : 4;                // number of literal bits
     uint16_t use_custom_dictionary : 1;  // Use a custom initialized dictionary.
+    uint16_t v2 : 1;                     // v2 format (RLE, extended match). Read from header bit [1].
 #if TAMP_LAZY_MATCHING
     uint16_t lazy_matching : 1;  // use Lazy Matching (spend 50-75% more CPU for around 0.5-2.0% better compression.)
                                  // only effects compression operations.
