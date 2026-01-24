@@ -12,8 +12,12 @@ import tamp.compressor
 
 def main():
     # Define test files (same as optimize-extended-huffman.py)
-    build_dir = Path(__file__).parent.parent / "build"
-    test_files = [build_dir / "enwik8", build_dir / "RPI_PICO-20250415-v1.25.0.uf2", *(build_dir / "silesia").iterdir()]
+    datasets_dir = Path(__file__).parent.parent / "datasets"
+    test_files = [
+        datasets_dir / "enwik8",
+        datasets_dir / "RPI_PICO-20250415-v1.25.0.uf2",
+        *(datasets_dir / "silesia").iterdir(),
+    ]
     test_files.sort()
 
     ratios = []
