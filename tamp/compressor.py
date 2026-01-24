@@ -535,6 +535,8 @@ class Compressor:
             bytes_written += self._compress_input_buffer_single()
         if self.v2 and self._rle_count:
             bytes_written += self._write_rle()
+        if self.v2 and self._extended_match_count:
+            bytes_written += self._write_extended_match()
 
         # Clear any cached lazy matching state
         if self.lazy_matching:
