@@ -35,8 +35,12 @@ cdef class Compressor:
         int literal=8,
         dictionary=None,
         bool lazy_matching=False,
+        bool v2=False,
     ):
         cdef ctamp.TampConf conf
+
+        if v2:
+            raise NotImplementedError("v2 compression not yet supported in C compressor. Use --v1 flag or --implementation python.")
 
         if dictionary and bit_size(len(dictionary) - 1) != window:
             raise ValueError("Dictionary-window size mismatch.")
