@@ -5,6 +5,7 @@
 3. Use the upper 4 bits to express the number of bits decoded.
 4. Use the lower 4 bits to express the decoded value.
 """
+
 _FLUSH = 15
 
 table_bits = 7

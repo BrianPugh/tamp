@@ -60,7 +60,7 @@ cdef class Decompressor:
         self._window_buffer = dictionary if dictionary else bytearray(1 << conf.window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
-        res = ctamp.tamp_decompressor_init(self._c_decompressor, &conf, self._window_buffer_ptr)
+        res = ctamp.tamp_decompressor_init(self._c_decompressor, &conf, self._window_buffer_ptr, conf.window)
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
 

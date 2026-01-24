@@ -12,4 +12,5 @@ ERROR_LOOKUP = {
     ctamp.TAMP_ERROR: Exception,
     ctamp.TAMP_EXCESS_BITS: ExcessBitsError,
     ctamp.TAMP_INVALID_CONF: ValueError,
+    ctamp.TAMP_OOB: ValueError,
 }

@@ -41,6 +41,11 @@ def build_cython_extensions():
 
     define_macros.append(("TAMP_LAZY_MATCHING", "1"))
 
+    # Force embedded find_best_match implementation on desktop (for testing)
+    if os.environ.get("TAMP_USE_EMBEDDED_MATCH", "0") == "1":
+        print("Using embedded find_best_match implementation")
+        define_macros.append(("TAMP_USE_EMBEDDED_MATCH", "1"))
+
     if profile:
         print("Setting profiling configuration.")
         directive_defaults = get_directive_defaults()

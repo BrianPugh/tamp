@@ -258,21 +258,21 @@ input data sourced from the
 [Enwik8](https://mattmahoney.net/dc/textdata.html). This should give a general
 idea of how these algorithms perform over a variety of input data types.
 
-| dataset               | raw         | tamp           | tamp (LazyMatching) | zlib           | heatshrink |
-| --------------------- | ----------- | -------------- | ------------------- | -------------- | ---------- |
-| enwik8                | 100,000,000 | **51,635,633** | 51,252,113          | 56,205,166     | 56,110,394 |
-| build/silesia/dickens | 10,192,446  | **5,546,761**  | 5,511,604           | 6,049,169      | 6,155,768  |
-| build/silesia/mozilla | 51,220,480  | 25,121,385     | 24,936,067          | **25,104,966** | 25,435,908 |
-| build/silesia/mr      | 9,970,564   | 5,027,032      | 4,886,272           | **4,864,734**  | 5,442,180  |
-| build/silesia/nci     | 33,553,445  | 8,643,610      | 8,645,299           | **5,765,521**  | 8,247,487  |
-| build/silesia/ooffice | 6,152,192   | **3,814,938**  | 3,798,261           | 4,077,277      | 3,994,589  |
-| build/silesia/osdb    | 10,085,684  | **8,520,835**  | 8,506,443           | 8,625,159      | 8,747,527  |
-| build/silesia/reymont | 6,627,202   | **2,847,981**  | 2,820,870           | 2,897,661      | 2,910,251  |
-| build/silesia/samba   | 21,606,400  | 9,102,594      | 9,060,692           | **8,862,423**  | 9,223,827  |
-| build/silesia/sao     | 7,251,944   | **6,137,755**  | 6,101,744           | 6,506,417      | 6,400,926  |
-| build/silesia/webster | 41,458,703  | **18,694,172** | 18,567,288          | 20,212,235     | 19,942,817 |
-| build/silesia/x-ray   | 8,474,240   | 7,510,606      | 7,405,814           | **7,351,750**  | 8,059,723  |
-| build/silesia/xml     | 5,345,280   | 1,681,687      | 1,672,660           | **1,586,985**  | 1,665,179  |
+| dataset         | raw         | tamp           | tamp (LazyMatching) | zlib           | heatshrink |
+| --------------- | ----------- | -------------- | ------------------- | -------------- | ---------- |
+| enwik8          | 100,000,000 | **51,635,633** | 51,252,113          | 56,205,166     | 56,110,394 |
+| silesia/dickens | 10,192,446  | **5,546,761**  | 5,511,604           | 6,049,169      | 6,155,768  |
+| silesia/mozilla | 51,220,480  | 25,121,385     | 24,936,067          | **25,104,966** | 25,435,908 |
+| silesia/mr      | 9,970,564   | 5,027,032      | 4,886,272           | **4,864,734**  | 5,442,180  |
+| silesia/nci     | 33,553,445  | 8,643,610      | 8,645,299           | **5,765,521**  | 8,247,487  |
+| silesia/ooffice | 6,152,192   | **3,814,938**  | 3,798,261           | 4,077,277      | 3,994,589  |
+| silesia/osdb    | 10,085,684  | **8,520,835**  | 8,506,443           | 8,625,159      | 8,747,527  |
+| silesia/reymont | 6,627,202   | **2,847,981**  | 2,820,870           | 2,897,661      | 2,910,251  |
+| silesia/samba   | 21,606,400  | 9,102,594      | 9,060,692           | **8,862,423**  | 9,223,827  |
+| silesia/sao     | 7,251,944   | **6,137,755**  | 6,101,744           | 6,506,417      | 6,400,926  |
+| silesia/webster | 41,458,703  | **18,694,172** | 18,567,288          | 20,212,235     | 19,942,817 |
+| silesia/x-ray   | 8,474,240   | 7,510,606      | 7,405,814           | **7,351,750**  | 8,059,723  |
+| silesia/xml     | 5,345,280   | 1,681,687      | 1,672,660           | **1,586,985**  | 1,665,179  |
 
 Tamp usually out-performs heatshrink, and is generally very competitive with
 zlib. While trying to be an apples-to-apples comparison, zlib still uses
@@ -326,15 +326,15 @@ Heatshrink.
 
 As a rough benchmark, here is the performance (in seconds) of these different
 compression algorithms on the 100MB enwik8 dataset. These tests were performed
-on an M1 Macbook Air.
+on an M3 Macbook Air.
 
-|                            | Compression (s) | Decompression (s) |
-| -------------------------- | --------------- | ----------------- |
-| Tamp (Python Reference)    | 109.5           | 76.0              |
-| Tamp (C)                   | 16.45           | 0.142             |
-| ZLib                       | 0.98            | 0.98              |
-| Heatshrink (with index)    | 6.22            | 0.82              |
-| Heatshrink (without index) | 41.73           | 0.82              |
+|                              | Compression (s) | Decompression (s) |
+| ---------------------------- | --------------- | ----------------- |
+| Tamp (Pure Python Reference) | 136.2           | 105.0             |
+| Tamp (C bindings)            | 5.56            | 0.544             |
+| ZLib                         | 3.65            | 0.578             |
+| Heatshrink (with index)      | 4.42            | 0.67              |
+| Heatshrink (without index)   | 27.40           | 0.67              |
 
 Heatshrink v0.4.1 was used in these benchmarks. When heathshrink uses an index,
 an additional `(1 << (windowBits + 1))` bytes of memory are used, resulting in
@@ -351,9 +351,9 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 12,770                | 644,000                 |
-| Tamp (C)                         | 28,500                | 1,042,524               |
-| Deflate (micropython builtin)    | 6,715                 | 146,477                 |
+| Tamp (Micropython Native Module) | 31,192                | 1,086,957               |
+| Tamp (C)                         | 36,127                | 1,400,600               |
+| Deflate (micropython builtin)    | 6,885                 | 294,985                 |
 
 Tamp resulted in a **51637** byte archive, while Micropython's builtin `deflate`
 resulted in a larger, **59442** byte archive.
@@ -362,18 +362,22 @@ resulted in a larger, **59442** byte archive.
 
 To give an idea on the resulting binary sizes, Tamp and other libraries were
 compiled for the Pi Pico (`armv6m`). All libraries were compiled with `-O3`.
-Numbers reported in bytes.
+Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
+15.2.1 and MicroPython v1.27, and can be regenerated with `make binary-size`.
 
 |                           | Compressor | Decompressor | Compressor + Decompressor |
 | ------------------------- | ---------- | ------------ | ------------------------- |
-| Tamp (MicroPython Viper)  | 4429       | 4205         | 7554                      |
-| Tamp (MicroPython Native) | 3232       | 3047         | 5505                      |
-| Tamp (C)                  | 2008       | 1972         | 3864                      |
+| Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
+| Tamp (MicroPython Native) | 3896       | 3559         | 6616                      |
+| Tamp (C, -DTAMP_STREAM=0) | 2028       | 1992         | 3900                      |
+| Tamp (C)                  | 2472       | 2444         | 4796                      |
 | Heatshrink (C)            | 2956       | 3876         | 6832                      |
 | uzlib (C)                 | 2355       | 3963         | 6318                      |
 
-Heatshrink doesn't include a high level API; in an apples-to-apples comparison
-the Tamp library would be even smaller.
+Tamp C includes a high-level stream API by default. Even with `-DTAMP_STREAM=0`,
+Tamp includes buffer-looping functions (like `tamp_compressor_compress`) that
+Heatshrink lacks (Heatshrink only provides poll/sink primitives). In an
+apples-to-apples comparison, Tamp would be even smaller.
 
 ## Acknowledgement
 

@@ -9,7 +9,7 @@
  **********/
 
 #include "tamp/common.h"
-#define CHUNK_SIZE 16  // Must be <= 65535
+#define CHUNK_SIZE 32  // Must be <= 65535
 #define mp_type_bytearray (*(mp_obj_type_t *)(mp_load_global(MP_QSTR_bytearray)))
 
 static void TAMP_CHECK(tamp_res res) {
@@ -188,7 +188,7 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
             mp_raise_ValueError("");
         }
 
-        TAMP_CHECK(tamp_decompressor_init(&o->d, &conf, dictionary_buffer_info.buf));
+        TAMP_CHECK(tamp_decompressor_init(&o->d, &conf, dictionary_buffer_info.buf, conf.window));
     }
 
     return MP_OBJ_FROM_PTR(o);

@@ -21,6 +21,7 @@ cdef extern from "tamp/common.h":
         TAMP_ERROR = -1,  # Generic error
         TAMP_EXCESS_BITS = -2,  # Provided symbol has more bits than conf->literal
         TAMP_INVALID_CONF = -3,  # Invalid configuration parameters.
+        TAMP_OOB = -4,  # Out-of-bounds access detected in compressed data.
 
     void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
     int compute_min_pattern_size(uint8_t window, uint8_t literal);
@@ -79,7 +80,8 @@ cdef extern from "tamp/decompressor.h":
     tamp_res tamp_decompressor_init(
             TampDecompressor *decompressor,
             const TampConf *conf,
-            unsigned char *window
+            unsigned char *window,
+            uint8_t window_bits
     );
 
     tamp_res tamp_decompressor_decompress(

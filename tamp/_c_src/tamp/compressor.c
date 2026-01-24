@@ -46,11 +46,33 @@ inline bool tamp_compressor_full(const TampCompressor *compressor) {
     return compressor->input_size == sizeof(compressor->input);
 }
 
+/*
+ * Platform-specific find_best_match implementations:
+ *
+ * 1. TAMP_ESP32: External implementation in espidf/tamp/compressor_esp32.cpp
+ *
+ * 2. Desktop 64-bit (x86_64, aarch64, Windows 64-bit):
+ *    Included from compressor_find_match_desktop.c - uses bit manipulation
+ *    and 64-bit loads for parallel match detection
+ *
+ * 3. Embedded/Default (Cortex-M0/M0+, other 32-bit):
+ *    Defined below - single-byte-first comparison, safe for all architectures
+ *
+ * Set TAMP_USE_EMBEDDED_MATCH=1 to force the embedded implementation on desktop
+ * (useful for testing the embedded code path on CI).
+ */
+
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size);
+
+#elif (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)) && !TAMP_USE_EMBEDDED_MATCH
+#include "compressor_find_match_desktop.c"
+
 #else
 /**
  * @brief Find the best match for the current input buffer.
+ *
+ * Embedded/32-bit implementation: uses single-byte-first comparison (faster on simple cores).
  *
  * @param[in,out] compressor TampCompressor object to perform search on.
  * @param[out] match_index  If match_size is 0, this value is undefined.
@@ -61,16 +83,17 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
     if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return;
 
-    const uint16_t first_second = (read_input(0) << 8) | read_input(1);
-    const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
+    const uint8_t first_byte = read_input(0);
+    const uint8_t second_byte = read_input(1);
+    const uint32_t window_size_minus_1 = WINDOW_SIZE - 1;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
+    const unsigned char *window = compressor->window;
 
-    uint16_t window_rolling_2_byte = compressor->window[0];
-
-    for (uint16_t window_index = 0; window_index < window_size_minus_1; window_index++) {
-        window_rolling_2_byte <<= 8;
-        window_rolling_2_byte |= compressor->window[window_index + 1];
-        if (TAMP_LIKELY(window_rolling_2_byte != first_second)) {
+    for (uint32_t window_index = 0; window_index < window_size_minus_1; window_index++) {
+        if (TAMP_LIKELY(window[window_index] != first_byte)) {
+            continue;
+        }
+        if (TAMP_LIKELY(window[window_index + 1] != second_byte)) {
             continue;
         }
 
@@ -81,7 +104,7 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
         for (uint8_t i = 2; i < max_pattern_size; i++) {
             if (TAMP_UNLIKELY((window_index + i) > window_size_minus_1)) break;
 
-            if (TAMP_LIKELY(compressor->window[window_index + i] != read_input(i))) break;
+            if (TAMP_LIKELY(window[window_index + i] != read_input(i))) break;
             match_len = i + 1;
         }
 
@@ -154,8 +177,8 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     return TAMP_OK;
 }
 
-tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
-                              size_t *output_written_size) {
+TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
+                                            size_t *output_written_size) {
     tamp_res res;
     const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     size_t output_written_size_proxy;
@@ -407,3 +430,72 @@ tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor *compressor, unsig
 
     return TAMP_OK;
 }
+
+#if TAMP_STREAM
+
+tamp_res tamp_compress_stream(TampCompressor *compressor, tamp_read_t read_cb, void *read_handle, tamp_write_t write_cb,
+                              void *write_handle, size_t *input_consumed_size, size_t *output_written_size,
+                              tamp_callback_t callback, void *user_data) {
+    size_t input_consumed_size_proxy, output_written_size_proxy;
+    if (!input_consumed_size) input_consumed_size = &input_consumed_size_proxy;
+    if (!output_written_size) output_written_size = &output_written_size_proxy;
+    *input_consumed_size = 0;
+    *output_written_size = 0;
+
+    unsigned char input_buffer[TAMP_STREAM_WORK_BUFFER_SIZE / 2];
+    unsigned char output_buffer[TAMP_STREAM_WORK_BUFFER_SIZE / 2];
+
+    // Main compression loop
+    while (1) {
+        int bytes_read = read_cb(read_handle, input_buffer, sizeof(input_buffer));
+        if (TAMP_UNLIKELY(bytes_read < 0)) return TAMP_READ_ERROR;
+        if (bytes_read == 0) break;
+
+        *input_consumed_size += bytes_read;
+
+        size_t input_pos = 0;
+        while (input_pos < (size_t)bytes_read) {
+            size_t chunk_consumed, chunk_written;
+
+            tamp_res res = tamp_compressor_compress(compressor, output_buffer, sizeof(output_buffer), &chunk_written,
+                                                    input_buffer + input_pos, bytes_read - input_pos, &chunk_consumed);
+            if (TAMP_UNLIKELY(res < TAMP_OK)) return res;
+
+            input_pos += chunk_consumed;
+
+            if (TAMP_LIKELY(chunk_written > 0)) {
+                int bytes_written = write_cb(write_handle, output_buffer, chunk_written);
+                if (TAMP_UNLIKELY(bytes_written < 0 || (size_t)bytes_written != chunk_written)) {
+                    return TAMP_WRITE_ERROR;
+                }
+                *output_written_size += chunk_written;
+            }
+        }
+
+        if (TAMP_UNLIKELY(callback)) {
+            int cb_res = callback(user_data, *input_consumed_size, 0);
+            if (TAMP_UNLIKELY(cb_res)) return (tamp_res)cb_res;
+        }
+    }
+
+    // Flush remaining data
+    while (1) {
+        size_t chunk_written;
+        tamp_res res = tamp_compressor_flush(compressor, output_buffer, sizeof(output_buffer), &chunk_written, false);
+        if (TAMP_UNLIKELY(res < TAMP_OK)) return res;
+
+        if (TAMP_LIKELY(chunk_written > 0)) {
+            int bytes_written = write_cb(write_handle, output_buffer, chunk_written);
+            if (TAMP_UNLIKELY(bytes_written < 0 || (size_t)bytes_written != chunk_written)) {
+                return TAMP_WRITE_ERROR;
+            }
+            *output_written_size += chunk_written;
+        }
+
+        if (res == TAMP_OK) break;
+    }
+
+    return TAMP_OK;
+}
+
+#endif /* TAMP_STREAM */

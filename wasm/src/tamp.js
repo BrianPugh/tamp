@@ -9,6 +9,7 @@ import TampModule from './tamp-module.mjs';
 const TAMP_ERROR = -1;
 const TAMP_EXCESS_BITS = -2;
 const TAMP_INVALID_CONF = -3;
+const TAMP_OOB = -4;
 
 class TampError extends Error {
   constructor(code, message, details = {}) {
@@ -46,17 +47,34 @@ class DecompressionError extends TampError {
 class WasmModuleManager {
   #module = null;
   #initPromise = null;
+  #structSizes = null;
 
   async initialize() {
     if (!this.#initPromise) {
-      this.#initPromise = TampModule();
+      this.#initPromise = this.#doInitialize();
     }
-    this.#module = await this.#initPromise;
+    return await this.#initPromise;
+  }
+
+  async #doInitialize() {
+    this.#module = await TampModule();
+
+    // Query struct sizes from C code once at initialization
+    this.#structSizes = {
+      compressor: this.#module.ccall('tamp_compressor_sizeof', 'number', [], []),
+      decompressor: this.#module.ccall('tamp_decompressor_sizeof', 'number', [], []),
+      conf: this.#module.ccall('tamp_conf_sizeof', 'number', [], []),
+    };
+
     return this.#module;
   }
 
   get module() {
     return this.#module;
+  }
+
+  get structSizes() {
+    return this.#structSizes;
   }
 
   get isInitialized() {
@@ -79,6 +97,8 @@ function throwOnError(result, operation) {
         throw new ExcessBitsError(`${operation}: Symbol has more bits than configured literal size`, details);
       case TAMP_INVALID_CONF:
         throw new RangeError(`${operation}: Invalid configuration parameters`);
+      case TAMP_OOB:
+        throw new RangeError(`${operation}: Out-of-bounds access detected in compressed data`);
       case TAMP_ERROR:
       default:
         if (operation.toLowerCase().includes('compress')) {
@@ -105,7 +125,15 @@ export class TampCompressor {
       lazy_matching: false,
       ...options,
     };
-    this.initialized = false;
+
+    // Validate window and literal ranges
+    if (this.options.window < 8 || this.options.window > 15) {
+      throw new RangeError(`window must be between 8 and 15, got ${this.options.window}`);
+    }
+    if (this.options.literal < 5 || this.options.literal > 8) {
+      throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
+    }
+
     this.compressorPtr = null;
     this.windowPtr = null;
     this.module = null;
@@ -120,34 +148,31 @@ export class TampCompressor {
   }
 
   async _doInitialize() {
-    if (this.initialized) return;
-
     this.module = await initializeWasm();
     const windowSize = 1 << this.options.window;
 
+    // Validate dictionary size before allocating
+    const dictData = this.options.dictionary ? new Uint8Array(this.options.dictionary) : null;
+    if (dictData && dictData.length !== windowSize) {
+      throw new RangeError(`Dictionary size (${dictData.length}) must match window size (${windowSize})`);
+    }
+
+    const { compressor: compressorStructSize, conf: confStructSize } = wasmManager.structSizes;
+
     // Allocate memory for compressor struct, config struct, and window buffer in single allocation
-    const totalSize = 64 + 4 + windowSize; // TampCompressor struct + config struct + window buffer
+    const totalSize = compressorStructSize + confStructSize + windowSize;
     this.compressorPtr = this.module._malloc(totalSize);
     if (this.compressorPtr === 0) {
       throw new RangeError(`Failed to allocate memory for compressor (${totalSize} bytes)`);
     }
 
-    const confPtr = this.compressorPtr + 64;
-    this.windowPtr = confPtr + 4;
+    const confPtr = this.compressorPtr + compressorStructSize;
+    this.windowPtr = confPtr + confStructSize;
 
     // Initialize dictionary
-    if (this.options.dictionary) {
-      // Use provided custom dictionary
-      const dictData = new Uint8Array(this.options.dictionary);
-      if (dictData.length !== windowSize) {
-        throw new RangeError(`Dictionary size (${dictData.length}) must match window size (${windowSize})`);
-      }
-      // Copy dictionary data byte by byte using setValue
-      for (let i = 0; i < dictData.length; i++) {
-        this.module.setValue(this.windowPtr + i, dictData[i], 'i8');
-      }
+    if (dictData) {
+      this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
-      // Use default dictionary initialization
       this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
     }
 
@@ -176,8 +201,6 @@ export class TampCompressor {
       this.windowPtr = null;
       throw error;
     }
-
-    this.initialized = true;
   }
 
   /**
@@ -194,8 +217,9 @@ export class TampCompressor {
     const progressCallback = options.onPoll;
     await this.initialize();
 
-    console.log(`Starting compression of ${input.length} bytes...`);
-    const compressionStartTime = performance.now();
+    if (!this.compressorPtr) {
+      throw new Error('Compressor has been destroyed');
+    }
 
     const CHUNK_SIZE = 1 << 20;
     const outputChunks = [];
@@ -244,10 +268,8 @@ export class TampCompressor {
         checkAborted(); // Check for cancellation at start of each chunk
         const currentInputSize = Math.min(inputRemaining, CHUNK_SIZE);
 
-        // Copy current input chunk to WASM memory
-        for (let i = 0; i < currentInputSize; i++) {
-          this.module.setValue(inputPtr + i, input[inputOffset + i], 'i8');
-        }
+        // Copy input chunk to WASM memory
+        this.module.HEAPU8.set(input.subarray(inputOffset, inputOffset + currentInputSize), inputPtr);
 
         // Use lower-level API instead of tamp_compressor_compress_cb
         // This is a translation of the C implementation
@@ -349,12 +371,8 @@ export class TampCompressor {
         this.module.setValue(outputSizePtr, chunkOutputWritten, 'i32');
         this.module.setValue(inputConsumedPtr, chunkInputConsumed, 'i32');
 
-        // Copy output chunk
         if (chunkOutputWritten > 0) {
-          const outputChunk = new Uint8Array(chunkOutputWritten);
-          for (let i = 0; i < chunkOutputWritten; i++) {
-            outputChunk[i] = this.module.getValue(outputPtr + i, 'i8');
-          }
+          const outputChunk = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, chunkOutputWritten).slice();
           outputChunks.push(outputChunk);
         }
 
@@ -380,14 +398,6 @@ export class TampCompressor {
         offset += chunk.length;
       }
 
-      const compressionEndTime = performance.now();
-      const compressionTime = compressionEndTime - compressionStartTime;
-      console.log(
-        `Compression completed in ${compressionTime.toFixed(2)}ms. Compressed ${
-          input.length
-        } bytes to ${totalSize} bytes (${((1 - totalSize / input.length) * 100).toFixed(1)}% reduction)`
-      );
-
       return result;
     } finally {
       this.module._free(basePtr);
@@ -401,6 +411,10 @@ export class TampCompressor {
    */
   async flush(write_token = false) {
     await this.initialize();
+
+    if (!this.compressorPtr) {
+      throw new Error('Compressor has been destroyed');
+    }
 
     // Single allocation for output buffer (32 bytes) + output size pointer (4 bytes)
     const totalAllocSize = 32 + 4;
@@ -423,12 +437,7 @@ export class TampCompressor {
       throwOnError(result, 'Flush');
 
       const outputSize = this.module.getValue(outputSizePtr, 'i32');
-      const flushed = new Uint8Array(outputSize);
-      // Copy output data byte by byte using getValue
-      for (let i = 0; i < outputSize; i++) {
-        flushed[i] = this.module.getValue(outputPtr + i, 'i8');
-      }
-
+      const flushed = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, outputSize).slice();
       return flushed;
     } finally {
       this.module._free(basePtr);
@@ -445,7 +454,6 @@ export class TampCompressor {
       this.compressorPtr = null;
       this.windowPtr = null; // Don't free separately - part of same allocation
     }
-    this.initialized = false;
   }
 }
 
@@ -461,7 +469,15 @@ export class TampDecompressor {
       lazy_matching: false,
       ...options,
     };
-    this.initialized = false;
+
+    // Validate window and literal ranges (if provided, these are used for dictionary matching)
+    if (this.options.window < 8 || this.options.window > 15) {
+      throw new RangeError(`window must be between 8 and 15, got ${this.options.window}`);
+    }
+    if (this.options.literal < 5 || this.options.literal > 8) {
+      throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
+    }
+
     this.decompressorPtr = null;
     this.windowPtr = null;
     this.module = null;
@@ -484,22 +500,20 @@ export class TampDecompressor {
   }
 
   async _doInitialize() {
-    if (this.initialized) return;
-
     this.module = await initializeWasm();
 
-    // Allocate memory for header processing: conf(16) + inputConsumed(4) + headerInput(1) = 21 bytes
-    const initialSize = 16 + 4 + 1;
+    const { conf: confStructSize } = wasmManager.structSizes;
+
+    // Allocate memory for header processing: conf + inputConsumed(4) + headerInput(1)
+    const initialSize = confStructSize + 4 + 1;
     this.initialPtr = this.module._malloc(initialSize);
     if (this.initialPtr === 0) {
       throw new RangeError(`Failed to allocate initial memory (${initialSize} bytes)`);
     }
 
     this.confPtr = this.initialPtr;
-    this.inputConsumedPtr = this.initialPtr + 16;
+    this.inputConsumedPtr = this.initialPtr + confStructSize;
     this.headerInputPtr = this.inputConsumedPtr + 4;
-
-    this.initialized = true;
   }
 
   /**
@@ -545,28 +559,27 @@ export class TampDecompressor {
     // Use header-derived configuration for window size
     const windowSize = 1 << headerWindow;
 
-    // Allocate memory for decompressor struct and window buffer in single allocation
-    const decompressorTotalSize = 32 + windowSize; // TampDecompressor struct + window buffer
-    this.decompressorPtr = this.module._malloc(decompressorTotalSize);
-    if (this.decompressorPtr === 0) {
-      throw new RangeError(`Failed to allocate memory for decompressor (${decompressorTotalSize} bytes)`);
+    // Validate dictionary size before allocating
+    const dictData = headerUsesCustomDict ? new Uint8Array(this.options.dictionary) : null;
+    if (dictData && dictData.length !== windowSize) {
+      throw new RangeError(`Dictionary size (${dictData.length}) must match header window size (${windowSize})`);
     }
 
-    this.windowPtr = this.decompressorPtr + 32; // Window buffer starts after struct
+    const { decompressor: decompressorStructSize } = wasmManager.structSizes;
 
-    // Initialize dictionary based on header information
-    if (headerUsesCustomDict) {
-      // Use provided custom dictionary
-      const dictData = new Uint8Array(this.options.dictionary);
-      if (dictData.length !== windowSize) {
-        throw new RangeError(`Dictionary size (${dictData.length}) must match header window size (${windowSize})`);
-      }
-      // Copy dictionary data byte by byte using setValue
-      for (let i = 0; i < dictData.length; i++) {
-        this.module.setValue(this.windowPtr + i, dictData[i], 'i8');
-      }
+    // Allocate memory for decompressor struct and window buffer in single allocation
+    const totalSize = decompressorStructSize + windowSize;
+    this.decompressorPtr = this.module._malloc(totalSize);
+    if (this.decompressorPtr === 0) {
+      throw new RangeError(`Failed to allocate memory for decompressor (${totalSize} bytes)`);
+    }
+
+    this.windowPtr = this.decompressorPtr + decompressorStructSize;
+
+    // Initialize dictionary
+    if (dictData) {
+      this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
-      // Use default dictionary initialization
       this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
     }
 
@@ -575,8 +588,8 @@ export class TampDecompressor {
       const result = this.module.ccall(
         'tamp_decompressor_init',
         'number',
-        ['number', 'number', 'number'],
-        [this.decompressorPtr, this.confPtr, this.windowPtr]
+        ['number', 'number', 'number', 'number'],
+        [this.decompressorPtr, this.confPtr, this.windowPtr, headerWindow]
       );
 
       throwOnError(result, 'Decompressor initialization');
@@ -595,10 +608,30 @@ export class TampDecompressor {
   /**
    * Decompress data in incremental chunks.
    * @param {Uint8Array} input - Compressed input data
+   * @param {Object} [options] - Options object
+   * @param {AbortSignal} [options.signal] - AbortSignal for cancellation
    * @returns {Promise<Uint8Array>} - Decompressed output
    */
-  async decompress(input) {
+  async decompress(input, options = {}) {
     await this.initialize();
+
+    if (!this.initialPtr) {
+      throw new Error('Decompressor has been destroyed');
+    }
+
+    const { signal } = options;
+
+    // Check for cancellation
+    const checkAborted = () => {
+      if (signal?.aborted) {
+        throw new DecompressionError('Decompression was aborted', {
+          aborted: true,
+          reason: signal.reason,
+        });
+      }
+    };
+
+    checkAborted(); // Check before starting
 
     // Combine any pending input with new input
     const combinedInput = new Uint8Array(this.pendingInput.length + input.length);
@@ -644,16 +677,14 @@ export class TampDecompressor {
     const outputPtr = inputPtr + payloadData.length;
 
     try {
-      // Copy payload data to WASM memory
-      for (let i = 0; i < payloadData.length; i++) {
-        this.module.setValue(inputPtr + i, payloadData[i], 'i8');
-      }
+      this.module.HEAPU8.set(payloadData, inputPtr);
 
       let payloadOffset = 0;
       let payloadSize = payloadData.length;
 
       // Process data incrementally
       while (payloadSize > 0) {
+        checkAborted(); // Check for cancellation at each iteration
         const result = this.module.ccall(
           'tamp_decompressor_decompress_cb',
           'number',
@@ -677,12 +708,8 @@ export class TampDecompressor {
         payloadSize -= inputConsumed;
         payloadOffset += inputConsumed;
 
-        // Copy output chunk if any data was produced
         if (outputSize > 0) {
-          const outputChunk = new Uint8Array(outputSize);
-          for (let i = 0; i < outputSize; i++) {
-            outputChunk[i] = this.module.getValue(outputPtr + i, 'i8');
-          }
+          const outputChunk = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, outputSize).slice();
           outputChunks.push(outputChunk);
         }
 
@@ -741,7 +768,6 @@ export class TampDecompressor {
       this.inputConsumedPtr = null;
       this.headerInputPtr = null;
     }
-    this.initialized = false;
     this.headerRead = false;
     this.decompressorInitialized = false;
     this.pendingInput = new Uint8Array(0);
@@ -835,12 +861,7 @@ export async function initializeDictionary(size) {
     // Call the C function to initialize the dictionary
     module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [bufferPtr, size]);
 
-    // Copy the initialized data back to JavaScript byte by byte
-    const dictionary = new Uint8Array(size);
-    for (let i = 0; i < size; i++) {
-      dictionary[i] = module.getValue(bufferPtr + i, 'i8');
-    }
-
+    const dictionary = new Uint8Array(module.HEAPU8.buffer, bufferPtr, size).slice();
     return dictionary;
   } finally {
     module._free(bufferPtr);

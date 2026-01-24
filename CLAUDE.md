@@ -89,7 +89,7 @@ poetry run pytest
 
 ```bash
 cd wasm/
-source /path/to/emsdk/emsdk_env.sh
+activate emsdk              # Activate Emscripten environment
 ```
 
 **Build and Test:**
@@ -246,6 +246,13 @@ make website-clean         # Clean website build artifacts
    - MicroPython `.mpy` files for multiple architectures
    - WebAssembly npm package
 3. **CI/CD handles** cross-platform builds and testing
+
+## Documentation Style
+
+- Avoid "fake" subsections (e.g., bold text like `**Error Promotion:**` acting
+  as a heading). Either use a real RST section heading or integrate the content
+  into the surrounding prose.
+- Keep documentation terse and direct.
 
 ## Additional Notes
 

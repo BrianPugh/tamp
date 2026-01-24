@@ -6,7 +6,7 @@ chunk_size = 1 << 20
 
 compressor = tamp.Compressor("build/enwik8.tamp")
 
-with open("build/enwik8", "rb") as f:
+with open("datasets/enwik8", "rb") as f:
     i = 0
     while True:
         i += 1

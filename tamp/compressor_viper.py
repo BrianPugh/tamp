@@ -1,5 +1,5 @@
-"""Micropython optimized for performance over readability.
-"""
+"""Micropython optimized for performance over readability."""
+
 from io import BytesIO
 
 import micropython

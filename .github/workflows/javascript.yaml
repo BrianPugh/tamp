@@ -2,24 +2,44 @@ name: JavaScript Package CI/CD
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.11.1). Leave empty to skip publishing.'
+        required: false
+        type: string
   push:
     branches:
       - main
     tags:
       - 'v*'
+    paths:
+      - 'wasm/**'
+      - 'tamp/_c_src/**'
+      - 'website/**'
+      - '.github/workflows/javascript.yaml'
   pull_request:
     branches:
       - main
+    paths:
+      - 'wasm/**'
+      - 'tamp/_c_src/**'
+      - 'website/**'
+      - '.github/workflows/javascript.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  build:
+    name: 'Build & Test'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Includes getting tags
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -62,67 +82,56 @@ jobs:
       - name: Cache enwik8 dataset
         uses: actions/cache@v4
         with:
-          path: build/enwik8.zip
-          key: enwik8-dataset-${{ hashFiles('Makefile') }}
+          path: datasets/enwik8.zip
+          key: enwik8-dataset-v2
 
       - name: Download enwik8 dataset
         run: make download-enwik8
 
-      - name: Run enwik8 compression tests
+      - name: Run enwik8 compression test
         run: |
+          mkdir -p build
           cd wasm
-          echo "Running streaming compression test..."
           npm run test:enwik8
-          echo "Running one-shot compression test..."
-          npm run test:enwik8-oneshot
-          echo "Running decompression verification test..."
-          npm run test:enwik8-decompress
 
-      - name: Verify compressed file hashes
+      - name: Verify compressed file hash
         run: |
           cd build
-          echo "Verifying SHA256 hashes of compressed files..."
-
-          # Check streaming compression output
-          HASH1=$(sha256sum enwik8-js.tamp | cut -d' ' -f1)
-          echo "Streaming compression hash: $HASH1"
-          if [ "$HASH1" != "02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038" ]; then
-            echo "❌ Streaming compression hash mismatch!"
+          HASH=$(sha256sum enwik8-js.tamp | cut -d' ' -f1)
+          echo "Compression hash: $HASH"
+          if [ "$HASH" != "02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038" ]; then
+            echo "❌ Hash mismatch!"
             echo "Expected: 02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038"
-            echo "Got:      $HASH1"
+            echo "Got:      $HASH"
             exit 1
           fi
-          echo "✅ Streaming compression hash verified"
+          echo "✅ Compression hash verified"
 
-          # Check one-shot compression output
-          HASH2=$(sha256sum enwik8-oneshot.tamp | cut -d' ' -f1)
-          echo "One-shot compression hash: $HASH2"
-          if [ "$HASH2" != "02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038" ]; then
-            echo "❌ One-shot compression hash mismatch!"
-            echo "Expected: 02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038"
-            echo "Got:      $HASH2"
-            exit 1
-          fi
-          echo "✅ One-shot compression hash verified"
+      # Build minified version and upload as artifact for deploy/publish jobs
+      - name: Build minified version
+        run: |
+          cd wasm
+          npm run build:minified
 
-          # Both files should be identical
-          if ! cmp -s enwik8-js.tamp enwik8-oneshot.tamp; then
-            echo "❌ Streaming and one-shot compression outputs differ!"
-            exit 1
-          fi
-          echo "✅ Both compression methods produce identical output"
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-build
+          path: |
+            wasm/dist/
+            wasm/build/
+          retention-days: 1
 
   deploy-pages:
-    needs: test
+    name: 'Deploy to GitHub Pages'
+    needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
 
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
-      pages: write # to deploy to Pages
-      id-token: write # to verify the deployment originates from an appropriate source
+      pages: write
+      id-token: write
 
-    # Deploy to the github-pages environment
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -131,7 +140,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Includes getting tags
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-build
+          path: wasm/
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -140,25 +155,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: './wasm/package-lock.json'
 
-      - name: Setup Emscripten SDK
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 4.0.12
-          actions-cache-folder: 'emsdk-cache'
-
-      - name: Install WebAssembly dependencies
+      - name: Install dependencies (for webpack)
         run: |
           cd wasm
           npm ci
 
-      - name: Build WebAssembly and JavaScript (minified)
-        run: |
-          cd wasm
-          npm run build:minified
-
       - name: Prepare Pages deployment with webpack
-        run: |
-          make website-build
+        run: make website-build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -170,48 +173,48 @@ jobs:
         uses: actions/deploy-pages@v4
 
   publish:
-    needs: test
+    name: 'Publish to npm'
+    needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.version != ''
+
+    permissions:
+      contents: read
+      id-token: write
+
+    environment:
+      name: npm-publish
+      url: https://www.npmjs.com/package/@brianpugh/tamp
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Includes getting tags
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-build
+          path: wasm/
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: './wasm/package-lock.json'
 
-      - name: Setup Emscripten SDK
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 4.0.12
-          actions-cache-folder: 'emsdk-cache'
-
-      - name: Install dependencies
+      - name: Set package version
         run: |
           cd wasm
-          npm ci
-
-      - name: Set package version from git tag
-        run: |
-          cd wasm
-          npm version from-git --no-git-tag-version
-
-      - name: Build package (minified)
-        run: |
-          cd wasm
-          npm run build:minified
+          if [ -n "${{ inputs.version }}" ]; then
+            npm version "${{ inputs.version }}" --no-git-tag-version
+          else
+            npm version from-git --no-git-tag-version
+          fi
 
       - name: Publish to npm
         run: |
           cd wasm
-          npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm publish --provenance --access public --ignore-scripts

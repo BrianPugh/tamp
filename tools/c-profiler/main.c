@@ -29,8 +29,8 @@ int benchmark_compressor() {
 
     if (!(compressor_buffer = malloc(1 << compressor_conf.window))) EXIT(1, "OOM");
 
-    if (!(uncompressed_file = fopen("../../build/enwik8", "rb")))
-        EXIT(1, "Unable to open uncompressed_file %s", "../../build/enwik8");
+    if (!(uncompressed_file = fopen("../../datasets/enwik8", "rb")))
+        EXIT(1, "Unable to open uncompressed_file %s", "../../datasets/enwik8");
     if (!(compressed_file = fopen("output.tamp", "wb"))) EXIT(1, "Unable to open compressed_file");
 
     fseek(uncompressed_file, 0, SEEK_END);
@@ -98,8 +98,8 @@ int benchmark_decompressor() {
     rewind(input_file);
     assert(input_size == fread(input, 1, input_size, input_file));
 
-    if (TAMP_OK != tamp_decompressor_init(&decompressor, NULL, window_buffer))
-        EXIT(1, "Failed to initialize compressor");
+    if (TAMP_OK != tamp_decompressor_init(&decompressor, NULL, window_buffer, 15))
+        EXIT(1, "Failed to initialize decompressor");
 
     if (0 > tamp_decompressor_decompress(&decompressor, output, output_size, &output_written_size, input, input_size,
                                          &input_consumed_size))

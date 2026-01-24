@@ -247,6 +247,7 @@ Temporary Items
 *.trace
 
 # Compression benchmark datasets
+datasets/
 enwik8*
 *.pkl
 *.tamp

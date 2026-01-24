@@ -139,6 +139,19 @@ venv = ".venv"
 
 [tool.ruff]
 target-version = 'py39'
+line-length = 120
+exclude = [
+    "migrations",
+    "__pycache__",
+    "manage.py",
+    "settings.py",
+    "env",
+    ".env",
+    "venv",
+    ".venv",
+]
+
+[tool.ruff.lint]
 unfixable = ["UP"]
 select = [
     "B",  # flake8-bugbear
@@ -157,18 +170,6 @@ select = [
     "W",  # Warning
     "YTT", # flake8-2020
 ]
-
-exclude = [
-    "migrations",
-    "__pycache__",
-    "manage.py",
-    "settings.py",
-    "env",
-    ".env",
-    "venv",
-    ".venv",
-]
-
 ignore = [
     "D100",
     "D101",
@@ -189,19 +190,18 @@ ignore = [
     "B904",  # Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
     "UP018",
 ]
-line-length = 120  # Must agree with Black
 
-[tool.ruff.flake8-bugbear]
+[tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
     "chr",
     "typer.Argument",
     "typer.Option",
 ]
 
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "mpy_bindings/*.py" = [
     "F821",  # Undefined names
 ]
@@ -225,7 +225,7 @@ convention = "numpy"
     "N806", # Variable in function should be lowercase; it sometimes makes sense if iterating over class constructors.
 ]
 
-[tool.ruff.pep8-naming]
+[tool.ruff.lint.pep8-naming]
 staticmethod-decorators = [
     "pydantic.validator",
     "pydantic.root_validator",

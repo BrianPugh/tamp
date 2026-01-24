@@ -51,7 +51,7 @@ def find_seed(best_seed, best_size, lock, data, start_index, end_index):
 
 
 def read_data():
-    input_folder = Path("build/silesia")
+    input_folder = Path("datasets/silesia")
     files = list(input_folder.glob("*"))
     data_list = [x.read_bytes() for x in files]
     return data_list
