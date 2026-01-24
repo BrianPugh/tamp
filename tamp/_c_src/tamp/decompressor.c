@@ -8,17 +8,13 @@
 #define FLUSH 15
 
 #if TAMP_V2_DECOMPRESS
-/* Pending symbol states for v2 decode suspend/resume.
- * - 0: No pending operation
- * - 12: RLE (fresh or resume based on skip_bytes)
- * - 13: Extended match - have match_size, need window_offset
- * - 14: Extended match - fresh decode (need both size and offset)
+/* Pending symbol states for v2 decode suspend/resume (2 bits).
  * When skip_bytes > 0, we're resuming after output-full with full decode saved.
  */
 #define PENDING_NONE 0
-#define PENDING_RLE 12
-#define PENDING_EXT_NEED_OFFSET 13
-#define PENDING_EXT_FRESH 14
+#define PENDING_RLE 1
+#define PENDING_EXT_NEED_OFFSET 2
+#define PENDING_EXT_FRESH 3
 #endif
 
 /**
@@ -151,15 +147,16 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
     }
     *output_written_size += to_write;
 
-    /* Update window only on first chunk (skip==0) and not after another RLE */
-    if (skip == 0 && !d->rle_last_written) {
-        uint16_t window_write = (rle_count < TAMP_RLE_MAX_WINDOW) ? rle_count : TAMP_RLE_MAX_WINDOW;
+    /* Update window only on first chunk (skip==0).
+     * Write up to TAMP_RLE_MAX_WINDOW or until end of buffer (no wrap). */
+    if (skip == 0) {
+        uint16_t remaining = (window_mask + 1) - d->window_pos;
+        uint16_t window_write = MIN(MIN(rle_count, TAMP_RLE_MAX_WINDOW), remaining);
         for (uint16_t i = 0; i < window_write; i++) {
-            d->window[d->window_pos] = symbol;
-            d->window_pos = (d->window_pos + 1) & window_mask;
+            d->window[d->window_pos++] = symbol;
         }
+        d->window_pos &= window_mask;
     }
-    d->rle_last_written = 1;
 
     return (d->pending_symbol == PENDING_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
 }
@@ -254,7 +251,6 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
             wp = (wp + 1) & window_mask;
         }
         d->window_pos = wp;
-        d->rle_last_written = 0;
     }
 
     return (d->pending_symbol == PENDING_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
@@ -455,9 +451,6 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 
             output++;
             (*output_written_size)++;
-#if TAMP_V2_DECOMPRESS
-            decompressor->rle_last_written = 0;
-#endif
         } else {
             // is token; attempt a decode
             /* copy the bit buffers so that we can abort at any time */
@@ -554,9 +547,6 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                 uint16_t wp = decompressor->window_pos;
                 window_copy(decompressor->window, &wp, window_offset, match_size, window_mask);
                 decompressor->window_pos = wp;
-#if TAMP_V2_DECOMPRESS
-                decompressor->rle_last_written = 0;
-#endif
             }
         }
         if (TAMP_UNLIKELY(callback && (res = callback(user_data, *output_written_size, input_size))))

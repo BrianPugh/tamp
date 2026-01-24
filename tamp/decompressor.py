@@ -181,7 +181,6 @@ class Decompressor:
         uses_custom_dictionary = self._bit_reader.read(1)
         self.v2 = self._bit_reader.read(1)
         more_header_bytes = self._bit_reader.read(1)
-        self._rle_last_written = False
 
         if more_header_bytes:
             raise NotImplementedError
@@ -242,7 +241,6 @@ class Decompressor:
                     if is_literal:
                         string = bytes([self._bit_reader.read(self.literal_bits)])
                         self._window_buffer.write_bytes(string)
-                        self._rle_last_written = False
                     else:
                         match_size = self._bit_reader.read_huffman()
                         if match_size is _FLUSH:
@@ -256,9 +254,9 @@ class Decompressor:
                                 rle_count += 1 + 1
                                 symbol = self._window_buffer.last_written_byte
                                 string = bytes([symbol]) * rle_count
-                                if not self._rle_last_written:
-                                    self._window_buffer.write_bytes(string[: min(rle_count, _RLE_MAX_WINDOW)])
-                                self._rle_last_written = True
+                                remaining = self._window_buffer.size - self._window_buffer.pos
+                                window_write = min(rle_count, _RLE_MAX_WINDOW, remaining)
+                                self._window_buffer.write_bytes(string[:window_write])
                             elif match_size == _EXTENDED_MATCH_SYMBOL:
                                 # Format: size (huffman+trailing), then position
                                 match_size = self._bit_reader.read_huffman()
@@ -270,7 +268,6 @@ class Decompressor:
                                 string = self._window_buffer.get(index, match_size)
 
                                 self._window_buffer.write_bytes(string)
-                                self._rle_last_written = False
                             else:
                                 raise ValueError("unreachable")
                         else:
@@ -279,7 +276,6 @@ class Decompressor:
 
                             string = self._window_buffer.get(index, match_size)
                             self._window_buffer.write_bytes(string)
-                            self._rle_last_written = False
 
                     if not write_to_output(string):
                         break

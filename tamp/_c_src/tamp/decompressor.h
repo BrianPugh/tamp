@@ -18,7 +18,7 @@ typedef struct {
     uint16_t window_pos;     // Current position in window (15 bits)
     uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits)
 #if TAMP_V2_DECOMPRESS
-    uint8_t pending_symbol;          // State machine: 0=none, 12=RLE, 13=ext need offset, 14=ext fresh
+    uint8_t pending_symbol : 2;      // State machine: 0=none, 1=RLE, 2=ext need offset, 3=ext fresh
     uint16_t pending_window_offset;  // Saved window_offset for extended match output-full resume
     uint16_t pending_match_size;     // Saved match_size for extended match resume
 #endif
@@ -36,9 +36,6 @@ typedef struct {
     uint8_t skip_bytes;           // For output-buffer-limited resumption (v2 needs >4 bits)
     uint8_t window_bits_max : 4;  // Max window bits buffer can hold
     uint8_t configured : 1;       // Whether config has been set
-#if TAMP_V2_DECOMPRESS
-    uint8_t rle_last_written : 1;  // Previous write was RLE (skip window re-write)
-#endif
 } TampDecompressor;
 
 /**

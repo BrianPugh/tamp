@@ -189,7 +189,6 @@ class Compressor:
         self.v2: bool = v2
 
         self._rle_count = 0
-        self._rle_last_written = False  # The previous write was an RLE token
 
         # "+1" Because a RLE of 1 is not valid.
         self._rle_max_size = (13 << _LEADING_RLE_HUFFMAN_BITS) + (1 << _LEADING_RLE_HUFFMAN_BITS) + 1
@@ -368,7 +367,6 @@ class Compressor:
             else:
                 bytes_written += self._write_match(search_i, match)
 
-            self._rle_last_written = False
             for _ in range(match_size):
                 self._input_buffer.popleft()
         else:
@@ -438,7 +436,6 @@ class Compressor:
 
         bytes_written += self._bit_writer.write(literal | self.literal_flag, self.literal_bits + 1)
         self._window_buffer.write_byte(literal)
-        self._rle_last_written = False
         return bytes_written
 
     def _write_match(self, search_i, match) -> int:
@@ -456,7 +453,6 @@ class Compressor:
         bytes_written += self._bit_writer.write_huffman_and_literal_flag(match_size - self.min_pattern_size)
         bytes_written += self._bit_writer.write(search_i, self.window_bits)
         self._window_buffer.write_bytes(match)
-        self._rle_last_written = False
         return bytes_written
 
     def _write_rle(self) -> int:
@@ -474,12 +470,10 @@ class Compressor:
             bytes_written += self._bit_writer.write_huffman_and_literal_flag(_RLE_SYMBOL)
             bytes_written += self._write_extended_huffman(self._rle_count - 2, _LEADING_RLE_HUFFMAN_BITS)
 
-            if not self._rle_last_written:
-                # Only write up to 8 bytes, and only if we didn't already do this.
-                # This prevents filling up the window buffer with unhelpful data.
-                self._window_buffer.write_bytes(bytes([last_written_byte]) * min(self._rle_count, _RLE_MAX_WINDOW))
-
-            self._rle_last_written = True
+            # Write up to 8 bytes (or until end of buffer) to the window.
+            remaining = self._window_buffer.size - self._window_buffer.pos
+            window_write = min(self._rle_count, _RLE_MAX_WINDOW, remaining)
+            self._window_buffer.write_bytes(bytes([last_written_byte]) * window_write)
 
         self._rle_count = 0
         return bytes_written
@@ -546,8 +540,6 @@ class Compressor:
 
         bytes_written_flush = self._bit_writer.flush(write_token=write_token)
         bytes_written += bytes_written_flush
-        if bytes_written_flush:
-            self._rle_last_written = False
         return bytes_written
 
     def close(self) -> int:
