@@ -413,12 +413,13 @@ class Compressor:
             self.extended_match_cb(
                 self._window_buffer.pos, self._extended_match_position, self._extended_match_count, string
             )
+        # Format: symbol, size (huffman+trailing), position
         bytes_written += self._bit_writer.write_huffman_and_literal_flag(_EXTENDED_MATCH_SYMBOL)
-        bytes_written += self._bit_writer.write(self._extended_match_position, self.window_bits)
         bytes_written += self._write_extended_huffman(
             self._extended_match_count - self.min_pattern_size - 11 - 1,
             _LEADING_EXTENDED_MATCH_HUFFMAN_BITS,
         )
+        bytes_written += self._bit_writer.write(self._extended_match_position, self.window_bits)
 
         self._window_buffer.write_from_self(self._extended_match_position, self._extended_match_count)
 

@@ -260,11 +260,12 @@ class Decompressor:
                                     self._window_buffer.write_bytes(string[: min(rle_count, _RLE_MAX_WINDOW)])
                                 self._rle_last_written = True
                             elif match_size == _EXTENDED_MATCH_SYMBOL:
-                                index = self._bit_reader.read(self.window_bits)
+                                # Format: size (huffman+trailing), then position
                                 match_size = self._bit_reader.read_huffman()
                                 match_size <<= _LEADING_EXTENDED_MATCH_HUFFMAN_BITS
                                 match_size += self._bit_reader.read(_LEADING_EXTENDED_MATCH_HUFFMAN_BITS)
                                 match_size += self.min_pattern_size + 11 + 1
+                                index = self._bit_reader.read(self.window_bits)
 
                                 string = self._window_buffer.get(index, match_size)
 

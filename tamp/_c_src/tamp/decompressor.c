@@ -10,18 +10,15 @@
 #if TAMP_V2_DECOMPRESS
 /* Pending symbol states for v2 decode suspend/resume.
  * - 0: No pending operation
- * - 12: RLE - pending_ext_huffman holds partial huffman result or 0xFF for fresh/output-resume
- * - 13: Extended match - fresh (need window_offset)
- * - 14: Extended match - have window_offset in pending_window_offset (need huffman+trailing)
- * - 15: Extended match - have window_offset and huffman (need trailing only)
+ * - 12: RLE (fresh or resume based on skip_bytes)
+ * - 13: Extended match - have match_size, need window_offset
+ * - 14: Extended match - fresh decode (need both size and offset)
  * When skip_bytes > 0, we're resuming after output-full with full decode saved.
  */
 #define PENDING_NONE 0
 #define PENDING_RLE 12
-#define PENDING_EXT_FRESH 13
-#define PENDING_EXT_HAVE_OFFSET 14
-#define PENDING_EXT_HAVE_HUFFMAN 15
-#define PARTIAL_STATE_NONE 0xFF
+#define PENDING_EXT_NEED_OFFSET 13
+#define PENDING_EXT_FRESH 14
 #endif
 
 /**
@@ -72,8 +69,8 @@ static inline int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_po
 /**
  * @brief Decode huffman symbol + trailing bits from bit buffer.
  *
- * Shared helper for RLE and extended match decoding.
- * Uses pending_ext_huffman to track partial decode state.
+ * Simple helper that decodes from local copies. On failure, decompressor
+ * state is not modified. Caller is responsible for state management.
  *
  * @param d Decompressor state
  * @param trailing_bits Number of trailing bits to read (3 or 4)
@@ -83,21 +80,13 @@ static inline int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_po
 static tamp_res decode_huffman_trailing(TampDecompressor *d, uint8_t trailing_bits, uint16_t *result) {
     uint32_t bit_buffer = d->bit_buffer;
     uint8_t bit_buffer_pos = d->bit_buffer_pos;
-    int8_t huffman_value;
 
-    if (d->pending_ext_huffman != PARTIAL_STATE_NONE) {
-        huffman_value = d->pending_ext_huffman;
-    } else {
-        if (TAMP_UNLIKELY(bit_buffer_pos < 1)) return TAMP_INPUT_EXHAUSTED;
-        huffman_value = huffman_decode(&bit_buffer, &bit_buffer_pos);
-    }
+    /* Need at least 1 bit for huffman, plus trailing bits */
+    if (TAMP_UNLIKELY(bit_buffer_pos < 1 + trailing_bits)) return TAMP_INPUT_EXHAUSTED;
 
-    if (TAMP_UNLIKELY(bit_buffer_pos < trailing_bits)) {
-        d->bit_buffer = bit_buffer;
-        d->bit_buffer_pos = bit_buffer_pos;
-        d->pending_ext_huffman = huffman_value;
-        return TAMP_INPUT_EXHAUSTED;
-    }
+    int8_t huffman_value = huffman_decode(&bit_buffer, &bit_buffer_pos);
+
+    if (TAMP_UNLIKELY(bit_buffer_pos < trailing_bits)) return TAMP_INPUT_EXHAUSTED;
 
     uint8_t trailing = bit_buffer >> (32 - trailing_bits);
     bit_buffer <<= trailing_bits;
@@ -105,15 +94,18 @@ static tamp_res decode_huffman_trailing(TampDecompressor *d, uint8_t trailing_bi
 
     *result = (huffman_value << trailing_bits) + trailing;
 
+    /* Commit only on success */
     d->bit_buffer = bit_buffer;
     d->bit_buffer_pos = bit_buffer_pos;
-    d->pending_ext_huffman = PARTIAL_STATE_NONE;
 
     return TAMP_OK;
 }
 
 /**
  * @brief Decode RLE token and write repeated bytes to output.
+ *
+ * RLE format: huffman(count_high) + trailing_bits(count_low)
+ * rle_count = (count_high << 4) + count_low + 2
  */
 static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
                            size_t *output_written_size, uint16_t window_mask) {
@@ -121,8 +113,10 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
     uint16_t skip = d->skip_bytes;
 
     if (skip > 0) {
+        /* Resume from output-full: rle_count saved in pending_window_offset */
         rle_count = d->pending_window_offset;
     } else {
+        /* Fresh decode */
         uint16_t raw;
         tamp_res res = decode_huffman_trailing(d, TAMP_LEADING_RLE_BITS, &raw);
         if (res != TAMP_OK) return res;
@@ -139,7 +133,7 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
     uint16_t to_write;
 
     if (TAMP_UNLIKELY(remaining_count > output_space)) {
-        /* Partial write */
+        /* Partial write - save state for resume */
         to_write = output_space;
         d->skip_bytes = skip + output_space;
         d->pending_symbol = PENDING_RLE;
@@ -172,6 +166,14 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
 
 /**
  * @brief Decode extended match token and copy from window to output.
+ *
+ * NEW FORMAT: huffman(size_high) + trailing_bits(size_low) + window_offset
+ * match_size = (size_high << 3) + size_low + min_pattern_size + 12
+ *
+ * State machine:
+ * - Fresh: decode huffman+trailing, then window_offset
+ * - PENDING_EXT_NEED_OFFSET: have match_size, need window_offset
+ * - Output-full resume (skip > 0): have both match_size and window_offset
  */
 static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
                                       size_t *output_written_size, uint8_t conf_window, uint8_t min_pattern_size,
@@ -179,36 +181,36 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
     uint16_t window_offset;
     uint16_t match_size;
     uint16_t skip = d->skip_bytes;
-    uint8_t pending = d->pending_symbol;
 
     if (skip > 0) {
-        /* Resume from output-full: window_offset and match_size already saved */
+        /* Resume from output-full: both values saved */
         window_offset = d->pending_window_offset;
-        match_size = d->pending_ext_huffman;
-    } else {
-        /* Step 1: Get window_offset (saved or decode fresh) */
-        if (pending >= PENDING_EXT_HAVE_OFFSET) {
-            window_offset = d->pending_window_offset;
-        } else {
-            if (TAMP_UNLIKELY(d->bit_buffer_pos < conf_window)) return TAMP_INPUT_EXHAUSTED;
-            window_offset = d->bit_buffer >> (32 - conf_window);
-            d->bit_buffer <<= conf_window;
-            d->bit_buffer_pos -= conf_window;
-            /* Save window_offset in case huffman+trailing needs more input */
-            d->pending_window_offset = window_offset;
-        }
+        match_size = d->pending_match_size;
+    } else if (d->pending_symbol == PENDING_EXT_NEED_OFFSET) {
+        /* Resume: have match_size, need window_offset */
+        match_size = d->pending_match_size;
 
-        /* Step 2: Decode huffman + trailing bits */
+        if (TAMP_UNLIKELY(d->bit_buffer_pos < conf_window)) return TAMP_INPUT_EXHAUSTED;
+        window_offset = d->bit_buffer >> (32 - conf_window);
+        d->bit_buffer <<= conf_window;
+        d->bit_buffer_pos -= conf_window;
+    } else {
+        /* Fresh decode: huffman+trailing first, then window_offset */
         uint16_t raw;
         tamp_res res = decode_huffman_trailing(d, TAMP_LEADING_EXTENDED_MATCH_BITS, &raw);
-        if (res != TAMP_OK) {
-            /* Update pending_symbol based on where we stopped */
-            d->pending_symbol =
-                (d->pending_ext_huffman != PARTIAL_STATE_NONE) ? PENDING_EXT_HAVE_HUFFMAN : PENDING_EXT_HAVE_OFFSET;
-            return res;
-        }
-
+        if (res != TAMP_OK) return res;
         match_size = raw + min_pattern_size + 12;
+
+        /* Now decode window_offset */
+        if (TAMP_UNLIKELY(d->bit_buffer_pos < conf_window)) {
+            /* Save match_size and return */
+            d->pending_symbol = PENDING_EXT_NEED_OFFSET;
+            d->pending_match_size = match_size;
+            return TAMP_INPUT_EXHAUSTED;
+        }
+        window_offset = d->bit_buffer >> (32 - conf_window);
+        d->bit_buffer <<= conf_window;
+        d->bit_buffer_pos -= conf_window;
     }
 
     /* Security check: validate window bounds */
@@ -224,12 +226,12 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
     uint16_t to_write;
 
     if (TAMP_UNLIKELY(remaining_count > output_space)) {
-        /* Partial write */
+        /* Partial write - save state for resume */
         to_write = output_space;
         d->skip_bytes = skip + output_space;
-        d->pending_symbol = PENDING_EXT_FRESH;
+        d->pending_symbol = PENDING_EXT_NEED_OFFSET; /* Reuse for output-full */
         d->pending_window_offset = window_offset;
-        d->pending_ext_huffman = match_size;
+        d->pending_match_size = match_size;
     } else {
         /* Complete write */
         to_write = remaining_count;
@@ -480,12 +482,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 #if TAMP_V2_DECOMPRESS
             /* Check for v2 symbols */
             if (TAMP_UNLIKELY(v2_enabled && match_size >= TAMP_RLE_SYMBOL)) {
-                /* Commit bit buffer and set pending symbol before calling helper.
-                 * Initialize partial state fields to indicate fresh decode. */
+                /* Commit bit buffer before calling helper. */
                 decompressor->bit_buffer = bit_buffer;
                 decompressor->bit_buffer_pos = bit_buffer_pos;
-                decompressor->pending_window_offset = 0;
-                decompressor->pending_ext_huffman = PARTIAL_STATE_NONE;
 
                 tamp_res v2_res;
                 if (match_size == TAMP_RLE_SYMBOL) {

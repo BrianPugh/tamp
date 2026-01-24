@@ -182,7 +182,8 @@ build/enwik8-100kb: download-enwik8
 	@head -c 100000 datasets/enwik8 > build/enwik8-100kb
 
 build/enwik8-100kb.tamp: build/enwik8-100kb
-	@poetry run tamp compress build/enwik8-100kb -o build/enwik8-100kb.tamp
+	@# Use Python implementation until C compressor supports v2
+	@poetry run tamp compress --implementation=python build/enwik8-100kb -o build/enwik8-100kb.tamp
 
 download-micropython:
 	mkdir -p datasets
@@ -490,7 +491,7 @@ tamp-c-library: build/tamp.a
 # Binary Sizes
 ###############
 # Generate binary size information for README table (armv6m with -O3).
-.PHONY: binary-size c-size
+.PHONY: binary-size c-size c-size-v1 c-size-v2
 
 ARM_CC := arm-none-eabi-gcc
 ARM_AR := arm-none-eabi-ar
@@ -501,61 +502,76 @@ C_SRC_COMMON = tamp/_c_src/tamp/common.c
 C_SRC_COMP = tamp/_c_src/tamp/compressor.c
 C_SRC_DECOMP = tamp/_c_src/tamp/decompressor.c
 
-# Build compressor-only library (without stream API)
-build/arm/tamp_comp.a: $(C_SRC_COMMON) $(C_SRC_COMP)
-	@mkdir -p build/arm
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common_c.o
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -DTAMP_STREAM=0 -c $(C_SRC_COMP) -o build/arm/compressor.o
-	$(ARM_AR) rcs $@ build/arm/common_c.o build/arm/compressor.o
+# V2 flags to disable v2 support
+V1_FLAGS = -DTAMP_V2_COMPRESS=0 -DTAMP_V2_DECOMPRESS=0
 
-# Build decompressor-only library (without stream API)
-build/arm/tamp_decomp.a: $(C_SRC_COMMON) $(C_SRC_DECOMP)
-	@mkdir -p build/arm
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common_d.o
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
-	$(ARM_AR) rcs $@ build/arm/common_d.o build/arm/decompressor.o
+c-size-v1:
+	@rm -rf build/arm && mkdir -p build/arm
+	@# v1 without stream API
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -DTAMP_STREAM=0 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	@$(ARM_AR) rcs build/arm/v1_comp.a build/arm/common.o build/arm/compressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	@$(ARM_AR) rcs build/arm/v1_decomp.a build/arm/common.o build/arm/decompressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	@$(ARM_AR) rcs build/arm/v1_full.a build/arm/common.o build/arm/compressor.o build/arm/decompressor.o
+	@# v1 with stream API
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	@$(ARM_AR) rcs build/arm/v1_comp_s.a build/arm/common.o build/arm/compressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	@$(ARM_AR) rcs build/arm/v1_decomp_s.a build/arm/common.o build/arm/decompressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) $(V1_FLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	@$(ARM_AR) rcs build/arm/v1_full_s.a build/arm/common.o build/arm/compressor.o build/arm/decompressor.o
+	@size_comp=$$($(ARM_SIZE) -B --totals build/arm/v1_comp.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_decomp=$$($(ARM_SIZE) -B --totals build/arm/v1_decomp.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_full=$$($(ARM_SIZE) -B --totals build/arm/v1_full.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	printf 'Tamp v1 (C, no stream)     %d  %d  %d\n' $$size_comp $$size_decomp $$size_full
+	@size_comp=$$($(ARM_SIZE) -B --totals build/arm/v1_comp_s.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_decomp=$$($(ARM_SIZE) -B --totals build/arm/v1_decomp_s.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_full=$$($(ARM_SIZE) -B --totals build/arm/v1_full_s.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	printf 'Tamp v1 (C)                %d  %d  %d\n' $$size_comp $$size_decomp $$size_full
 
-# Build full library (without stream API)
-build/arm/tamp_full.a: $(C_SRC_COMMON) $(C_SRC_COMP) $(C_SRC_DECOMP)
-	@mkdir -p build/arm
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common_f.o
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMP) -o build/arm/compressor_f.o
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_DECOMP) -o build/arm/decompressor_f.o
-	$(ARM_AR) rcs $@ build/arm/common_f.o build/arm/compressor_f.o build/arm/decompressor_f.o
+c-size-v2:
+	@rm -rf build/arm && mkdir -p build/arm
+	@# v2 without stream API
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -DTAMP_STREAM=0 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	@$(ARM_AR) rcs build/arm/v2_comp.a build/arm/common.o build/arm/compressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	@$(ARM_AR) rcs build/arm/v2_decomp.a build/arm/common.o build/arm/decompressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -DTAMP_STREAM=0 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	@$(ARM_AR) rcs build/arm/v2_full.a build/arm/common.o build/arm/compressor.o build/arm/decompressor.o
+	@# v2 with stream API
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	@$(ARM_AR) rcs build/arm/v2_comp_s.a build/arm/common.o build/arm/compressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	@$(ARM_AR) rcs build/arm/v2_decomp_s.a build/arm/common.o build/arm/decompressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMMON) -o build/arm/common.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMP) -o build/arm/compressor.o
+	@$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_DECOMP) -o build/arm/decompressor.o
+	@$(ARM_AR) rcs build/arm/v2_full_s.a build/arm/common.o build/arm/compressor.o build/arm/decompressor.o
+	@size_comp=$$($(ARM_SIZE) -B --totals build/arm/v2_comp.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_decomp=$$($(ARM_SIZE) -B --totals build/arm/v2_decomp.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_full=$$($(ARM_SIZE) -B --totals build/arm/v2_full.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	printf 'Tamp v2 (C, no stream)     %d  %d  %d\n' $$size_comp $$size_decomp $$size_full
+	@size_comp=$$($(ARM_SIZE) -B --totals build/arm/v2_comp_s.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_decomp=$$($(ARM_SIZE) -B --totals build/arm/v2_decomp_s.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	size_full=$$($(ARM_SIZE) -B --totals build/arm/v2_full_s.a | grep TOTALS | awk '{print $$1+$$2}'); \
+	printf 'Tamp v2 (C)                %d  %d  %d\n' $$size_comp $$size_decomp $$size_full
 
-# Build compressor-only library (with stream API, the default)
-build/arm/tamp_comp_stream.a: $(C_SRC_COMMON) $(C_SRC_COMP)
-	@mkdir -p build/arm
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -c $(C_SRC_COMMON) -o build/arm/common_cs.o
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=0 -c $(C_SRC_COMP) -o build/arm/compressor_s.o
-	$(ARM_AR) rcs $@ build/arm/common_cs.o build/arm/compressor_s.o
-
-# Build decompressor-only library (with stream API, the default)
-build/arm/tamp_decomp_stream.a: $(C_SRC_COMMON) $(C_SRC_DECOMP)
-	@mkdir -p build/arm
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMMON) -o build/arm/common_ds.o
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=0 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_DECOMP) -o build/arm/decompressor_s.o
-	$(ARM_AR) rcs $@ build/arm/common_ds.o build/arm/decompressor_s.o
-
-# Build full library (with stream API, the default)
-build/arm/tamp_full_stream.a: $(C_SRC_COMMON) $(C_SRC_COMP) $(C_SRC_DECOMP)
-	@mkdir -p build/arm
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMMON) -o build/arm/common_fs.o
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_COMP) -o build/arm/compressor_fs.o
-	$(ARM_CC) $(ARM_CFLAGS) -DTAMP_COMPRESSOR=1 -DTAMP_DECOMPRESSOR=1 -c $(C_SRC_DECOMP) -o build/arm/decompressor_fs.o
-	$(ARM_AR) rcs $@ build/arm/common_fs.o build/arm/compressor_fs.o build/arm/decompressor_fs.o
-
-c-size:
-	@rm -rf build/arm
-	@$(MAKE) --no-print-directory build/arm/tamp_comp_stream.a build/arm/tamp_decomp_stream.a build/arm/tamp_full_stream.a build/arm/tamp_comp.a build/arm/tamp_decomp.a build/arm/tamp_full.a
-	@size_comp=$$($(ARM_SIZE) -B --totals build/arm/tamp_comp.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
-	size_decomp=$$($(ARM_SIZE) -B --totals build/arm/tamp_decomp.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
-	size_full=$$($(ARM_SIZE) -B --totals build/arm/tamp_full.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
-	printf 'Tamp (C, -DTAMP_STREAM=0)  %d  %d  %d\n' $$size_comp $$size_decomp $$size_full
-	@size_comp=$$($(ARM_SIZE) -B --totals build/arm/tamp_comp_stream.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
-	size_decomp=$$($(ARM_SIZE) -B --totals build/arm/tamp_decomp_stream.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
-	size_full=$$($(ARM_SIZE) -B --totals build/arm/tamp_full_stream.a 2>/dev/null | grep TOTALS | awk '{print $$1+$$2}'); \
-	printf 'Tamp (C)                   %d  %d  %d\n' $$size_comp $$size_decomp $$size_full
+c-size: c-size-v1 c-size-v2
 
 binary-size:
 	@echo "Binary sizes for armv6m (bytes):"
