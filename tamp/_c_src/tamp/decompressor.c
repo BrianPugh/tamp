@@ -350,6 +350,21 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
     return res;
 }
 
+/**
+ * @brief Refill bit buffer from input stream.
+ *
+ * Consumes bytes from input until bit_buffer has at least 25 bits or input is exhausted.
+ */
+static inline void refill_bit_buffer(TampDecompressor *d, const unsigned char **input, const unsigned char *input_end,
+                                     size_t *input_consumed_size) {
+    while (*input != input_end && d->bit_buffer_pos <= 24) {
+        d->bit_buffer_pos += 8;
+        d->bit_buffer |= (uint32_t) * (*input) << (32 - d->bit_buffer_pos);
+        (*input)++;
+        (*input_consumed_size)++;
+    }
+}
+
 tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigned char *output, size_t output_size,
                                          size_t *output_written_size, const unsigned char *input, size_t input_size,
                                          size_t *input_consumed_size, tamp_callback_t callback, void *user_data) {
@@ -390,23 +405,13 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
     const bool v2_enabled = decompressor->conf_v2;
 #endif
 
-/* Macro to refill bit buffer from input. Used before returning TAMP_INPUT_EXHAUSTED
- * to ensure we consume all available input first. */
-#define REFILL()                                                                               \
-    while (input != input_end && decompressor->bit_buffer_pos <= 24) {                         \
-        decompressor->bit_buffer_pos += 8;                                                     \
-        decompressor->bit_buffer |= (uint32_t) * input << (32 - decompressor->bit_buffer_pos); \
-        input++;                                                                               \
-        (*input_consumed_size)++;                                                              \
-    }
-
     while (input != input_end || decompressor->bit_buffer_pos
 #if TAMP_V2_DECOMPRESS
            || decompressor->pending_symbol
 #endif
     ) {
         // Populate the bit buffer
-        REFILL();
+        refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
 
 #if TAMP_V2_DECOMPRESS
         /* Resume pending v2 operation. Retry after refill if helper needs more bits. */
@@ -420,7 +425,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                                                min_pattern_size, window_mask);
             }
             if (v2_res == TAMP_INPUT_EXHAUSTED) {
-                REFILL();
+                refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
                 if (input == input_end) return TAMP_INPUT_EXHAUSTED;
                 continue; /* Retry with refilled buffer */
             }
@@ -497,13 +502,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                 } else {
                     return TAMP_ERROR; /* Invalid v2 symbol */
                 }
-                /* On success, helper clears pending_symbol; on error, it stays set for resume */
-                if (v2_res == TAMP_INPUT_EXHAUSTED) {
-                    REFILL();
-                    if (input == input_end) return TAMP_INPUT_EXHAUSTED;
-                    continue; /* Retry with refilled buffer */
-                }
-                if (v2_res != TAMP_OK) return v2_res;
+                /* On success, helper clears pending_symbol; on error, it stays set for resume.
+                 * TAMP_INPUT_EXHAUSTED is handled by resume path on next iteration. */
+                if (v2_res == TAMP_OUTPUT_FULL || v2_res < TAMP_OK) return v2_res;
                 continue;
             }
 #endif
