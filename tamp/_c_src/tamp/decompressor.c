@@ -102,7 +102,8 @@ static tamp_res decode_huffman_trailing(TampDecompressor *d, uint8_t trailing_bi
  * rle_count = (count_high << 4) + count_low + 2
  */
 static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
-                           size_t *output_written_size, uint16_t window_mask) {
+                           size_t *output_written_size) {
+    const uint16_t window_mask = (1u << d->conf_window) - 1;
     uint16_t rle_count;
     uint16_t skip = d->skip_bytes;
 
@@ -171,8 +172,9 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
  * - Output-full resume (skip > 0): have both match_size and window_offset
  */
 static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
-                                      size_t *output_written_size, uint8_t conf_window, uint8_t min_pattern_size,
-                                      uint16_t window_mask) {
+                                      size_t *output_written_size) {
+    const uint8_t conf_window = d->conf_window;
+    const uint16_t window_mask = (1u << conf_window) - 1;
     uint16_t window_offset;
     uint16_t match_size;
     uint16_t skip = d->skip_bytes;
@@ -194,7 +196,7 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
         uint16_t raw;
         tamp_res res = decode_huffman_trailing(d, TAMP_LEADING_EXTENDED_MATCH_BITS, &raw);
         if (res != TAMP_OK) return res;
-        match_size = raw + min_pattern_size + 12;
+        match_size = raw + d->min_pattern_size + 12;
 
         /* Now decode window_offset */
         if (TAMP_UNLIKELY(d->bit_buffer_pos < conf_window)) {
@@ -413,10 +415,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
             if (TAMP_UNLIKELY(output == output_end)) return TAMP_OUTPUT_FULL;
             tamp_res v2_res;
             if (decompressor->token_state == TOKEN_RLE) {
-                v2_res = decode_rle(decompressor, &output, output_end, output_written_size, window_mask);
+                v2_res = decode_rle(decompressor, &output, output_end, output_written_size);
             } else {
-                v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size, conf_window,
-                                               min_pattern_size, window_mask);
+                v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size);
             }
             if (v2_res == TAMP_INPUT_EXHAUSTED) {
                 refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
@@ -485,11 +486,10 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
                 tamp_res v2_res;
                 if (match_size == TAMP_RLE_SYMBOL) {
                     decompressor->token_state = TOKEN_RLE;
-                    v2_res = decode_rle(decompressor, &output, output_end, output_written_size, window_mask);
+                    v2_res = decode_rle(decompressor, &output, output_end, output_written_size);
                 } else if (match_size == TAMP_EXTENDED_MATCH_SYMBOL) {
                     decompressor->token_state = TOKEN_EXT_MATCH_FRESH;
-                    v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size, conf_window,
-                                                   min_pattern_size, window_mask);
+                    v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size);
                 } else {
                     return TAMP_ERROR; /* Invalid v2 symbol */
                 }
