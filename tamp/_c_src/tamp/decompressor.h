@@ -12,12 +12,26 @@ extern "C" {
  */
 typedef struct {
     /* HOT: accessed every iteration of the decompression loop. */
-    unsigned char *window;   // Pointer to window buffer
-    uint32_t bit_buffer;     // Bit buffer for reading compressed data (32 bits)
-    uint16_t window_pos;     // Current position in window (15 bits)
-    uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits needed)
+    unsigned char *window;  // Pointer to window buffer
+    uint32_t bit_buffer;    // Bit buffer for reading compressed data (32 bits)
+    uint16_t window_pos;    // Current position in window (15 bits)
+
+    /* Union allows single zero-check in main loop instead of two separate checks. */
 #if TAMP_V2_DECOMPRESS
-    uint8_t token_state : 2;         // 0=none, 1=RLE, 2=ext match, 3=ext match fresh
+    union {
+        struct {
+            uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits needed)
+            uint8_t token_state;     // 0=none, 1=RLE, 2=ext match, 3=ext match fresh (2 bits used)
+        };
+        uint16_t pos_and_state;  // Combined for fast 16-bit zero-check
+    };
+#else
+    union {
+        uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits needed)
+        uint8_t pos_and_state;   // Alias for consistent access in main loop
+    };
+#endif
+#if TAMP_V2_DECOMPRESS
     uint16_t pending_window_offset;  // Saved window_offset for extended match output-full resume
     uint16_t pending_match_size;     // Saved match_size for extended match resume
 #endif

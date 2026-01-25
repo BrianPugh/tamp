@@ -406,11 +406,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
     const bool v2_enabled = decompressor->conf_v2;
 #endif
 
-    while (input != input_end || decompressor->bit_buffer_pos
-#if TAMP_V2_DECOMPRESS
-           || decompressor->token_state
-#endif
-    ) {
+    while (input != input_end || decompressor->pos_and_state) {
         if (TAMP_UNLIKELY(output == output_end)) return TAMP_OUTPUT_FULL;
 
         // Populate the bit buffer
