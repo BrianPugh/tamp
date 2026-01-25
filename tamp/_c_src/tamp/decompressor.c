@@ -41,7 +41,7 @@ static const uint8_t HUFFMAN_TABLE[128] = {
  *
  * @returns Decoded match_size
  */
-static int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos) {
+static int8_t huffman_decode(uint32_t* bit_buffer, uint8_t* bit_buffer_pos) {
     uint8_t code;
     uint8_t bit_len;
 
@@ -71,7 +71,7 @@ static int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos) {
  * @param result Output: (huffman << trailing_bits) + trailing
  * @return TAMP_OK on success, TAMP_INPUT_EXHAUSTED if more bits needed
  */
-static tamp_res decode_huffman_trailing(TampDecompressor *d, uint8_t trailing_bits, uint16_t *result) {
+static tamp_res decode_huffman_trailing(TampDecompressor* d, uint8_t trailing_bits, uint16_t* result) {
     uint32_t bit_buffer = d->bit_buffer;
     uint8_t bit_buffer_pos = d->bit_buffer_pos;
 
@@ -101,8 +101,8 @@ static tamp_res decode_huffman_trailing(TampDecompressor *d, uint8_t trailing_bi
  * RLE format: huffman(count_high) + trailing_bits(count_low)
  * rle_count = (count_high << 4) + count_low + 2
  */
-static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
-                           size_t *output_written_size) {
+static tamp_res decode_rle(TampDecompressor* d, unsigned char** output, const unsigned char* output_end,
+                           size_t* output_written_size) {
     uint16_t rle_count;
     uint16_t skip = d->skip_bytes;
 
@@ -171,8 +171,8 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
  * - TOKEN_EXT_MATCH: have match_size, need window_offset
  * - Output-full resume (skip > 0): have both match_size and window_offset
  */
-static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
-                                      size_t *output_written_size) {
+static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** output, const unsigned char* output_end,
+                                      size_t* output_written_size) {
     const uint8_t conf_window = d->conf_window;
     uint16_t window_offset;
     uint16_t match_size;
@@ -265,7 +265,7 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
  * using a temporary buffer when necessary. Overlap occurs when the
  * destination would "catch up" to the source during copying.
  */
-static inline void window_copy(unsigned char *window, uint16_t *window_pos, uint16_t window_offset, uint8_t match_size,
+static inline void window_copy(unsigned char* window, uint16_t* window_pos, uint16_t window_offset, uint8_t match_size,
                                uint16_t window_mask) {
     const uint16_t src_to_dst = (*window_pos - window_offset) & window_mask;
     const bool overlap = (src_to_dst < match_size) && (src_to_dst > 0);
@@ -287,8 +287,8 @@ static inline void window_copy(unsigned char *window, uint16_t *window_pos, uint
     }
 }
 
-tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *input, size_t input_size,
-                                       size_t *input_consumed_size) {
+tamp_res tamp_decompressor_read_header(TampConf* conf, const unsigned char* input, size_t input_size,
+                                       size_t* input_consumed_size) {
     if (input_consumed_size) (*input_consumed_size) = 0;
     if (input_size == 0) return TAMP_INPUT_EXHAUSTED;
     if (input[0] & 0x1) return TAMP_INVALID_CONF;  // Currently only a single header byte is supported.
@@ -307,7 +307,7 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
  *   * window
  *   * window_bits_max
  */
-static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor *decompressor, uint8_t conf_window,
+static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor* decompressor, uint8_t conf_window,
                                                      uint8_t conf_literal, uint8_t conf_use_custom_dictionary,
                                                      uint8_t conf_v2) {
     if (conf_window < 8 || conf_window > 15) return TAMP_INVALID_CONF;
@@ -328,7 +328,7 @@ static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor *decompres
     return TAMP_OK;
 }
 
-tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *conf, unsigned char *window,
+tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* conf, unsigned char* window,
                                 uint8_t window_bits) {
     tamp_res res = TAMP_OK;
 
@@ -336,7 +336,7 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
     if (window_bits < 8 || window_bits > 15) return TAMP_INVALID_CONF;
 
     for (uint8_t i = 0; i < sizeof(TampDecompressor); i++)  // Zero-out the struct
-        ((unsigned char *)decompressor)[i] = 0;
+        ((unsigned char*)decompressor)[i] = 0;
     decompressor->window = window;
     decompressor->window_bits_max = window_bits;
     if (conf) {
@@ -352,8 +352,8 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
  *
  * Consumes bytes from input until bit_buffer has at least 25 bits or input is exhausted.
  */
-static inline void refill_bit_buffer(TampDecompressor *d, const unsigned char **input, const unsigned char *input_end,
-                                     size_t *input_consumed_size) {
+static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end,
+                                     size_t* input_consumed_size) {
     while (*input != input_end && d->bit_buffer_pos <= 24) {
         d->bit_buffer_pos += 8;
         d->bit_buffer |= (uint32_t) * (*input) << (32 - d->bit_buffer_pos);
@@ -362,14 +362,14 @@ static inline void refill_bit_buffer(TampDecompressor *d, const unsigned char **
     }
 }
 
-tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigned char *output, size_t output_size,
-                                         size_t *output_written_size, const unsigned char *input, size_t input_size,
-                                         size_t *input_consumed_size, tamp_callback_t callback, void *user_data) {
+tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigned char* output, size_t output_size,
+                                         size_t* output_written_size, const unsigned char* input, size_t input_size,
+                                         size_t* input_consumed_size, tamp_callback_t callback, void* user_data) {
     size_t input_consumed_size_proxy;
     size_t output_written_size_proxy;
     tamp_res res;
-    const unsigned char *input_end = input + input_size;
-    const unsigned char *output_end = output + output_size;
+    const unsigned char* input_end = input + input_size;
+    const unsigned char* output_end = output + output_size;
 
     if (!output_written_size) output_written_size = &output_written_size_proxy;
     if (!input_consumed_size) input_consumed_size = &input_consumed_size_proxy;
@@ -413,8 +413,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
         refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
 
 #if TAMP_V2_DECOMPRESS
-        /* Resume pending v2 operation. Retry after refill if helper needs more bits. */
+        /* Handle v2 tokens - either resuming or fresh from match_size detection below. */
         if (TAMP_UNLIKELY(decompressor->token_state)) {
+        v2_dispatch:;
             tamp_res v2_res;
             if (decompressor->token_state == TOKEN_RLE) {
                 v2_res = decode_rle(decompressor, &output, output_end, output_written_size);
@@ -424,7 +425,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
             if (v2_res == TAMP_INPUT_EXHAUSTED) {
                 refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
                 if (input == input_end) return TAMP_INPUT_EXHAUSTED;
-                continue; /* Retry with refilled buffer */
+                continue;
             }
             if (v2_res != TAMP_OK) return v2_res;
             continue;
@@ -479,24 +480,17 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 #if TAMP_V2_DECOMPRESS
             /* Check for v2 symbols */
             if (TAMP_UNLIKELY(v2_enabled && match_size >= TAMP_RLE_SYMBOL)) {
-                /* Commit bit buffer before calling helper. */
                 decompressor->bit_buffer = bit_buffer;
                 decompressor->bit_buffer_pos = bit_buffer_pos;
 
-                tamp_res v2_res;
                 if (match_size == TAMP_RLE_SYMBOL) {
                     decompressor->token_state = TOKEN_RLE;
-                    v2_res = decode_rle(decompressor, &output, output_end, output_written_size);
                 } else if (match_size == TAMP_EXTENDED_MATCH_SYMBOL) {
                     decompressor->token_state = TOKEN_EXT_MATCH_FRESH;
-                    v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size);
                 } else {
-                    return TAMP_ERROR; /* Invalid v2 symbol */
+                    return TAMP_ERROR;
                 }
-                /* On success, helper clears token_state; on error, it stays set for resume.
-                 * TAMP_INPUT_EXHAUSTED is handled by resume path on next iteration. */
-                if (v2_res == TAMP_OUTPUT_FULL || v2_res < TAMP_OK) return v2_res;
-                continue;
+                goto v2_dispatch;
             }
 #endif
 
@@ -555,9 +549,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 
 #if TAMP_STREAM
 
-tamp_res tamp_decompress_stream(TampDecompressor *decompressor, tamp_read_t read_cb, void *read_handle,
-                                tamp_write_t write_cb, void *write_handle, size_t *input_consumed_size,
-                                size_t *output_written_size, tamp_callback_t callback, void *user_data) {
+tamp_res tamp_decompress_stream(TampDecompressor* decompressor, tamp_read_t read_cb, void* read_handle,
+                                tamp_write_t write_cb, void* write_handle, size_t* input_consumed_size,
+                                size_t* output_written_size, tamp_callback_t callback, void* user_data) {
     size_t input_consumed_size_proxy, output_written_size_proxy;
     if (!input_consumed_size) input_consumed_size = &input_consumed_size_proxy;
     if (!output_written_size) output_written_size = &output_written_size_proxy;
