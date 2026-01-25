@@ -42,10 +42,10 @@ static const uint8_t HUFFMAN_TABLE[128] = {
  * @param bit_buffer Pointer to bit buffer (modified in place)
  * @param bit_buffer_pos Pointer to bit position (modified in place)
  * @param trailing_bits Number of trailing bits to read (0, 3, or 4)
- * @param result Output: (huffman << trailing_bits) + trailing
+ * @param result Output: (huffman << trailing_bits) + trailing (max 223 for trailing_bits=4)
  * @return TAMP_OK on success, TAMP_INPUT_EXHAUSTED if more bits needed
  */
-static tamp_res decode_huffman(uint32_t* bit_buffer, uint8_t* bit_buffer_pos, uint8_t trailing_bits, uint16_t* result) {
+static tamp_res decode_huffman(uint32_t* bit_buffer, uint8_t* bit_buffer_pos, uint8_t trailing_bits, uint8_t* result) {
     /* Need at least 1 bit for huffman, plus trailing bits */
     if (TAMP_UNLIKELY(*bit_buffer_pos < 1 + trailing_bits)) return TAMP_INPUT_EXHAUSTED;
 
@@ -90,8 +90,8 @@ static tamp_res decode_huffman(uint32_t* bit_buffer, uint8_t* bit_buffer_pos, ui
  */
 static tamp_res decode_rle(TampDecompressor* d, unsigned char** output, const unsigned char* output_end,
                            size_t* output_written_size) {
-    uint16_t rle_count;
-    uint16_t skip = d->skip_bytes;
+    uint8_t rle_count; /* max 225: (13 << 4) + 15 + 2 */
+    uint8_t skip = d->skip_bytes;
 
     if (skip > 0) {
         /* Resume from output-full: rle_count saved in pending_window_offset */
@@ -100,7 +100,7 @@ static tamp_res decode_rle(TampDecompressor* d, unsigned char** output, const un
         /* Fresh decode */
         uint32_t bit_buffer = d->bit_buffer;
         uint8_t bit_buffer_pos = d->bit_buffer_pos;
-        uint16_t raw;
+        uint8_t raw;
         tamp_res res = decode_huffman(&bit_buffer, &bit_buffer_pos, TAMP_LEADING_RLE_BITS, &raw);
         if (res != TAMP_OK) return res;
         d->bit_buffer = bit_buffer;
@@ -113,14 +113,14 @@ static tamp_res decode_rle(TampDecompressor* d, unsigned char** output, const un
     uint8_t symbol = d->window[prev_pos];
 
     /* Calculate how many to write this call */
-    uint16_t remaining_count = rle_count - skip;
+    uint8_t remaining_count = rle_count - skip;
     size_t output_space = output_end - *output;
-    uint16_t to_write;
+    uint8_t to_write;
 
     if (TAMP_UNLIKELY(remaining_count > output_space)) {
         /* Partial write - save state for resume */
         to_write = output_space;
-        d->skip_bytes = skip + output_space;
+        d->skip_bytes = skip + to_write;
         d->token_state = TOKEN_RLE;
         d->pending_window_offset = rle_count;
     } else {
@@ -185,7 +185,7 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
         /* Fresh decode: huffman+trailing first, then window_offset */
         uint32_t bit_buffer = d->bit_buffer;
         uint8_t bit_buffer_pos = d->bit_buffer_pos;
-        uint16_t raw;
+        uint8_t raw;
         tamp_res res = decode_huffman(&bit_buffer, &bit_buffer_pos, TAMP_LEADING_EXTENDED_MATCH_BITS, &raw);
         if (res != TAMP_OK) return res;
         match_size = raw + d->min_pattern_size + 12;
@@ -457,10 +457,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             bit_buffer <<= 1;
             bit_buffer_pos--;
 
-            uint16_t match_size_u16;
-            if (decode_huffman(&bit_buffer, &bit_buffer_pos, 0, &match_size_u16) != TAMP_OK)
-                return TAMP_INPUT_EXHAUSTED;
-            match_size = match_size_u16;
+            uint8_t match_size_u8;
+            if (decode_huffman(&bit_buffer, &bit_buffer_pos, 0, &match_size_u8) != TAMP_OK) return TAMP_INPUT_EXHAUSTED;
+            match_size = match_size_u8;
 
             if (TAMP_UNLIKELY(match_size == FLUSH)) {
                 // flush bit_buffer to the nearest byte and skip the remainder of decoding
