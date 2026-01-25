@@ -37,67 +37,51 @@ static const uint8_t HUFFMAN_TABLE[128] = {
     17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,  17,  17,  17,  17, 17, 17,  17,  17,  17};
 
 /**
- * @brief Decode a huffman match-size symbol from the decompressor's bit_buffer.
+ * @brief Decode huffman symbol + optional trailing bits from bit buffer.
  *
- * Internally updates bit_buffer and bit_buffer_pos.
+ * Modifies bit_buffer and bit_buffer_pos in place. Caller is responsible
+ * for committing to decompressor state if needed.
  *
- * bit_buffer MUST have at least 8 bits prior to calling.
- *
- * @returns Decoded match_size
- */
-static int8_t huffman_decode(uint32_t* bit_buffer, uint8_t* bit_buffer_pos) {
-    uint8_t code;
-    uint8_t bit_len;
-
-    (*bit_buffer_pos)--;
-    code = *bit_buffer >> 31;
-    *bit_buffer <<= 1;
-    if (TAMP_LIKELY(code == 0)) return 0;
-
-    code = *bit_buffer >> (32 - 7);
-    code = HUFFMAN_TABLE[code];
-    bit_len = code >> 4;
-    *bit_buffer <<= bit_len;
-    (*bit_buffer_pos) -= bit_len;
-
-    return code & 0xF;
-}
-
-#if TAMP_V2_DECOMPRESS
-/**
- * @brief Decode huffman symbol + trailing bits from bit buffer.
- *
- * Simple helper that decodes from local copies. On failure, decompressor
- * state is not modified. Caller is responsible for state management.
- *
- * @param d Decompressor state
- * @param trailing_bits Number of trailing bits to read (3 or 4)
+ * @param bit_buffer Pointer to bit buffer (modified in place)
+ * @param bit_buffer_pos Pointer to bit position (modified in place)
+ * @param trailing_bits Number of trailing bits to read (0, 3, or 4)
  * @param result Output: (huffman << trailing_bits) + trailing
  * @return TAMP_OK on success, TAMP_INPUT_EXHAUSTED if more bits needed
  */
-static tamp_res decode_huffman_trailing(TampDecompressor* d, uint8_t trailing_bits, uint16_t* result) {
-    uint32_t bit_buffer = d->bit_buffer;
-    uint8_t bit_buffer_pos = d->bit_buffer_pos;
-
+static tamp_res decode_huffman(uint32_t* bit_buffer, uint8_t* bit_buffer_pos, uint8_t trailing_bits, uint16_t* result) {
     /* Need at least 1 bit for huffman, plus trailing bits */
-    if (TAMP_UNLIKELY(bit_buffer_pos < 1 + trailing_bits)) return TAMP_INPUT_EXHAUSTED;
+    if (TAMP_UNLIKELY(*bit_buffer_pos < 1 + trailing_bits)) return TAMP_INPUT_EXHAUSTED;
 
-    int8_t huffman_value = huffman_decode(&bit_buffer, &bit_buffer_pos);
+    /* Decode huffman symbol */
+    int8_t huffman_value;
+    (*bit_buffer_pos)--;
+    if (TAMP_LIKELY((*bit_buffer >> 31) == 0)) {
+        *bit_buffer <<= 1;
+        huffman_value = 0;
+    } else {
+        *bit_buffer <<= 1;
+        uint8_t code = HUFFMAN_TABLE[*bit_buffer >> (32 - 7)];
+        uint8_t bit_len = code >> 4;
+        if (TAMP_UNLIKELY(*bit_buffer_pos < bit_len + trailing_bits)) return TAMP_INPUT_EXHAUSTED;
+        *bit_buffer <<= bit_len;
+        *bit_buffer_pos -= bit_len;
+        huffman_value = code & 0xF;
+    }
 
-    if (TAMP_UNLIKELY(bit_buffer_pos < trailing_bits)) return TAMP_INPUT_EXHAUSTED;
-
-    uint8_t trailing = bit_buffer >> (32 - trailing_bits);
-    bit_buffer <<= trailing_bits;
-    bit_buffer_pos -= trailing_bits;
-
-    *result = (huffman_value << trailing_bits) + trailing;
-
-    /* Commit only on success */
-    d->bit_buffer = bit_buffer;
-    d->bit_buffer_pos = bit_buffer_pos;
+    /* Read trailing bits (skip if trailing_bits==0 to avoid undefined shift) */
+    if (trailing_bits) {
+        uint8_t trailing = *bit_buffer >> (32 - trailing_bits);
+        *bit_buffer <<= trailing_bits;
+        *bit_buffer_pos -= trailing_bits;
+        *result = (huffman_value << trailing_bits) + trailing;
+    } else {
+        *result = huffman_value;
+    }
 
     return TAMP_OK;
 }
+
+#if TAMP_V2_DECOMPRESS
 
 /**
  * @brief Decode RLE token and write repeated bytes to output.
@@ -115,9 +99,13 @@ static tamp_res decode_rle(TampDecompressor* d, unsigned char** output, const un
         rle_count = d->pending_window_offset;
     } else {
         /* Fresh decode */
+        uint32_t bit_buffer = d->bit_buffer;
+        uint8_t bit_buffer_pos = d->bit_buffer_pos;
         uint16_t raw;
-        tamp_res res = decode_huffman_trailing(d, TAMP_LEADING_RLE_BITS, &raw);
+        tamp_res res = decode_huffman(&bit_buffer, &bit_buffer_pos, TAMP_LEADING_RLE_BITS, &raw);
         if (res != TAMP_OK) return res;
+        d->bit_buffer = bit_buffer;
+        d->bit_buffer_pos = bit_buffer_pos;
         rle_count = raw + 2;
     }
 
@@ -196,21 +184,27 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
         d->bit_buffer_pos -= conf_window;
     } else {
         /* Fresh decode: huffman+trailing first, then window_offset */
+        uint32_t bit_buffer = d->bit_buffer;
+        uint8_t bit_buffer_pos = d->bit_buffer_pos;
         uint16_t raw;
-        tamp_res res = decode_huffman_trailing(d, TAMP_LEADING_EXTENDED_MATCH_BITS, &raw);
+        tamp_res res = decode_huffman(&bit_buffer, &bit_buffer_pos, TAMP_LEADING_EXTENDED_MATCH_BITS, &raw);
         if (res != TAMP_OK) return res;
         match_size = raw + d->min_pattern_size + 12;
 
         /* Now decode window_offset */
-        if (TAMP_UNLIKELY(d->bit_buffer_pos < conf_window)) {
+        if (TAMP_UNLIKELY(bit_buffer_pos < conf_window)) {
             /* Save match_size and return */
+            d->bit_buffer = bit_buffer;
+            d->bit_buffer_pos = bit_buffer_pos;
             d->token_state = TOKEN_EXT_MATCH;
             d->pending_match_size = match_size;
             return TAMP_INPUT_EXHAUSTED;
         }
-        window_offset = d->bit_buffer >> (32 - conf_window);
-        d->bit_buffer <<= conf_window;
-        d->bit_buffer_pos -= conf_window;
+        window_offset = bit_buffer >> (32 - conf_window);
+        bit_buffer <<= conf_window;
+        bit_buffer_pos -= conf_window;
+        d->bit_buffer = bit_buffer;
+        d->bit_buffer_pos = bit_buffer_pos;
     }
 
     /* Security check: validate window bounds */
@@ -464,10 +458,11 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             bit_buffer <<= 1;
             bit_buffer_pos--;
 
-            // There must be at least 8 bits, otherwise no possible decoding.
-            if (TAMP_UNLIKELY(bit_buffer_pos < 8)) return TAMP_INPUT_EXHAUSTED;
+            uint16_t match_size_u16;
+            if (decode_huffman(&bit_buffer, &bit_buffer_pos, 0, &match_size_u16) != TAMP_OK)
+                return TAMP_INPUT_EXHAUSTED;
+            match_size = match_size_u16;
 
-            match_size = huffman_decode(&bit_buffer, &bit_buffer_pos);
             if (TAMP_UNLIKELY(match_size == FLUSH)) {
                 // flush bit_buffer to the nearest byte and skip the remainder of decoding
                 decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);
