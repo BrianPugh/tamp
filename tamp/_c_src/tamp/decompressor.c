@@ -8,11 +8,15 @@
 #define FLUSH 15
 
 #if TAMP_V2_DECOMPRESS
-/* Token state for v2 decode suspend/resume (2 bits). */
+/* Token state for v2 decode suspend/resume (2 bits).
+ * TOKEN_RLE and TOKEN_EXT_MATCH_FRESH are arranged so that:
+ *     token_state = match_size - (TAMP_RLE_SYMBOL - 1)
+ * maps TAMP_RLE_SYMBOL (12) -> 1 and TAMP_EXTENDED_MATCH_SYMBOL (13) -> 2.
+ */
 #define TOKEN_NONE 0
 #define TOKEN_RLE 1
-#define TOKEN_EXT_MATCH 2
-#define TOKEN_EXT_MATCH_FRESH 3
+#define TOKEN_EXT_MATCH_FRESH 2
+#define TOKEN_EXT_MATCH 3 /* Resume: have match_size, need window_offset */
 #endif
 
 /**
@@ -478,18 +482,12 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             }
 
 #if TAMP_V2_DECOMPRESS
-            /* Check for v2 symbols */
+            /* Check for v2 symbols (RLE=12, extended match=13).
+             * Convert match_size to token_state via subtraction (see TOKEN_* defines). */
             if (TAMP_UNLIKELY(v2_enabled && match_size >= TAMP_RLE_SYMBOL)) {
                 decompressor->bit_buffer = bit_buffer;
                 decompressor->bit_buffer_pos = bit_buffer_pos;
-
-                if (match_size == TAMP_RLE_SYMBOL) {
-                    decompressor->token_state = TOKEN_RLE;
-                } else if (match_size == TAMP_EXTENDED_MATCH_SYMBOL) {
-                    decompressor->token_state = TOKEN_EXT_MATCH_FRESH;
-                } else {
-                    return TAMP_ERROR;
-                }
+                decompressor->token_state = match_size - (TAMP_RLE_SYMBOL - 1);
                 goto v2_dispatch;
             }
 #endif
