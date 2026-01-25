@@ -18,7 +18,7 @@ typedef struct {
     uint16_t window_pos;     // Current position in window (15 bits)
     uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits)
 #if TAMP_V2_DECOMPRESS
-    uint8_t pending_symbol : 2;      // State machine: 0=none, 1=RLE, 2=ext need offset, 3=ext fresh
+    uint8_t token_state : 2;         // 0=none, 1=RLE, 2=ext match, 3=ext match fresh
     uint16_t pending_window_offset;  // Saved window_offset for extended match output-full resume
     uint16_t pending_match_size;     // Saved match_size for extended match resume
 #endif

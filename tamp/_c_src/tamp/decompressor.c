@@ -8,13 +8,11 @@
 #define FLUSH 15
 
 #if TAMP_V2_DECOMPRESS
-/* Pending symbol states for v2 decode suspend/resume (2 bits).
- * When skip_bytes > 0, we're resuming after output-full with full decode saved.
- */
-#define PENDING_NONE 0
-#define PENDING_RLE 1
-#define PENDING_EXT_NEED_OFFSET 2
-#define PENDING_EXT_FRESH 3
+/* Token state for v2 decode suspend/resume (2 bits). */
+#define TOKEN_NONE 0
+#define TOKEN_RLE 1
+#define TOKEN_EXT_MATCH 2
+#define TOKEN_EXT_MATCH_FRESH 3
 #endif
 
 /**
@@ -43,7 +41,7 @@ static const uint8_t HUFFMAN_TABLE[128] = {
  *
  * @returns Decoded match_size
  */
-static inline int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos) {
+static int8_t huffman_decode(uint32_t *bit_buffer, uint8_t *bit_buffer_pos) {
     uint8_t code;
     uint8_t bit_len;
 
@@ -132,13 +130,13 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
         /* Partial write - save state for resume */
         to_write = output_space;
         d->skip_bytes = skip + output_space;
-        d->pending_symbol = PENDING_RLE;
+        d->token_state = TOKEN_RLE;
         d->pending_window_offset = rle_count;
     } else {
         /* Complete write */
         to_write = remaining_count;
         d->skip_bytes = 0;
-        d->pending_symbol = PENDING_NONE;
+        d->token_state = TOKEN_NONE;
     }
 
     /* Write repeated bytes to output */
@@ -158,7 +156,7 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
         d->window_pos &= window_mask;
     }
 
-    return (d->pending_symbol == PENDING_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
+    return (d->token_state == TOKEN_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
 }
 
 /**
@@ -169,7 +167,7 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
  *
  * State machine:
  * - Fresh: decode huffman+trailing, then window_offset
- * - PENDING_EXT_NEED_OFFSET: have match_size, need window_offset
+ * - TOKEN_EXT_MATCH: have match_size, need window_offset
  * - Output-full resume (skip > 0): have both match_size and window_offset
  */
 static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
@@ -183,7 +181,7 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
         /* Resume from output-full: both values saved */
         window_offset = d->pending_window_offset;
         match_size = d->pending_match_size;
-    } else if (d->pending_symbol == PENDING_EXT_NEED_OFFSET) {
+    } else if (d->token_state == TOKEN_EXT_MATCH) {
         /* Resume: have match_size, need window_offset */
         match_size = d->pending_match_size;
 
@@ -201,7 +199,7 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
         /* Now decode window_offset */
         if (TAMP_UNLIKELY(d->bit_buffer_pos < conf_window)) {
             /* Save match_size and return */
-            d->pending_symbol = PENDING_EXT_NEED_OFFSET;
+            d->token_state = TOKEN_EXT_MATCH;
             d->pending_match_size = match_size;
             return TAMP_INPUT_EXHAUSTED;
         }
@@ -226,14 +224,14 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
         /* Partial write - save state for resume */
         to_write = output_space;
         d->skip_bytes = skip + output_space;
-        d->pending_symbol = PENDING_EXT_NEED_OFFSET; /* Reuse for output-full */
+        d->token_state = TOKEN_EXT_MATCH; /* Reuse for output-full */
         d->pending_window_offset = window_offset;
         d->pending_match_size = match_size;
     } else {
         /* Complete write */
         to_write = remaining_count;
         d->skip_bytes = 0;
-        d->pending_symbol = PENDING_NONE;
+        d->token_state = TOKEN_NONE;
     }
 
     /* Copy from window to output */
@@ -244,7 +242,7 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
     *output_written_size += to_write;
 
     /* Update window only on complete decode */
-    if (d->pending_symbol == PENDING_NONE) {
+    if (d->token_state == TOKEN_NONE) {
         uint16_t wp = d->window_pos;
         for (uint16_t i = 0; i < match_size; i++) {
             d->window[wp] = d->window[(window_offset + i) & window_mask];
@@ -253,7 +251,7 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
         d->window_pos = wp;
     }
 
-    return (d->pending_symbol == PENDING_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
+    return (d->token_state == TOKEN_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
 }
 #endif /* TAMP_V2_DECOMPRESS */
 
@@ -403,7 +401,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 
     while (input != input_end || decompressor->bit_buffer_pos
 #if TAMP_V2_DECOMPRESS
-           || decompressor->pending_symbol
+           || decompressor->token_state
 #endif
     ) {
         // Populate the bit buffer
@@ -411,10 +409,10 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 
 #if TAMP_V2_DECOMPRESS
         /* Resume pending v2 operation. Retry after refill if helper needs more bits. */
-        if (TAMP_UNLIKELY(decompressor->pending_symbol)) {
+        if (TAMP_UNLIKELY(decompressor->token_state)) {
             if (TAMP_UNLIKELY(output == output_end)) return TAMP_OUTPUT_FULL;
             tamp_res v2_res;
-            if (decompressor->pending_symbol == PENDING_RLE) {
+            if (decompressor->token_state == TOKEN_RLE) {
                 v2_res = decode_rle(decompressor, &output, output_end, output_written_size, window_mask);
             } else {
                 v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size, conf_window,
@@ -486,16 +484,16 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 
                 tamp_res v2_res;
                 if (match_size == TAMP_RLE_SYMBOL) {
-                    decompressor->pending_symbol = PENDING_RLE;
+                    decompressor->token_state = TOKEN_RLE;
                     v2_res = decode_rle(decompressor, &output, output_end, output_written_size, window_mask);
                 } else if (match_size == TAMP_EXTENDED_MATCH_SYMBOL) {
-                    decompressor->pending_symbol = PENDING_EXT_FRESH;
+                    decompressor->token_state = TOKEN_EXT_MATCH_FRESH;
                     v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size, conf_window,
                                                    min_pattern_size, window_mask);
                 } else {
                     return TAMP_ERROR; /* Invalid v2 symbol */
                 }
-                /* On success, helper clears pending_symbol; on error, it stays set for resume.
+                /* On success, helper clears token_state; on error, it stays set for resume.
                  * TAMP_INPUT_EXHAUSTED is handled by resume path on next iteration. */
                 if (v2_res == TAMP_OUTPUT_FULL || v2_res < TAMP_OK) return v2_res;
                 continue;
