@@ -419,19 +419,18 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
 #if TAMP_V2_DECOMPRESS
         /* Handle v2 tokens - either resuming or fresh from match_size detection below. */
         if (TAMP_UNLIKELY(decompressor->token_state)) {
-        v2_dispatch:;
-            tamp_res v2_res;
+        v2_dispatch:
             if (decompressor->token_state == TOKEN_RLE) {
-                v2_res = decode_rle(decompressor, &output, output_end, output_written_size);
+                res = decode_rle(decompressor, &output, output_end, output_written_size);
             } else {
-                v2_res = decode_extended_match(decompressor, &output, output_end, output_written_size);
+                res = decode_extended_match(decompressor, &output, output_end, output_written_size);
             }
-            if (v2_res == TAMP_INPUT_EXHAUSTED) {
+            if (res == TAMP_INPUT_EXHAUSTED) {
                 refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
                 if (input == input_end) return TAMP_INPUT_EXHAUSTED;
                 continue;
             }
-            if (v2_res != TAMP_OK) return v2_res;
+            if (res != TAMP_OK) return res;
             continue;
         }
 #endif
