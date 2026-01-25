@@ -35,12 +35,9 @@ cdef class Compressor:
         int literal=8,
         dictionary=None,
         bool lazy_matching=False,
-        bool v2=False,
+        bool v2=True,
     ):
         cdef ctamp.TampConf conf
-
-        if v2:
-            raise NotImplementedError("v2 compression not yet supported in C compressor. Use --v1 flag or --implementation python.")
 
         if dictionary and bit_size(len(dictionary) - 1) != window:
             raise ValueError("Dictionary-window size mismatch.")
@@ -59,6 +56,7 @@ cdef class Compressor:
         # Set lazy_matching - this field is conditionally compiled based on TAMP_LAZY_MATCHING
         # The build system defines this macro, so the field should be available
         conf.lazy_matching = lazy_matching
+        conf.v2 = v2
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
