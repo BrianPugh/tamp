@@ -125,9 +125,13 @@ class _RingBuffer:
         return result
 
     def write_from_self(self, position, size):
-        data = [self.buffer[(position + i) % self.size] for i in range(size)]
-        for x in data:
-            self.write_byte(x)
+        # Write up to end of buffer (no wrap)
+        remaining = self.size - self.pos
+        window_write = min(size, remaining)
+        for i in range(window_write):
+            self.buffer[self.pos] = self.buffer[position + i]
+            self.pos += 1
+        self.pos %= self.size
 
     def get(self, index, size):
         out = bytearray(size)

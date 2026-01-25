@@ -242,15 +242,16 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
     }
     *output_written_size += to_write;
 
-    /* Update window only on complete decode */
+    /* Update window only on complete decode.
+     * Write up to end of buffer (no wrap), mask wp only at the end. */
     if (d->token_state == TOKEN_NONE) {
-        const uint16_t window_mask = (1u << conf_window) - 1;
+        uint16_t remaining = window_size - d->window_pos;
+        uint16_t window_write = (match_size < remaining) ? match_size : remaining;
         uint16_t wp = d->window_pos;
-        for (uint16_t i = 0; i < match_size; i++) {
-            d->window[wp] = d->window[(window_offset + i) & window_mask];
-            wp = (wp + 1) & window_mask;
+        for (uint16_t i = 0; i < window_write; i++) {
+            d->window[wp++] = d->window[window_offset + i];
         }
-        d->window_pos = wp;
+        d->window_pos = wp & (window_size - 1);
     }
 
     return (d->token_state == TOKEN_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;

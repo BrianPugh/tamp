@@ -267,7 +267,10 @@ class Decompressor:
 
                                 string = self._window_buffer.get(index, match_size)
 
-                                self._window_buffer.write_bytes(string)
+                                # Write up to end of buffer (no wrap)
+                                remaining = self._window_buffer.size - self._window_buffer.pos
+                                window_write = min(match_size, remaining)
+                                self._window_buffer.write_bytes(string[:window_write])
                             else:
                                 raise ValueError("unreachable")
                         else:
