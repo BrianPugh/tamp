@@ -407,13 +407,14 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
            || decompressor->token_state
 #endif
     ) {
+        if (TAMP_UNLIKELY(output == output_end)) return TAMP_OUTPUT_FULL;
+
         // Populate the bit buffer
         refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
 
 #if TAMP_V2_DECOMPRESS
         /* Resume pending v2 operation. Retry after refill if helper needs more bits. */
         if (TAMP_UNLIKELY(decompressor->token_state)) {
-            if (TAMP_UNLIKELY(output == output_end)) return TAMP_OUTPUT_FULL;
             tamp_res v2_res;
             if (decompressor->token_state == TOKEN_RLE) {
                 v2_res = decode_rle(decompressor, &output, output_end, output_written_size);
@@ -431,8 +432,6 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigne
 #endif
 
         if (TAMP_UNLIKELY(decompressor->bit_buffer_pos == 0)) return TAMP_INPUT_EXHAUSTED;
-
-        if (TAMP_UNLIKELY(output == output_end)) return TAMP_OUTPUT_FULL;
 
         // Hint that patterns are more likely than literals
         if (TAMP_UNLIKELY(decompressor->bit_buffer >> 31)) {

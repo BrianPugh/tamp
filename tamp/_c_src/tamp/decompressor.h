@@ -11,12 +11,11 @@ extern "C" {
  * Fields are ordered by access frequency for cache efficiency.
  */
 typedef struct {
-    /* HOT: accessed every iteration of the decompression loop.
-     * Full-width types avoid bitfield access overhead. */
+    /* HOT: accessed every iteration of the decompression loop. */
     unsigned char *window;   // Pointer to window buffer
     uint32_t bit_buffer;     // Bit buffer for reading compressed data (32 bits)
     uint16_t window_pos;     // Current position in window (15 bits)
-    uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits)
+    uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits needed)
 #if TAMP_V2_DECOMPRESS
     uint8_t token_state : 2;         // 0=none, 1=RLE, 2=ext match, 3=ext match fresh
     uint16_t pending_window_offset;  // Saved window_offset for extended match output-full resume
