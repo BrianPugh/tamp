@@ -20,14 +20,11 @@
 #endif
 
 /**
- * This array was generated with tools/huffman_jump_table.py
+ * Huffman lookup table indexed by 7 bits (after first "1" bit consumed).
+ * Upper 4 bits = additional bits to consume, lower 4 bits = symbol (15 = FLUSH).
  *
- * The idea is that the resulting code is smaller/faster as a lookup table than a bunch of if/else
- * statements.
- *
- * Of each element:
- *  * The upper 4 bits express the number of bits to decode.
- *  * The lower 4 bits express the decoded value, with FLUSH being represented as 0b1111
+ * Note: A 64-byte table with special-cased symbol 1 was tried but was ~10% slower
+ * and only saved 8 bytes in final firmware due to added branch logic.
  */
 static const uint8_t HUFFMAN_TABLE[128] = {
     50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,  50,  85,  85,  85, 85, 122, 123, 104, 104, 86, 86,
@@ -56,9 +53,11 @@ static tamp_res decode_huffman(uint32_t* bit_buffer, uint8_t* bit_buffer_pos, ui
     int8_t huffman_value;
     (*bit_buffer_pos)--;
     if (TAMP_LIKELY((*bit_buffer >> 31) == 0)) {
+        /* Symbol 0: code "0" */
         *bit_buffer <<= 1;
         huffman_value = 0;
     } else {
+        /* All other symbols: use 128-entry table indexed by next 7 bits */
         *bit_buffer <<= 1;
         uint8_t code = HUFFMAN_TABLE[*bit_buffer >> (32 - 7)];
         uint8_t bit_len = code >> 4;
