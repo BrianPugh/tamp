@@ -103,7 +103,6 @@ static tamp_res decode_huffman_trailing(TampDecompressor *d, uint8_t trailing_bi
  */
 static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
                            size_t *output_written_size) {
-    const uint16_t window_mask = (1u << d->conf_window) - 1;
     uint16_t rle_count;
     uint16_t skip = d->skip_bytes;
 
@@ -119,7 +118,7 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
     }
 
     /* Get the byte to repeat (last written byte) */
-    uint16_t prev_pos = (d->window_pos == 0) ? window_mask : (d->window_pos - 1);
+    uint16_t prev_pos = (d->window_pos - 1) & ((1u << d->conf_window) - 1);
     uint8_t symbol = d->window[prev_pos];
 
     /* Calculate how many to write this call */
@@ -149,12 +148,13 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
     /* Update window only on first chunk (skip==0).
      * Write up to TAMP_RLE_MAX_WINDOW or until end of buffer (no wrap). */
     if (skip == 0) {
-        uint16_t remaining = (window_mask + 1) - d->window_pos;
+        const uint16_t window_size = 1u << d->conf_window;
+        uint16_t remaining = window_size - d->window_pos;
         uint16_t window_write = MIN(MIN(rle_count, TAMP_RLE_MAX_WINDOW), remaining);
         for (uint16_t i = 0; i < window_write; i++) {
             d->window[d->window_pos++] = symbol;
         }
-        d->window_pos &= window_mask;
+        d->window_pos &= (window_size - 1);
     }
 
     return (d->token_state == TOKEN_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
@@ -174,7 +174,6 @@ static tamp_res decode_rle(TampDecompressor *d, unsigned char **output, const un
 static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **output, const unsigned char *output_end,
                                       size_t *output_written_size) {
     const uint8_t conf_window = d->conf_window;
-    const uint16_t window_mask = (1u << conf_window) - 1;
     uint16_t window_offset;
     uint16_t match_size;
     uint16_t skip = d->skip_bytes;
@@ -245,6 +244,7 @@ static tamp_res decode_extended_match(TampDecompressor *d, unsigned char **outpu
 
     /* Update window only on complete decode */
     if (d->token_state == TOKEN_NONE) {
+        const uint16_t window_mask = (1u << conf_window) - 1;
         uint16_t wp = d->window_pos;
         for (uint16_t i = 0; i < match_size; i++) {
             d->window[wp] = d->window[(window_offset + i) & window_mask];
