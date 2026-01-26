@@ -7,6 +7,30 @@
 
 #define FLUSH 15
 
+/**
+ * @brief Copy pattern from window to window, updating window_pos.
+ *
+ * Handles potential overlap between source and destination regions by
+ * copying backwards when the destination would "catch up" to the source.
+ */
+TAMP_NOINLINE static void window_copy(unsigned char* window, uint16_t* window_pos, uint16_t window_offset,
+                                      uint8_t match_size, uint16_t window_mask) {
+    const uint16_t src_to_dst = (*window_pos - window_offset) & window_mask;
+
+    if (TAMP_UNLIKELY(src_to_dst < match_size && src_to_dst > 0)) {
+        /* Overlap with dst > src: copy backwards to avoid corruption. */
+        for (uint8_t i = match_size; i-- > 0;) {
+            window[(*window_pos + i) & window_mask] = window[window_offset + i];
+        }
+        *window_pos = (*window_pos + match_size) & window_mask;
+    } else {
+        for (uint8_t i = 0; i < match_size; i++) {
+            window[*window_pos] = window[window_offset + i];
+            *window_pos = (*window_pos + 1) & window_mask;
+        }
+    }
+}
+
 #if TAMP_V2_DECOMPRESS
 /* Token state for v2 decode suspend/resume (2 bits).
  * TOKEN_RLE and TOKEN_EXT_MATCH_FRESH are arranged so that:
@@ -240,49 +264,18 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
     *output_written_size += to_write;
 
     /* Update window only on complete decode.
-     * Write up to end of buffer (no wrap), mask wp only at the end. */
+     * Write up to end of buffer (no wrap). */
     if (d->token_state == TOKEN_NONE) {
         uint16_t remaining = window_size - d->window_pos;
         uint8_t window_write = (match_size < remaining) ? match_size : remaining; /* max 126 */
         uint16_t wp = d->window_pos;
-        for (uint8_t i = 0; i < window_write; i++) {
-            d->window[wp++] = d->window[window_offset + i];
-        }
-        d->window_pos = wp & (window_size - 1);
+        window_copy(d->window, &wp, window_offset, window_write, window_size - 1);
+        d->window_pos = wp;
     }
 
     return (d->token_state == TOKEN_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
 }
 #endif /* TAMP_V2_DECOMPRESS */
-
-/**
- * @brief Copy pattern from window to window, updating window_pos.
- *
- * Handles potential overlap between source and destination regions by
- * using a temporary buffer when necessary. Overlap occurs when the
- * destination would "catch up" to the source during copying.
- */
-static inline void window_copy(unsigned char* window, uint16_t* window_pos, uint16_t window_offset, uint8_t match_size,
-                               uint16_t window_mask) {
-    const uint16_t src_to_dst = (*window_pos - window_offset) & window_mask;
-    const bool overlap = (src_to_dst < match_size) && (src_to_dst > 0);
-
-    if (TAMP_UNLIKELY(overlap)) {
-        uint8_t tmp_buf[16];
-        for (uint8_t i = 0; i < match_size; i++) {
-            tmp_buf[i] = window[window_offset + i];
-        }
-        for (uint8_t i = 0; i < match_size; i++) {
-            window[*window_pos] = tmp_buf[i];
-            *window_pos = (*window_pos + 1) & window_mask;
-        }
-    } else {
-        for (uint8_t i = 0; i < match_size; i++) {
-            window[*window_pos] = window[window_offset + i];
-            *window_pos = (*window_pos + 1) & window_mask;
-        }
-    }
-}
 
 tamp_res tamp_decompressor_read_header(TampConf* conf, const unsigned char* input, size_t input_size,
                                        size_t* input_consumed_size) {
