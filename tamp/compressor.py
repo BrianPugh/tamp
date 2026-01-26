@@ -128,8 +128,10 @@ class _RingBuffer:
         # Write up to end of buffer (no wrap)
         remaining = self.size - self.pos
         window_write = min(size, remaining)
-        for i in range(window_write):
-            self.buffer[self.pos] = self.buffer[position + i]
+        # Read source data first to avoid overlap when source and destination ranges overlap
+        data = self.get(position, window_write)
+        for byte in data:
+            self.buffer[self.pos] = byte
             self.pos += 1
         self.pos %= self.size
 
