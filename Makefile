@@ -21,6 +21,7 @@ help:
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make binary-size        Show binary sizes for README table"
+	@echo "  make v1-compressed-datasets  Compress all datasets/ files to datasets/v1-compressed/"
 	@echo "  make c-benchmark-stream Benchmark stream API with various temporary working buffer sizes"
 	@echo "  make download-enwik8    Download enwik8 test dataset"
 	@echo "  make tamp-c-library     Build static C library"
@@ -136,20 +137,13 @@ endif
 # Data Downloads
 ################
 # Datasets are stored in datasets/ to persist across `make clean`
-.PHONY: download-enwik8-zip download-enwik8 download-silesia
+.PHONY: download-enwik8 download-silesia v1-compressed-datasets
 
-datasets/enwik8.zip:
+datasets/enwik8:
 	@mkdir -p datasets
-	@if [ ! -f datasets/enwik8.zip ]; then \
-		curl -o datasets/enwik8.zip https://mattmahoney.net/dc/enwik8.zip; \
-	fi
-
-download-enwik8-zip: datasets/enwik8.zip
-
-datasets/enwik8: datasets/enwik8.zip
-	@if [ ! -f datasets/enwik8 ]; then \
-		cd datasets && unzip -q enwik8.zip; \
-	fi
+	curl -o datasets/enwik8.zip https://mattmahoney.net/dc/enwik8.zip
+	cd datasets && unzip -q enwik8.zip
+	rm -f datasets/enwik8.zip
 
 download-enwik8: datasets/enwik8
 
@@ -163,6 +157,22 @@ datasets/silesia:
 	fi
 
 download-silesia: datasets/silesia
+
+v1-compressed-datasets: datasets/enwik8 datasets/silesia
+	@mkdir -p datasets/v1-compressed
+	@for f in datasets/*; do \
+		[ -f "$$f" ] || continue; \
+		base=$$(basename "$$f"); \
+		echo "Compressing $$f -> datasets/v1-compressed/$$base.tamp"; \
+		poetry run tamp compress "$$f" -o "datasets/v1-compressed/$$base.tamp"; \
+	done
+	@mkdir -p datasets/v1-compressed/silesia
+	@for f in datasets/silesia/*; do \
+		[ -f "$$f" ] || continue; \
+		base=$$(basename "$$f"); \
+		echo "Compressing $$f -> datasets/v1-compressed/silesia/$$base.tamp"; \
+		poetry run tamp compress "$$f" -o "datasets/v1-compressed/silesia/$$base.tamp"; \
+	done
 
 # Derived test files (OK to be in build/, quick to regenerate)
 build/enwik8-100kb: download-enwik8
