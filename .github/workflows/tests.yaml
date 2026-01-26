@@ -110,6 +110,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          lfs: true
 
       - name: Set up python 3.13 (for Poetry)
         id: setup-python-system
@@ -166,7 +167,7 @@ jobs:
       - name: Run tests with sanitizers
         run: |
           source .venv/bin/activate
-          LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
+          LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --dataset --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
           belay run micropython -X heapsize=200M -m unittest $(find tests -name "*.py" ! -name "test_cli.py")
           coverage report
 
