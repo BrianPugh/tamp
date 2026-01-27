@@ -1,11 +1,10 @@
 import hashlib
-from pathlib import Path
-
-import pytest
+import os
+import unittest
 
 import tamp
 
-PROJECT_DIR = Path(__file__).parent.parent
+PROJECT_DIR = os.path.dirname(os.path.dirname(__file__))
 
 # Expected SHA256 hashes of the *decompressed* content.
 V1_DATASETS = [
@@ -68,20 +67,21 @@ V1_DATASETS = [
 ]
 
 
-@pytest.mark.parametrize(
-    "rel_path, expected_sha256",
-    V1_DATASETS,
-    ids=[p.removesuffix(".tamp") for p, _ in V1_DATASETS],
-)
-def test_v1_decompress(request, rel_path, expected_sha256):
-    if not request.config.getoption("--dataset"):
-        pytest.skip("dataset tests require --dataset flag")
+class TestV1Decompression(unittest.TestCase):
+    def test_v1_decompress(self):
+        for rel_path, expected_sha256 in V1_DATASETS:
+            with self.subTest(dataset=rel_path):
+                path = os.path.join(PROJECT_DIR, rel_path)
+                if not os.path.exists(path):
+                    self.skipTest(f"Missing dataset file: {path}")
 
-    path = PROJECT_DIR / rel_path
-    if not path.exists():
-        pytest.fail(f"Missing dataset file: {path}")
+                with open(path, "rb") as f:
+                    data = f.read()
 
-    data = path.read_bytes()
-    decompressed = tamp.decompress(data)
-    actual = hashlib.sha256(decompressed).hexdigest()
-    assert actual == expected_sha256, f"SHA256 mismatch for {rel_path}"
+                decompressed = tamp.decompress(data)
+                actual = hashlib.sha256(decompressed).hexdigest()
+                self.assertEqual(actual, expected_sha256, f"SHA256 mismatch for {rel_path}")
+
+
+if __name__ == "__main__":
+    unittest.main()
