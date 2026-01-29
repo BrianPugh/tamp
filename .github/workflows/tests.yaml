@@ -168,7 +168,7 @@ jobs:
         run: |
           source .venv/bin/activate
           LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --dataset --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
-          belay run micropython -X heapsize=200M -m unittest $(find tests -name "*.py" ! -name "test_cli.py")
+          belay run micropython -X heapsize=200M -m unittest $(find tests -name "*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py")
           coverage report
 
       - name: Run C tests
