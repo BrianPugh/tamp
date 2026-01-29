@@ -247,10 +247,12 @@ Temporary Items
 *.trace
 
 # Compression benchmark datasets
-datasets/
+datasets/*
+!datasets/v1-compressed/
 enwik8*
 *.pkl
 *.tamp
+!datasets/v1-compressed/**
 
 # Cython-generated files
 tamp/_c_compressor.c

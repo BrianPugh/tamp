@@ -86,9 +86,7 @@ def print_results():
     print()
     print(f"{_BOLD}Total-Time:{_RESET} {t_total_ms:6.3f}ms")
 
-    header = _table_formatter(
-        "Name", "Calls", "Total (%)", "Total (ms)", "Average (ms)"
-    )
+    header = _table_formatter("Name", "Calls", "Total (%)", "Total (ms)", "Average (ms)")
 
     print(_BOLD + header + _RESET)
     print("-" * len(header))
