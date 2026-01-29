@@ -164,12 +164,16 @@ jobs:
           echo "ASAN_OPTIONS=detect_leaks=0" >> $GITHUB_ENV
           echo "UBSAN_OPTIONS=print_stacktrace=1" >> $GITHUB_ENV
 
-      - name: Run tests with sanitizers
+      - name: Run CPython tests with sanitizers
         run: |
           source .venv/bin/activate
           LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --dataset --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
-          belay run micropython -X heapsize=200M -m unittest $(find tests -name "*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py")
           coverage report
+
+      - name: Run MicroPython tests
+        run: |
+          source .venv/bin/activate
+          belay run micropython -X heapsize=200M -m unittest $(find tests -name "*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py")
 
       - name: Run C tests
         run: make c-test
