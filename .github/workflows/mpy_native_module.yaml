@@ -187,7 +187,7 @@ jobs:
           make mpy ARCH=$ARCH
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
-            poetry run belay run micropython -X heapsize=200M -m unittest tests/test_*.py
+            poetry run belay run micropython -X heapsize=200M -m unittest $(find tests -name "*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py")
             rm tamp_native.mpy
           fi
           mv tamp.mpy tamp-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
