@@ -7,15 +7,30 @@ try:
 except ImportError:
     micropython = None
 
-from tamp.compressor import Compressor as PyCompressor
-from tamp.decompressor import Decompressor as PyDecompressor
-
 if micropython is None:
+    # CPython: test pure Python and Cython implementations
+    from tamp.compressor import Compressor as PyCompressor
+    from tamp.decompressor import Decompressor as PyDecompressor
+
+    try:
+        from tamp._c_compressor import Compressor as CCompressor
+        from tamp._c_decompressor import Decompressor as CDecompressor
+    except ImportError:
+        CCompressor = None
+        CDecompressor = None
+
     ViperCompressor = None
     ViperDecompressor = None
     NativeCompressor = None
     NativeDecompressor = None
 else:
+    # MicroPython: only test Viper and Native implementations
+    # Pure Python and Cython implementations use CPython-specific features
+    PyCompressor = None
+    PyDecompressor = None
+    CCompressor = None
+    CDecompressor = None
+
     from tamp.compressor_viper import Compressor as ViperCompressor
     from tamp.decompressor_viper import Decompressor as ViperDecompressor
 
@@ -26,13 +41,6 @@ else:
         print("Skipping Native Module.")
         NativeCompressor = None
         NativeDecompressor = None
-
-try:
-    from tamp._c_compressor import Compressor as CCompressor
-    from tamp._c_decompressor import Decompressor as CDecompressor
-except ImportError:
-    CCompressor = None
-    CDecompressor = None
 
 
 Compressors = (PyCompressor, CCompressor, ViperCompressor, NativeCompressor)
