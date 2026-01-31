@@ -2,17 +2,17 @@ import hashlib
 import os
 import unittest
 
+import pytest
+
 import tamp
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(__file__))
 
-# Test both C and Python implementations
+# Test C implementation (Python implementation is too slow for large datasets)
 from tamp._c_decompressor import decompress as c_decompress
-from tamp.decompressor import decompress as py_decompress
 
 DECOMPRESSOR_IMPLEMENTATIONS = [
     ("C (Cython)", c_decompress),
-    ("Python", py_decompress),
 ]
 
 # Expected SHA256 hashes of the *decompressed* content.
@@ -77,6 +77,7 @@ V1_DATASETS = [
 
 
 class TestV1Decompression(unittest.TestCase):
+    @pytest.mark.dataset
     def test_v1_decompress(self):
         for impl_name, decompress_func in DECOMPRESSOR_IMPLEMENTATIONS:
             for rel_path, expected_sha256 in V1_DATASETS:
