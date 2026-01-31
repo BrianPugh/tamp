@@ -167,7 +167,7 @@ jobs:
       - name: Run CPython tests with sanitizers
         run: |
           source .venv/bin/activate
-          LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --dataset --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
+          LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest --cov=tamp --cov-report term --cov-report xml --junitxml=testresults.xml
           coverage report
 
       - name: Run MicroPython tests (reference implementation)
