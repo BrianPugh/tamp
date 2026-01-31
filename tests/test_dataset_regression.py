@@ -1,12 +1,10 @@
 import hashlib
-import os
 import unittest
+from pathlib import Path
 
 import pytest
 
-import tamp
-
-PROJECT_DIR = os.path.dirname(os.path.dirname(__file__))
+PROJECT_DIR = Path(__file__).parent.parent
 
 # Test C implementation (Python implementation is too slow for large datasets)
 from tamp._c_decompressor import decompress as c_decompress
@@ -82,7 +80,7 @@ class TestV1Decompression(unittest.TestCase):
         for impl_name, decompress_func in DECOMPRESSOR_IMPLEMENTATIONS:
             for rel_path, expected_sha256 in V1_DATASETS:
                 with self.subTest(implementation=impl_name, dataset=rel_path):
-                    path = os.path.join(PROJECT_DIR, rel_path)
+                    path = PROJECT_DIR / rel_path
 
                     with open(path, "rb") as f:
                         data = f.read()
