@@ -33,25 +33,6 @@ _LEADING_EXTENDED_MATCH_HUFFMAN_BITS = 3
 _LEADING_RLE_HUFFMAN_BITS = 4
 
 
-def _determine_rle_breakeven_point(min_pattern_size, window_bits):
-    # Determines if a pattern-match would be shorter than a RLE match.
-    # See how many bits this encoding would be with RLE
-    rle_length_bits = {}
-    for i in range(min_pattern_size, min_pattern_size + 11 + 1):
-        rle_length_bits[i] = 8 + _LEADING_RLE_HUFFMAN_BITS + _huffman_bits[(i - 1) >> _LEADING_RLE_HUFFMAN_BITS]
-
-    pattern_length_bits = {}
-    for i in range(min_pattern_size, min_pattern_size + 11 + 1):
-        pattern_length_bits[i] = _huffman_bits[i - min_pattern_size] + window_bits
-
-    breakeven_point = 0
-    for pattern_size in sorted(pattern_length_bits):
-        if pattern_length_bits[pattern_size] < rle_length_bits[pattern_size]:
-            breakeven_point = pattern_size
-
-    return breakeven_point
-
-
 class _BitWriter:
     """Writes bits to a stream."""
 
@@ -133,7 +114,8 @@ class _RingBuffer:
         for byte in data:
             self.buffer[self.pos] = byte
             self.pos += 1
-        self.pos %= self.size
+        if self.pos == self.size:
+            self.pos = 0
 
     def get(self, index, size):
         out = bytearray(size)
@@ -198,7 +180,6 @@ class Compressor:
 
         # "+1" Because a RLE of 1 is not valid.
         self._rle_max_size = (13 << _LEADING_RLE_HUFFMAN_BITS) + (1 << _LEADING_RLE_HUFFMAN_BITS) + 1
-        self._rle_breakeven = _determine_rle_breakeven_point(self.min_pattern_size, self.window_bits)
 
         self._extended_match_count = 0
         self._extended_match_position = 0
@@ -290,57 +271,92 @@ class Compressor:
             # We ran out of input_buffer, return so caller can re-populate the input_buffer
             return bytes_written
 
-        target = bytes(self._input_buffer)
-        search_i = 0
-        match_size = 1
+        # RLE handling with persistent state (v2 only)
+        # Accumulate RLE count across compression cycles for better compression of long runs
+        have_match_from_rle = False  # Track if we already did pattern matching in RLE section
 
         if self.v2:
-            # RLE same-character-counting logic
-            while (
-                target and target[0] == self._window_buffer.last_written_byte and self._rle_count < self._rle_max_size
-            ):
-                self._rle_count += 1
-                self._input_buffer.popleft()
-                target = bytes(self._input_buffer)
-            if not target and self._rle_count != self._rle_max_size:
-                # Need more input to see if the RLE continues
+            last_byte = self._window_buffer.last_written_byte
+
+            # Count additional matching bytes in current buffer
+            new_rle_bytes = 0
+            for byte in self._input_buffer:
+                if byte == last_byte and self._rle_count + new_rle_bytes < self._rle_max_size:
+                    new_rle_bytes += 1
+                else:
+                    break
+
+            # If we consumed whole buffer and haven't hit max, keep accumulating
+            if new_rle_bytes == len(self._input_buffer) and self._rle_count + new_rle_bytes < self._rle_max_size:
+                # Consume these bytes and wait for more data
+                for _ in range(new_rle_bytes):
+                    self._input_buffer.popleft()
+                self._rle_count += new_rle_bytes
                 return bytes_written
-            if self._rle_count == 1:
-                # This is not RLE; attempt to pattern-match or just write literals.
-                self._input_buffer.appendleft(self._window_buffer.last_written_byte)
-                target = bytes(self._input_buffer)
-                self._rle_count = 0
-            elif self._rle_count:
-                if self._rle_count > self._rle_breakeven:
-                    # It's certainly better to do a RLE write than searching for a pattern.
-                    bytes_written += self._write_rle()
+
+            # RLE run has ended or hit max - decide what to encode
+            total_rle_count = self._rle_count + new_rle_bytes
+
+            if total_rle_count >= 2:
+                # Build search target: accumulated RLE + new RLE + rest of buffer
+                # This allows pattern matching to find longer sequences
+                target = bytes([last_byte]) * total_rle_count + bytes(list(self._input_buffer)[new_rle_bytes:])
+
+                # Do pattern search
+                if self.lazy_matching and self._cached_match_index >= 0:
+                    search_i = self._cached_match_index
+                    match_size = self._cached_match_size
+                    match = self._window_buffer.get(search_i, match_size)
+                    self._cached_match_index = -1
+                else:
+                    search_i, match = self._search(target, start=0)
+                    match_size = len(match)
+
+                have_match_from_rle = True
+
+                # Simple decision: if pattern match is longer, use it; otherwise use RLE
+                if match_size >= self.min_pattern_size and match_size > total_rle_count:
+                    # Pattern match wins
+                    # Consume bytes from input_buffer (only the bytes actually in the buffer)
+                    # Note: first _rle_count bytes were already consumed in previous calls
+                    bytes_to_consume = match_size - self._rle_count
+                    for _ in range(bytes_to_consume):
+                        self._input_buffer.popleft()
+                    self._rle_count = 0
+
+                    # Write the pattern match immediately and return
+                    # (Don't continue to normal flow which would try to consume bytes again)
+                    if self.v2 and match_size > (self.min_pattern_size + 11):
+                        self._extended_match_position = search_i
+                        self._extended_match_count = match_size
+                        bytes_written += self._write_extended_match()
+                    else:
+                        bytes_written += self._write_match(search_i, match)
                     return bytes_written
                 else:
-                    # We'll see if pattern-matching offers a better encoding.
-                    target = bytes([self._window_buffer.last_written_byte]) * self._rle_count
-
-        # Check if we have a cached match from lazy matching
-        if self.lazy_matching and self._cached_match_index >= 0:
-            search_i = self._cached_match_index
-            match_size = self._cached_match_size
-            match = self._window_buffer.get(search_i, match_size)
-            self._cached_match_index = -1  # Clear cache after using
-        else:
-            # Perform normal pattern-matching
-            search_i, match = self._search(target, start=0)
-            match_size = len(match)
-
-        if self._rle_count:
-            # Check to see if the found pattern-match is more efficient than the RLE encoding.
-            assert self._rle_count >= 2  # noqa: S101
-            if match_size >= self._rle_count:
-                # Pattern is better than RLE
-                bytes_written += self._write_match(search_i, match)
+                    # RLE wins - commit RLE
+                    for _ in range(new_rle_bytes):
+                        self._input_buffer.popleft()
+                    self._rle_count = total_rle_count
+                    bytes_written += self._write_rle()
+                    return bytes_written
+            elif self._rle_count == 1:
+                # Single byte isn't worth RLE encoding
                 self._rle_count = 0
-                return bytes_written
+                # Fall through to normal pattern matching
+
+        # Normal pattern matching (when no RLE or RLE was abandoned for pattern)
+        if not have_match_from_rle:
+            target = bytes(self._input_buffer)
+
+            if self.lazy_matching and self._cached_match_index >= 0:
+                search_i = self._cached_match_index
+                match_size = self._cached_match_size
+                match = self._window_buffer.get(search_i, match_size)
+                self._cached_match_index = -1
             else:
-                # RLE is better than pattern
-                return self._write_rle()
+                search_i, match = self._search(target, start=0)
+                match_size = len(match)
 
         # Lazy matching logic
         if (
@@ -476,7 +492,7 @@ class Compressor:
             bytes_written += self._bit_writer.write_huffman_and_literal_flag(_RLE_SYMBOL)
             bytes_written += self._write_extended_huffman(self._rle_count - 2, _LEADING_RLE_HUFFMAN_BITS)
 
-            # Write up to 8 bytes (or until end of buffer) to the window.
+            # Write up to 8 bytes to the window (up to end of buffer, no wrap).
             remaining = self._window_buffer.size - self._window_buffer.pos
             window_write = min(self._rle_count, _RLE_MAX_WINDOW, remaining)
             self._window_buffer.write_bytes(bytes([last_written_byte]) * window_write)
