@@ -7,30 +7,6 @@
 
 #define FLUSH 15
 
-/**
- * @brief Copy pattern from window to window, updating window_pos.
- *
- * Handles potential overlap between source and destination regions by
- * copying backwards when the destination would "catch up" to the source.
- */
-TAMP_NOINLINE static void window_copy(unsigned char* window, uint16_t* window_pos, uint16_t window_offset,
-                                      uint8_t match_size, uint16_t window_mask) {
-    const uint16_t src_to_dst = (*window_pos - window_offset) & window_mask;
-
-    if (TAMP_UNLIKELY(src_to_dst < match_size && src_to_dst > 0)) {
-        /* Overlap with dst > src: copy backwards to avoid corruption. */
-        for (uint8_t i = match_size; i-- > 0;) {
-            window[(*window_pos + i) & window_mask] = window[window_offset + i];
-        }
-        *window_pos = (*window_pos + match_size) & window_mask;
-    } else {
-        for (uint8_t i = 0; i < match_size; i++) {
-            window[*window_pos] = window[window_offset + i];
-            *window_pos = (*window_pos + 1) & window_mask;
-        }
-    }
-}
-
 #if TAMP_V2_DECOMPRESS
 /* Token state for v2 decode suspend/resume (2 bits).
  * TOKEN_RLE and TOKEN_EXT_MATCH_FRESH are arranged so that:
@@ -56,6 +32,30 @@ static const uint8_t HUFFMAN_TABLE[128] = {
     51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 17, 17, 17,  17,  17,  17,  17, 17, 17,  17,  17,  17,  17, 17,
     17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,  17,  17,  17,  17, 17, 17,  17,  17,  17,  17, 17,
     17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,  17,  17,  17,  17, 17, 17,  17,  17,  17};
+
+/**
+ * @brief Copy pattern from window to window, updating window_pos.
+ *
+ * Handles potential overlap between source and destination regions by
+ * copying backwards when the destination would "catch up" to the source.
+ */
+TAMP_NOINLINE static void window_copy(unsigned char* window, uint16_t* window_pos, uint16_t window_offset,
+                                      uint8_t match_size, uint16_t window_mask) {
+    const uint16_t src_to_dst = (*window_pos - window_offset) & window_mask;
+
+    if (TAMP_UNLIKELY(src_to_dst < match_size && src_to_dst > 0)) {
+        /* Overlap with dst > src: copy backwards to avoid corruption. */
+        for (uint8_t i = match_size; i-- > 0;) {
+            window[(*window_pos + i) & window_mask] = window[window_offset + i];
+        }
+        *window_pos = (*window_pos + match_size) & window_mask;
+    } else {
+        for (uint8_t i = 0; i < match_size; i++) {
+            window[*window_pos] = window[window_offset + i];
+            *window_pos = (*window_pos + 1) & window_mask;
+        }
+    }
+}
 
 /**
  * @brief Decode huffman symbol + optional trailing bits from bit buffer.
