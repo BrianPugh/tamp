@@ -40,9 +40,7 @@ typedef struct {
     uint8_t conf_window : 4;       // Window bits from config
     uint8_t conf_literal : 4;      // Literal bits from config
     uint8_t min_pattern_size : 2;  // Minimum pattern size, 2 or 3
-#if TAMP_V2_DECOMPRESS
-    uint8_t conf_v2 : 1;  // v2 format enabled (from header)
-#endif
+    uint8_t conf_v2 : 1;           // v2 format enabled (from header)
 
     /* COLD: rarely accessed (init or edge cases).
      * Bitfields save space; add new cold fields here. */

@@ -286,10 +286,13 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
     }
     *output_written_size += to_write;
 
-    /* Update window only on complete decode. */
+    /* Update window only on complete decode.
+     * Write up to end of buffer (no wrap), matching RLE behavior. */
     if (d->token_state == TOKEN_NONE) {
         uint16_t wp = d->window_pos;
-        window_copy(d->window, &wp, window_offset, match_size, window_size - 1);
+        uint16_t remaining = window_size - wp;
+        uint8_t window_write = (match_size < remaining) ? match_size : remaining;
+        window_copy(d->window, &wp, window_offset, window_write, window_size - 1);
         d->window_pos = wp;
     }
 
@@ -329,10 +332,9 @@ static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor* decompres
     decompressor->conf_literal = conf_literal;
     decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf_window, conf_literal);
     decompressor->configured = true;
-#if TAMP_V2_DECOMPRESS
     decompressor->conf_v2 = conf_v2;
-#else
-    (void)conf_v2;
+#if !TAMP_V2_DECOMPRESS
+    if (conf_v2) return TAMP_INVALID_CONF;  // v2 stream but v2 support not compiled in
 #endif
 
     return TAMP_OK;
