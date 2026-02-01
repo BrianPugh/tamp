@@ -431,7 +431,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             }
             if (res == TAMP_INPUT_EXHAUSTED) {
                 refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
-                if (input == input_end) return TAMP_INPUT_EXHAUSTED;
+                /* Don't return yet - we may have refilled enough bits to continue.
+                 * The loop condition will exit when both input is exhausted AND
+                 * pos_and_state (including token_state) is zero. */
                 continue;
             }
             if (res != TAMP_OK) return res;
