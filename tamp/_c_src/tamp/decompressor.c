@@ -263,13 +263,10 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
     }
     *output_written_size += to_write;
 
-    /* Update window only on complete decode.
-     * Write up to end of buffer (no wrap). */
+    /* Update window only on complete decode. */
     if (d->token_state == TOKEN_NONE) {
-        uint16_t remaining = window_size - d->window_pos;
-        uint8_t window_write = (match_size < remaining) ? match_size : remaining; /* max 126 */
         uint16_t wp = d->window_pos;
-        window_copy(d->window, &wp, window_offset, window_write, window_size - 1);
+        window_copy(d->window, &wp, window_offset, match_size, window_size - 1);
         d->window_pos = wp;
     }
 
