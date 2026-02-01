@@ -38,13 +38,36 @@ static const uint8_t HUFFMAN_TABLE[128] = {
  *
  * Handles potential overlap between source and destination regions by
  * copying backwards when the destination would "catch up" to the source.
+ *
+ * IMPORTANT: Caller must validate that (window_offset + match_size) does not
+ * exceed window bounds before calling this function. This function assumes
+ * window_offset and match_size are pre-validated and does not perform
+ * bounds checking on source reads.
+ *
+ * @param window Circular buffer (size must be power of 2)
+ * @param window_pos Current write position (updated by this function)
+ * @param window_offset Source position to copy from
+ * @param match_size Number of bytes to copy
+ * @param window_mask Bitmask for wrapping (window_size - 1)
  */
 TAMP_NOINLINE static void window_copy(unsigned char* window, uint16_t* window_pos, uint16_t window_offset,
                                       uint8_t match_size, uint16_t window_mask) {
+    /* Calculate distance from source to destination in circular buffer.
+     * src_to_dst = (dst - src) & mask gives the forward distance. */
     const uint16_t src_to_dst = (*window_pos - window_offset) & window_mask;
 
+    /* Critical overlap case: destination is AHEAD of source and they overlap.
+     * When dst > src by less than match_size, a forward copy corrupts data because
+     * we write to positions before reading from them.
+     *
+     * Example: src=100, dst=105, match_size=8
+     *   - Forward copy at i=5 would read window[105], but we already overwrote it at i=0!
+     *   - Must copy in REVERSE order (end to start) to read source bytes before overwriting.
+     */
     if (TAMP_UNLIKELY(src_to_dst < match_size && src_to_dst > 0)) {
-        /* Overlap with dst > src: copy backwards to avoid corruption. */
+        /* Copy in reverse order: start from last byte, work backwards to first byte.
+         * This ensures we read all overlapping source bytes before they're overwritten.
+         * Destination wraps via mask; source doesn't need wrapping (pre-validated bounds). */
         for (uint8_t i = match_size; i-- > 0;) {
             window[(*window_pos + i) & window_mask] = window[window_offset + i];
         }
