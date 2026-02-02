@@ -364,14 +364,16 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
 #if TAMP_V2_COMPRESS
     // V2: Handle extended match continuation
     if (TAMP_UNLIKELY(compressor->conf_v2 && compressor->extended_match_count)) {
-        // We're in extended match mode - try to extend the match using search-based extension
-        // (matching Python's behavior: search for current_pattern + next_byte in window)
+        // We're in extended match mode - try to extend the match at the current position
         const uint8_t max_ext_match = compressor->min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA;
         const unsigned char *window = compressor->window;
 
         while (compressor->input_size > 0) {
+            const uint16_t current_pos = compressor->extended_match_position;
+            const uint8_t current_count = compressor->extended_match_count;
+
             // Check if extending would go beyond window buffer boundary (no wrap-around)
-            if (compressor->extended_match_position + compressor->extended_match_count >= WINDOW_SIZE) {
+            if (current_pos + current_count >= WINDOW_SIZE) {
                 size_t token_bytes;
                 res = write_extended_match_token(compressor, output, output_size, &token_bytes);
                 (*output_written_size) += token_bytes;
@@ -380,7 +382,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
             }
 
             // Check if we've reached max extended match size
-            if (compressor->extended_match_count >= max_ext_match) {
+            if (current_count >= max_ext_match) {
                 size_t token_bytes;
                 res = write_extended_match_token(compressor, output, output_size, &token_bytes);
                 (*output_written_size) += token_bytes;
@@ -388,51 +390,13 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
                 return TAMP_OK;
             }
 
-            // Search-based extension: search for pattern + next_byte in window
-            // This matches Python's _search behavior for extended match extension
-            const uint8_t current_count = compressor->extended_match_count;
-            const uint16_t current_pos = compressor->extended_match_position;
-            const uint8_t next_byte = read_input(0);
-            const uint8_t target_len = current_count + 1;
-
-            // Search window for a position where target_len bytes match
-            // Start from current_pos and search forward
-            uint16_t best_pos = current_pos;
-            uint8_t best_len = 0;
-
-            for (uint16_t search_pos = current_pos; search_pos + target_len <= WINDOW_SIZE; search_pos++) {
-                // Check if prefix matches
-                uint8_t match_len = 0;
-                for (uint8_t i = 0; i < current_count && match_len == i; i++) {
-                    if (window[search_pos + i] == window[current_pos + i]) {
-                        match_len = i + 1;
-                    }
-                }
-                if (match_len < current_count) continue;  // Current pattern doesn't match here
-
-                // Check if next_byte also matches
-                if (window[search_pos + current_count] == next_byte) {
-                    // Found a match of target_len bytes
-                    best_pos = search_pos;
-                    best_len = target_len;
-                    break;  // Take first match (same as Python's index())
-                }
-            }
-
-            if (best_len > current_count) {
-                // Found longer match - update position and count
-                compressor->extended_match_count = best_len;
-                compressor->extended_match_position = best_pos;
+            // O(1) extension check: does the next byte at current position match input?
+            if (window[current_pos + current_count] == read_input(0)) {
+                // Extension successful - consume input byte and increment count
+                compressor->extended_match_count++;
                 compressor->input_pos = input_add(1);
                 compressor->input_size--;
-
-                if (compressor->extended_match_count >= max_ext_match) {
-                    size_t token_bytes;
-                    res = write_extended_match_token(compressor, output, output_size, &token_bytes);
-                    (*output_written_size) += token_bytes;
-                    if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-                    return TAMP_OK;
-                }
+                // Continue to next iteration to try extending further
             } else {
                 // Match ended - emit current match
                 size_t token_bytes;
