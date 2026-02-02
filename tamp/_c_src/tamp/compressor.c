@@ -184,6 +184,9 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     if (!conf) conf = &conf_default;
     if (conf->window < 8 || conf->window > 15) return TAMP_INVALID_CONF;
     if (conf->literal < 5 || conf->literal > 8) return TAMP_INVALID_CONF;
+#if !TAMP_V2_COMPRESS
+    if (conf->v2) return TAMP_INVALID_CONF;  // V2 requested but not compiled in
+#endif
 
     for (uint8_t i = 0; i < sizeof(TampCompressor); i++)  // Zero-out the struct
         ((unsigned char *)compressor)[i] = 0;
@@ -191,11 +194,9 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->conf_literal = conf->literal;
     compressor->conf_window = conf->window;
     compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
+    compressor->conf_v2 = conf->v2;
 #if TAMP_LAZY_MATCHING
     compressor->conf_lazy_matching = conf->lazy_matching;
-#endif
-#if TAMP_V2_COMPRESS
-    compressor->conf_v2 = conf->v2;
 #endif
 
     compressor->window = window;
@@ -208,14 +209,10 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     if (!compressor->conf_use_custom_dictionary) tamp_initialize_dictionary(window, (1 << conf->window));
 
     // Write header to bit buffer
-    write_to_bit_buffer(compressor, conf->window - 8, 3);
-    write_to_bit_buffer(compressor, conf->literal - 5, 2);
-    write_to_bit_buffer(compressor, conf->use_custom_dictionary, 1);
-#if TAMP_V2_COMPRESS
-    write_to_bit_buffer(compressor, conf->v2, 1);  // v2 format flag
-#else
-    write_to_bit_buffer(compressor, 0, 1);  // Reserved (v1 only)
-#endif
+    write_to_bit_buffer(compressor, compressor->conf_window - 8, 3);
+    write_to_bit_buffer(compressor, compressor->conf_literal - 5, 2);
+    write_to_bit_buffer(compressor, compressor->conf_use_custom_dictionary, 1);
+    write_to_bit_buffer(compressor, compressor->conf_v2, 1);
     write_to_bit_buffer(compressor, 0, 1);  // No more header bytes
 
     return TAMP_OK;
