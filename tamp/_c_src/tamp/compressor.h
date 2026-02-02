@@ -55,12 +55,12 @@ typedef struct TampCompressor {
 #endif
 
     /* Other small attributes */
-    uint32_t bit_buffer_pos : 6;
     uint32_t min_pattern_size : 2;
     uint32_t input_size : 5;
     uint32_t input_pos : 4;
 
-    uint16_t window_pos;  // Window position (0 to window_size-1)
+    uint8_t bit_buffer_pos;  // 6 bits used; bits pending in bit_buffer (0-32)
+    uint16_t window_pos;     // 15 bits used; position in window (0 to window_size-1)
 
 #if TAMP_LAZY_MATCHING
     /* Lazy matching cache */

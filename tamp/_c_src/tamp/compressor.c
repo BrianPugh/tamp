@@ -67,8 +67,8 @@ static inline void write_extended_huffman(TampCompressor *compressor, uint8_t va
  *
  * Flushes complete bytes from the bit buffer. Up to 7 bits may remain.
  */
-static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *output, size_t output_size,
-                                     size_t *output_written_size) {
+static TAMP_NOINLINE tamp_res partial_flush(TampCompressor *compressor, unsigned char *output, size_t output_size,
+                                            size_t *output_written_size) {
     for (*output_written_size = output_size; compressor->bit_buffer_pos >= 8 && output_size;
          output_size--, compressor->bit_buffer_pos -= 8, compressor->bit_buffer <<= 8)
         *output++ = compressor->bit_buffer >> 24;
