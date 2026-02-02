@@ -227,7 +227,7 @@ define mpremote-sync
 	fi
 endef
 
-on-device-compression-benchmark: mpy build/enwik8-100kb build/enwik8-100kb.tamp
+on-device-compression-benchmark: mpy build/enwik8-100kb
 	$(MPREMOTE) rm :enwik8-100kb.tamp || true
 	@# Remove any viper implementation that may exist from previous belay syncs
 	$(MPREMOTE) rm :tamp/__init__.py :tamp/compressor_viper.py :tamp/decompressor_viper.py :tamp/compressor.py :tamp/decompressor.py :tamp/__main__.py :tamp/py.typed 2>/dev/null || true
@@ -238,7 +238,8 @@ on-device-compression-benchmark: mpy build/enwik8-100kb build/enwik8-100kb.tamp
 	$(MPREMOTE) soft-reset
 	$(MPREMOTE) run tools/on-device-compression-benchmark.py
 	$(MPREMOTE) cp :enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp
-	cmp build/enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp
+	poetry run tamp decompress build/on-device-enwik8-100kb.tamp -o build/on-device-enwik8-100kb-decompressed
+	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed
 	@echo "Success!"
 
 on-device-decompression-benchmark: mpy build/enwik8-100kb.tamp
