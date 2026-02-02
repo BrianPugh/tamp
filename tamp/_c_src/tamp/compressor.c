@@ -65,28 +65,15 @@ static inline void write_extended_huffman(TampCompressor *compressor, uint8_t va
 /**
  * @brief Partially flush the internal bit buffer.
  *
- * @param[in] min_threshold Minimum bit_buffer_pos to trigger flush. Default 8 flushes whole bytes.
- *                          Use 7 for extended match tokens which need up to 26 bits (32 - 26 = 6 max remaining).
- *
- * Up to (min_threshold - 1) bits may remain in the internal bit buffer.
- */
-static inline tamp_res partial_flush_threshold(TampCompressor *compressor, unsigned char *output, size_t output_size,
-                                               size_t *output_written_size, uint8_t min_threshold) {
-    for (*output_written_size = output_size; compressor->bit_buffer_pos >= min_threshold && output_size;
-         output_size--, compressor->bit_buffer_pos -= 8, compressor->bit_buffer <<= 8)
-        *output++ = compressor->bit_buffer >> 24;
-    *output_written_size -= output_size;
-    return (compressor->bit_buffer_pos >= min_threshold) ? TAMP_OUTPUT_FULL : TAMP_OK;
-}
-
-/**
- * @brief Partially flush the internal bit buffer.
- *
- * Up to 7 bits may remain in the internal bit buffer.
+ * Flushes complete bytes from the bit buffer. Up to 7 bits may remain.
  */
 static inline tamp_res partial_flush(TampCompressor *compressor, unsigned char *output, size_t output_size,
                                      size_t *output_written_size) {
-    return partial_flush_threshold(compressor, output, output_size, output_written_size, 8);
+    for (*output_written_size = output_size; compressor->bit_buffer_pos >= 8 && output_size;
+         output_size--, compressor->bit_buffer_pos -= 8, compressor->bit_buffer <<= 8)
+        *output++ = compressor->bit_buffer >> 24;
+    *output_written_size -= output_size;
+    return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
 
 inline bool tamp_compressor_full(const TampCompressor *compressor) {
@@ -271,9 +258,8 @@ static void write_rle_token(TampCompressor *compressor, uint8_t count) {
 /**
  * @brief Write extended match token to bit buffer and update window.
  *
- * Extended match tokens can be up to 26 bits (7 symbol + 9 extended_huffman + 10 window).
- * To avoid overflowing the 32-bit buffer when starting with up to 7 bits remaining,
- * we do intermediate flushes between token parts.
+ * Token format: symbol (7 bits) + extended_huffman (up to 11 bits) + window_pos (up to 15 bits)
+ * Total: up to 33 bits. We flush after symbol+huffman (18 bits max) to ensure window_pos fits.
  *
  * @param[in,out] compressor Compressor state.
  * @param[out] output Output buffer for flushed bytes.
@@ -291,32 +277,23 @@ static tamp_res write_extended_match_token(TampCompressor *compressor, unsigned 
 
     *output_written_size = 0;
 
-    // Write extended match symbol (13) with literal flag (7 bits)
-    // Note: symbols 12 and 13 are at indices 12 and 13 in huffman table (not offset by min_pattern_size)
+    // Write symbol (7 bits) + extended huffman (up to 11 bits) = 18 bits max
+    // With ≤7 bits already in buffer, total ≤25 bits - fits in 32-bit buffer
     write_to_bit_buffer(compressor, huffman_codes[TAMP_EXTENDED_MATCH_SYMBOL],
                         huffman_bits[TAMP_EXTENDED_MATCH_SYMBOL]);
-
-    // Flush to make room for extended huffman (up to 9 bits)
-    res = partial_flush(compressor, output, output_size, &flush_bytes);
-    *output_written_size += flush_bytes;
-    output += flush_bytes;
-    output_size -= flush_bytes;
-    if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-
-    // Write extended huffman for (count - min_pattern_size - 11 - 1)
     write_extended_huffman(compressor, count - compressor->min_pattern_size - 11 - 1, TAMP_LEADING_EXTENDED_MATCH_BITS);
 
-    // Flush to make room for window position (10 bits)
+    // Flush to make room for window position (up to 15 bits)
     res = partial_flush(compressor, output, output_size, &flush_bytes);
     *output_written_size += flush_bytes;
     output += flush_bytes;
     output_size -= flush_bytes;
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
 
-    // Write window position
+    // Write window position - with ≤7 bits remaining, up to 22 bits total - fits
     write_to_bit_buffer(compressor, position, compressor->conf_window);
 
-    // Flush any remaining complete bytes
+    // Final flush
     res = partial_flush(compressor, output, output_size, &flush_bytes);
     *output_written_size += flush_bytes;
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
