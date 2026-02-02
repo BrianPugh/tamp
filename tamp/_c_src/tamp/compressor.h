@@ -25,12 +25,22 @@ typedef struct TampCompressor {
 #if TAMP_LAZY_MATCHING
     uint8_t conf_lazy_matching;  // Use lazy matching for better compression
 #endif
+#if TAMP_V2_COMPRESS
+    uint8_t conf_v2;  // Use v2 format (RLE, extended match)
+#endif
     uint8_t min_pattern_size;
 
 #if TAMP_LAZY_MATCHING
     /* Lazy matching cache */
     int16_t cached_match_index;
     uint8_t cached_match_size;
+#endif
+
+#if TAMP_V2_COMPRESS
+    /* V2 state */
+    uint8_t rle_count;                 // Current RLE run length (max 225)
+    uint8_t extended_match_count;      // Current extended match size (max ~126)
+    uint16_t extended_match_position;  // Window position for extended match
 #endif
 #else  // Use bitfields for reduced memory-usage
     /* Conf attributes */
@@ -39,6 +49,9 @@ typedef struct TampCompressor {
     uint32_t conf_use_custom_dictionary : 1;  // Use a custom initialized dictionary.
 #if TAMP_LAZY_MATCHING
     uint32_t conf_lazy_matching : 1;  // Use lazy matching for better compression
+#endif
+#if TAMP_V2_COMPRESS
+    uint32_t conf_v2 : 1;  // Use v2 format (RLE, extended match)
 #endif
 
     /* Other small attributes */
@@ -53,6 +66,13 @@ typedef struct TampCompressor {
     /* Lazy matching cache */
     int16_t cached_match_index;
     uint8_t cached_match_size;
+#endif
+
+#if TAMP_V2_COMPRESS
+    /* V2 state */
+    uint8_t rle_count;                 // Current RLE run length (max 225)
+    uint8_t extended_match_count;      // Current extended match size (max ~126)
+    uint16_t extended_match_position;  // Window position for extended match
 #endif
 #endif  // TAMP_ESP32
     unsigned char input[16] /* __attribute__ ((aligned (16)))*/;
