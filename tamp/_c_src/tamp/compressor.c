@@ -465,78 +465,44 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
             // literal and cache the next match
             if (next_match_size > match_size &&
                 validate_no_match_overlap(compressor->window_pos, next_match_index, next_match_size)) {
-                // Write LITERAL at current position
-                match_size = 1;
-                unsigned char c = read_input(0);
-                if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
-                    return TAMP_EXCESS_BITS;
-                }
-                write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+                // Force literal at current position, cache next match
+                match_size = 0;  // Will trigger literal write below
             } else {
-                // Use current match, clear cache
                 compressor->cached_match_index = -1;
                 // Note: No V2 extended match check here - we're in the match_size <= 8 branch,
                 // so extended matches (which require match_size > min_pattern_size + 11) are impossible.
-                uint8_t huffman_index = match_size - compressor->min_pattern_size;
-                write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-                write_to_bit_buffer(compressor, match_index, compressor->conf_window);
             }
-        } else if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
-            // Write LITERAL
-            compressor->cached_match_index = -1;  // Clear cache
-            match_size = 1;
-            unsigned char c = read_input(0);
-            if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
-                return TAMP_EXCESS_BITS;
-            }
-            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
         } else {
-            // Write TOKEN
             compressor->cached_match_index = -1;  // Clear cache
-#if TAMP_V2_COMPRESS
-            // V2: Check for extended match
-            if (compressor->conf_v2 && match_size > compressor->min_pattern_size + 11) {
-                compressor->extended_match_count = match_size;
-                compressor->extended_match_position = match_index;
-                // Consume matched bytes from input
-                compressor->input_pos = input_add(match_size);
-                compressor->input_size -= match_size;
-                return TAMP_OK;
-            }
-#endif
-            uint8_t huffman_index = match_size - compressor->min_pattern_size;
-            write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-            write_to_bit_buffer(compressor, match_index, compressor->conf_window);
         }
-    } else
+    }
 #endif
-    {
-        // Non-lazy matching path
-        if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
-            // Write LITERAL
-            match_size = 1;
-            unsigned char c = read_input(0);
-            if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
-                return TAMP_EXCESS_BITS;
-            }
-            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
-        } else {
-#if TAMP_V2_COMPRESS
-            // V2: Check for extended match
-            if (compressor->conf_v2 && match_size > compressor->min_pattern_size + 11) {
-                compressor->extended_match_count = match_size;
-                compressor->extended_match_position = match_index;
-                // Consume matched bytes from input
-                compressor->input_pos = input_add(match_size);
-                compressor->input_size -= match_size;
-                return TAMP_OK;
-            }
-#endif
-            // Write TOKEN
-            uint8_t huffman_index = match_size - compressor->min_pattern_size;
-            write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-            write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+
+    // Shared token/literal writing logic
+    if (TAMP_UNLIKELY(match_size < compressor->min_pattern_size)) {
+        // Write LITERAL
+        match_size = 1;
+        unsigned char c = read_input(0);
+        if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
+            return TAMP_EXCESS_BITS;
         }
+        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+    } else {
+#if TAMP_V2_COMPRESS
+        // V2: Check for extended match
+        if (compressor->conf_v2 && match_size > compressor->min_pattern_size + 11) {
+            compressor->extended_match_count = match_size;
+            compressor->extended_match_position = match_index;
+            // Consume matched bytes from input
+            compressor->input_pos = input_add(match_size);
+            compressor->input_size -= match_size;
+            return TAMP_OK;
+        }
+#endif
+        // Write TOKEN
+        uint8_t huffman_index = match_size - compressor->min_pattern_size;
+        write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
+        write_to_bit_buffer(compressor, match_index, compressor->conf_window);
     }
     // Populate Window
     for (uint8_t i = 0; i < match_size; i++) {
