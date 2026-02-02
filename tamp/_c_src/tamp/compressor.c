@@ -58,7 +58,7 @@ static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits
  * @param[in] value The value to encode.
  * @param[in] trailing_bits Number of trailing bits (3 for extended match, 4 for RLE).
  */
-static inline void write_extended_huffman(TampCompressor *compressor, uint8_t value, uint8_t trailing_bits) {
+static TAMP_NOINLINE void write_extended_huffman(TampCompressor *compressor, uint8_t value, uint8_t trailing_bits) {
     uint8_t mask = (1 << trailing_bits) - 1;
     uint8_t code_index = value >> trailing_bits;
     // Write huffman code without literal flag (subtract 1 from bit length)
@@ -239,7 +239,7 @@ static inline uint8_t get_last_window_byte(TampCompressor *compressor) {
  * @param[in,out] compressor Compressor state.
  * @param[in] count Number of repeated bytes (must be >= 2).
  */
-static void write_rle_token(TampCompressor *compressor, uint8_t count) {
+static TAMP_NOINLINE void write_rle_token(TampCompressor *compressor, uint8_t count) {
     const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     uint8_t symbol = get_last_window_byte(compressor);
 
@@ -270,8 +270,8 @@ static void write_rle_token(TampCompressor *compressor, uint8_t count) {
  * @param[out] output_written_size Bytes written to output.
  * @return TAMP_OK on success, TAMP_OUTPUT_FULL if output buffer is too small.
  */
-static tamp_res write_extended_match_token(TampCompressor *compressor, unsigned char *output, size_t output_size,
-                                           size_t *output_written_size) {
+static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor *compressor, unsigned char *output,
+                                                         size_t output_size, size_t *output_written_size) {
     const uint16_t window_mask = (1 << compressor->conf_window) - 1;
     const uint8_t count = compressor->extended_match_count;
     const uint16_t position = compressor->extended_match_position;
