@@ -67,6 +67,7 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
         .window = mp_obj_get_int(args_in[1]),
         .literal = mp_obj_get_int(args_in[2]),
         .use_custom_dictionary = mp_obj_get_int(args_in[4]),
+        .v2 = mp_obj_get_int(args_in[5]),
     };
 
     mp_obj_compressor_t *o = mp_obj_malloc(mp_obj_compressor_t, type);
