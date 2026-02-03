@@ -437,6 +437,9 @@ wasm/build/
 *.swo
 *~
 
+# clangd (C/C++ language server)
+.clangd
+
 # Emacs
 *~
 \#*\#
