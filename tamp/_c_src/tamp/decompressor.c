@@ -7,8 +7,8 @@
 
 #define FLUSH 15
 
-#if TAMP_V2_DECOMPRESS
-/* Token state for v2 decode suspend/resume (2 bits).
+#if TAMP_EXTENDED_DECOMPRESS
+/* Token state for extended decode suspend/resume (2 bits).
  * TOKEN_RLE and TOKEN_EXT_MATCH_FRESH are arranged so that:
  *     token_state = match_size - (TAMP_RLE_SYMBOL - 1)
  * maps TAMP_RLE_SYMBOL (12) -> 1 and TAMP_EXTENDED_MATCH_SYMBOL (13) -> 2.
@@ -127,7 +127,7 @@ static tamp_res decode_huffman(uint32_t* bit_buffer, uint8_t* bit_buffer_pos, ui
     return TAMP_OK;
 }
 
-#if TAMP_V2_DECOMPRESS
+#if TAMP_EXTENDED_DECOMPRESS
 
 /**
  * @brief Decode RLE token and write repeated bytes to output.
@@ -298,7 +298,7 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
 
     return (d->token_state == TOKEN_NONE) ? TAMP_OK : TAMP_OUTPUT_FULL;
 }
-#endif /* TAMP_V2_DECOMPRESS */
+#endif /* TAMP_EXTENDED_DECOMPRESS */
 
 tamp_res tamp_decompressor_read_header(TampConf* conf, const unsigned char* input, size_t input_size,
                                        size_t* input_consumed_size) {
@@ -310,7 +310,7 @@ tamp_res tamp_decompressor_read_header(TampConf* conf, const unsigned char* inpu
     conf->window = ((input[0] >> 5) & 0x7) + 8;
     conf->literal = ((input[0] >> 3) & 0x3) + 5;
     conf->use_custom_dictionary = ((input[0] >> 2) & 0x1);
-    conf->v2 = ((input[0] >> 1) & 0x1);
+    conf->extended = ((input[0] >> 1) & 0x1);
 
     return TAMP_OK;
 }
@@ -322,7 +322,7 @@ tamp_res tamp_decompressor_read_header(TampConf* conf, const unsigned char* inpu
  */
 static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor* decompressor, uint8_t conf_window,
                                                      uint8_t conf_literal, uint8_t conf_use_custom_dictionary,
-                                                     uint8_t conf_v2) {
+                                                     uint8_t conf_extended) {
     if (conf_window < 8 || conf_window > 15) return TAMP_INVALID_CONF;
     if (conf_literal < 5 || conf_literal > 8) return TAMP_INVALID_CONF;
     if (conf_window > decompressor->window_bits_max) return TAMP_INVALID_CONF;
@@ -332,9 +332,9 @@ static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor* decompres
     decompressor->conf_literal = conf_literal;
     decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf_window, conf_literal);
     decompressor->configured = true;
-    decompressor->conf_v2 = conf_v2;
-#if !TAMP_V2_DECOMPRESS
-    if (conf_v2) return TAMP_INVALID_CONF;  // v2 stream but v2 support not compiled in
+    decompressor->conf_extended = conf_extended;
+#if !TAMP_EXTENDED_DECOMPRESS
+    if (conf_extended) return TAMP_INVALID_CONF;  // Extended stream but extended support not compiled in
 #endif
 
     return TAMP_OK;
@@ -353,7 +353,7 @@ tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* 
     decompressor->window_bits_max = window_bits;
     if (conf) {
         res = tamp_decompressor_populate_from_conf(decompressor, conf->window, conf->literal,
-                                                   conf->use_custom_dictionary, conf->v2);
+                                                   conf->use_custom_dictionary, conf->extended);
     }
 
     return res;
@@ -397,7 +397,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
         if (res != TAMP_OK) return res;
 
         res = tamp_decompressor_populate_from_conf(decompressor, conf.window, conf.literal, conf.use_custom_dictionary,
-                                                   conf.v2);
+                                                   conf.extended);
         if (res != TAMP_OK) return res;
 
         input += header_consumed_size;
@@ -410,8 +410,8 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
     const uint8_t min_pattern_size = decompressor->min_pattern_size;
 
     const uint16_t window_mask = (1 << conf_window) - 1;
-#if TAMP_V2_DECOMPRESS
-    const bool v2_enabled = decompressor->conf_v2;
+#if TAMP_EXTENDED_DECOMPRESS
+    const bool extended_enabled = decompressor->conf_extended;
 #endif
 
     while (input != input_end || decompressor->pos_and_state) {
@@ -420,10 +420,10 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
         // Populate the bit buffer
         refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
 
-#if TAMP_V2_DECOMPRESS
-        /* Handle v2 tokens - either resuming or fresh from match_size detection below. */
+#if TAMP_EXTENDED_DECOMPRESS
+        /* Handle extended tokens - either resuming or fresh from match_size detection below. */
         if (TAMP_UNLIKELY(decompressor->token_state)) {
-        v2_dispatch:
+        extended_dispatch:
             if (decompressor->token_state == TOKEN_RLE) {
                 res = decode_rle(decompressor, &output, output_end, output_written_size);
             } else {
@@ -442,7 +442,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             if (res != TAMP_OK) return res;
             continue;
         }
-#endif
+#endif  // TAMP_EXTENDED_DECOMPRESS
 
         if (TAMP_UNLIKELY(decompressor->bit_buffer_pos == 0)) return TAMP_INPUT_EXHAUSTED;
 
@@ -489,16 +489,16 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                 continue;
             }
 
-#if TAMP_V2_DECOMPRESS
-            /* Check for v2 symbols (RLE=12, extended match=13).
+#if TAMP_EXTENDED_DECOMPRESS
+            /* Check for extended symbols (RLE=12, extended match=13).
              * Convert match_size to token_state via subtraction (see TOKEN_* defines). */
-            if (TAMP_UNLIKELY(v2_enabled && match_size >= TAMP_RLE_SYMBOL)) {
+            if (TAMP_UNLIKELY(extended_enabled && match_size >= TAMP_RLE_SYMBOL)) {
                 decompressor->bit_buffer = bit_buffer;
                 decompressor->bit_buffer_pos = bit_buffer_pos;
                 decompressor->token_state = match_size - (TAMP_RLE_SYMBOL - 1);
-                goto v2_dispatch;
+                goto extended_dispatch;
             }
-#endif
+#endif  // TAMP_EXTENDED_DECOMPRESS
 
             if (TAMP_UNLIKELY(bit_buffer_pos < conf_window)) {
                 // There are not enough bits to decode window offset

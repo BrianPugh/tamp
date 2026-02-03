@@ -143,7 +143,7 @@ class Compressor:
         literal: int = 8,
         dictionary: Optional[bytearray] = None,
         lazy_matching: bool = False,
-        v2: bool = True,
+        extended: bool = True,
     ):
         """
         Parameters
@@ -174,7 +174,7 @@ class Compressor:
         self.window_bits = window
         self.literal_bits = literal
         self.min_pattern_size = compute_min_pattern_size(window, literal)
-        self.v2: bool = v2
+        self.extended: bool = extended
 
         self._rle_count = 0
 
@@ -198,7 +198,7 @@ class Compressor:
         if dictionary and bit_size(len(dictionary) - 1) != window:
             raise ValueError("Dictionary-window size mismatch.")
 
-        if self.v2:
+        if self.extended:
             self.max_pattern_size = (
                 self.min_pattern_size
                 + 11
@@ -230,7 +230,7 @@ class Compressor:
         self._bit_writer.write(window - 8, 3, flush=False)
         self._bit_writer.write(literal - 5, 2, flush=False)
         self._bit_writer.write(bool(dictionary), 1, flush=False)
-        self._bit_writer.write(self.v2, 1, flush=False)
+        self._bit_writer.write(self.extended, 1, flush=False)
         self._bit_writer.write(0, 1, flush=False)  # No other header bytes
 
     def _validate_no_match_overlap(self, write_pos, match_index, match_size):
@@ -275,7 +275,7 @@ class Compressor:
         # Accumulate RLE count across compression cycles for better compression of long runs
         have_match_from_rle = False  # Track if we already did pattern matching in RLE section
 
-        if self.v2:
+        if self.extended:
             last_byte = self._window_buffer.last_written_byte
 
             # Count additional matching bytes in current buffer
@@ -326,7 +326,7 @@ class Compressor:
 
                     # Write the pattern match immediately and return
                     # (Don't continue to normal flow which would try to consume bytes again)
-                    if self.v2 and match_size > (self.min_pattern_size + 11):
+                    if self.extended and match_size > (self.min_pattern_size + 11):
                         self._extended_match_position = search_i
                         self._extended_match_count = match_size
                         bytes_written += self._write_extended_match()
@@ -382,7 +382,7 @@ class Compressor:
                 return bytes_written
 
         if match_size >= self.min_pattern_size:
-            if self.v2 and match_size > (self.min_pattern_size + 11):
+            if self.extended and match_size > (self.min_pattern_size + 11):
                 # Protects +12 to be RLE symbol, and +13 to be extended match symbol
                 self._extended_match_position = search_i
                 self._extended_match_count = match_size
@@ -550,9 +550,9 @@ class Compressor:
             self.flush_cb()
         while self._input_buffer:
             bytes_written += self._compress_input_buffer_single()
-        if self.v2 and self._rle_count:
+        if self.extended and self._rle_count:
             bytes_written += self._write_rle()
-        if self.v2 and self._extended_match_count:
+        if self.extended and self._extended_match_count:
             bytes_written += self._write_extended_match()
 
         # Clear any cached lazy matching state
@@ -606,7 +606,7 @@ def compress(
     literal: int = 8,
     dictionary: Optional[bytearray] = None,
     lazy_matching: bool = False,
-    v2: bool = True,
+    extended: bool = True,
 ) -> bytes:
     """Single-call to compress data.
 
@@ -633,8 +633,8 @@ def compress(
         first be initialized with :func:`~tamp.initialize_dictionary`
     lazy_matching: bool
         Use roughly 50% more cpu to get 0~2% better compression.
-    v2: bool
-        Use v2 compression format. Defaults to True.
+    extended: bool
+        Use extended compression format. Defaults to True.
 
     Returns
     -------
@@ -649,7 +649,7 @@ def compress(
                 literal=literal,
                 dictionary=dictionary,
                 lazy_matching=lazy_matching,
-                v2=v2,
+                extended=extended,
             )
             c.write(data)
         else:
@@ -659,7 +659,7 @@ def compress(
                 literal=literal,
                 dictionary=dictionary,
                 lazy_matching=lazy_matching,
-                v2=v2,
+                extended=extended,
             )
             c.write(data)
         c.flush(write_token=False)

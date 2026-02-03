@@ -179,7 +179,7 @@ class Decompressor:
         self.window_bits = self._bit_reader.read(3) + 8
         self.literal_bits = self._bit_reader.read(2) + 5
         uses_custom_dictionary = self._bit_reader.read(1)
-        self.v2 = self._bit_reader.read(1)
+        self.extended = self._bit_reader.read(1)
         more_header_bytes = self._bit_reader.read(1)
 
         if more_header_bytes:
@@ -246,7 +246,7 @@ class Decompressor:
                         if match_size is _FLUSH:
                             self._bit_reader.clear()
                             continue
-                        if self.v2 and match_size > 11:
+                        if self.extended and match_size > 11:
                             if match_size == _RLE_SYMBOL:
                                 rle_count = self._bit_reader.read_huffman()
                                 rle_count <<= _LEADING_RLE_HUFFMAN_BITS

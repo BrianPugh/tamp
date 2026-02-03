@@ -6,7 +6,7 @@ cdef extern from "tamp/common.h":
         int window
         int literal
         bool use_custom_dictionary
-        bool v2  # v2 format (RLE, extended match). Read from header bit [1].
+        bool extended  # Extended format (RLE, extended match). Read from header bit [1].
         # The lazy_matching field is conditionally compiled based on TAMP_LAZY_MATCHING
         # We declare it here, but accessing it when the macro is disabled will cause compile errors
         # This is handled in the Cython code by always setting it when the struct is initialized

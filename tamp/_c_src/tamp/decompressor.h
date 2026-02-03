@@ -17,7 +17,7 @@ typedef struct {
     uint16_t window_pos;    // Current position in window (15 bits)
 
     /* Union allows single zero-check in main loop instead of two separate checks. */
-#if TAMP_V2_DECOMPRESS
+#if TAMP_EXTENDED_DECOMPRESS
     union {
         struct {
             uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits needed)
@@ -31,7 +31,7 @@ typedef struct {
         uint8_t pos_and_state;   // Alias for consistent access in main loop
     };
 #endif
-#if TAMP_V2_DECOMPRESS
+#if TAMP_EXTENDED_DECOMPRESS
     uint16_t pending_window_offset;  // Saved window_offset for extended match output-full resume
     uint16_t pending_match_size;     // Saved match_size for extended match resume
 #endif
@@ -40,7 +40,7 @@ typedef struct {
     uint8_t conf_window : 4;       // Window bits from config
     uint8_t conf_literal : 4;      // Literal bits from config
     uint8_t min_pattern_size : 2;  // Minimum pattern size, 2 or 3
-    uint8_t conf_v2 : 1;           // v2 format enabled (from header)
+    uint8_t conf_extended : 1;     // Extended format enabled (from header)
 
     /* COLD: rarely accessed (init or edge cases).
      * Bitfields save space; add new cold fields here. */

@@ -249,12 +249,12 @@ Temporary Items
 # Compression benchmark datasets
 datasets/*
 !datasets/v1-compressed/
-!datasets/v2-compressed/
+!datasets/extended-compressed/
 enwik8*
 *.pkl
 *.tamp
 !datasets/v1-compressed/**
-!datasets/v2-compressed/**
+!datasets/extended-compressed/**
 
 # Cython-generated files
 tamp/_c_compressor.c

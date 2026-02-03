@@ -26,15 +26,15 @@ typedef struct TampCompressor {
     uint8_t conf_window;                 // Window bits (4 bits used; 8-15)
     uint8_t conf_literal;                // Literal bits (4 bits used; 5-8)
     uint8_t conf_use_custom_dictionary;  // Custom dictionary (1 bit used; init only)
-    uint8_t conf_v2;                     // V2 format enabled (1 bit used)
+    uint8_t conf_extended;               // Extended format enabled (1 bit used)
 #if TAMP_LAZY_MATCHING
     uint8_t conf_lazy_matching;  // Lazy matching enabled (1 bit used)
     int16_t cached_match_index;  // Lazy matching cache
     uint8_t cached_match_size;
 #endif
 
-#if TAMP_V2_COMPRESS
-    /* V2 state (only needed when V2 compression is enabled) */
+#if TAMP_EXTENDED_COMPRESS
+    /* Extended state (only needed when extended compression is enabled) */
     uint8_t rle_count;                 // Current RLE run length (max 225)
     uint8_t extended_match_count;      // Current extended match size (max ~126)
     uint16_t extended_match_position;  // Window position for extended match
@@ -53,20 +53,20 @@ typedef struct TampCompressor {
 
     /* WARM: read frequently, often cached in locals.
      * Bitfields: min_pattern_size(2) + conf_window(4) + conf_literal(4) +
-     *            conf_use_custom_dictionary(1) + conf_v2(1) + conf_lazy_matching(1) = 13 bits
+     *            conf_use_custom_dictionary(1) + conf_extended(1) + conf_lazy_matching(1) = 13 bits
      */
     uint8_t min_pattern_size : 2;            // Minimum pattern size (2 or 3)
     uint8_t conf_window : 4;                 // Window bits (8-15)
     uint8_t conf_literal : 4;                // Literal bits (5-8)
     uint8_t conf_use_custom_dictionary : 1;  // Custom dictionary (init only)
-    uint8_t conf_v2 : 1;                     // V2 format enabled
+    uint8_t conf_extended : 1;               // Extended format enabled
 #if TAMP_LAZY_MATCHING
     uint8_t conf_lazy_matching : 1;  // Lazy matching enabled
     int16_t cached_match_index;      // Lazy matching cache
     uint8_t cached_match_size;
 #endif
 
-#if TAMP_V2_COMPRESS
+#if TAMP_EXTENDED_COMPRESS
     uint8_t rle_count;                 // Current RLE run length (max 225)
     uint8_t extended_match_count;      // Current extended match size (max ~126)
     uint16_t extended_match_position;  // Window position for extended match
