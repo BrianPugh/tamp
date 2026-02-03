@@ -504,7 +504,7 @@ C_SRC_COMP = tamp/_c_src/tamp/compressor.c
 C_SRC_DECOMP = tamp/_c_src/tamp/decompressor.c
 
 # Flags to disable extended format support
-NO_EXTENDED_FLAGS = -DTAMP_EXTENDED_COMPRESS=0 -DTAMP_EXTENDED_DECOMPRESS=0
+NO_EXTENDED_FLAGS = -DTAMP_EXTENDED=0
 
 c-size-no-extended:
 	@rm -rf build/arm && mkdir -p build/arm

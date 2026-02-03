@@ -70,13 +70,19 @@ extern "C" {
 
 /* Extended format support (RLE, extended match).
  * Enabled by default. Disable to save code size on minimal builds.
- * Separate flags allow decompressor-only or compressor-only extended support.
+ *
+ * TAMP_EXTENDED is the master switch (default: 1).
+ * TAMP_EXTENDED_COMPRESS and TAMP_EXTENDED_DECOMPRESS default to TAMP_EXTENDED,
+ * but can be individually overridden for compressor-only or decompressor-only builds.
  */
+#ifndef TAMP_EXTENDED
+#define TAMP_EXTENDED 1
+#endif
 #ifndef TAMP_EXTENDED_DECOMPRESS
-#define TAMP_EXTENDED_DECOMPRESS 1
+#define TAMP_EXTENDED_DECOMPRESS TAMP_EXTENDED
 #endif
 #ifndef TAMP_EXTENDED_COMPRESS
-#define TAMP_EXTENDED_COMPRESS 1
+#define TAMP_EXTENDED_COMPRESS TAMP_EXTENDED
 #endif
 
 /* Extended encoding constants */
