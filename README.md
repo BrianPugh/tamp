@@ -258,31 +258,30 @@ input data sourced from the
 [Enwik8](https://mattmahoney.net/dc/textdata.html). This should give a general
 idea of how these algorithms perform over a variety of input data types.
 
-| dataset         | raw         | tamp           | tamp (LazyMatching) | zlib           | heatshrink |
-| --------------- | ----------- | -------------- | ------------------- | -------------- | ---------- |
-| enwik8          | 100,000,000 | **51,635,633** | 51,252,113          | 56,205,166     | 56,110,394 |
-| silesia/dickens | 10,192,446  | **5,546,761**  | 5,511,604           | 6,049,169      | 6,155,768  |
-| silesia/mozilla | 51,220,480  | 25,121,385     | 24,936,067          | **25,104,966** | 25,435,908 |
-| silesia/mr      | 9,970,564   | 5,027,032      | 4,886,272           | **4,864,734**  | 5,442,180  |
-| silesia/nci     | 33,553,445  | 8,643,610      | 8,645,299           | **5,765,521**  | 8,247,487  |
-| silesia/ooffice | 6,152,192   | **3,814,938**  | 3,798,261           | 4,077,277      | 3,994,589  |
-| silesia/osdb    | 10,085,684  | **8,520,835**  | 8,506,443           | 8,625,159      | 8,747,527  |
-| silesia/reymont | 6,627,202   | **2,847,981**  | 2,820,870           | 2,897,661      | 2,910,251  |
-| silesia/samba   | 21,606,400  | 9,102,594      | 9,060,692           | **8,862,423**  | 9,223,827  |
-| silesia/sao     | 7,251,944   | **6,137,755**  | 6,101,744           | 6,506,417      | 6,400,926  |
-| silesia/webster | 41,458,703  | **18,694,172** | 18,567,288          | 20,212,235     | 19,942,817 |
-| silesia/x-ray   | 8,474,240   | 7,510,606      | 7,405,814           | **7,351,750**  | 8,059,723  |
-| silesia/xml     | 5,345,280   | 1,681,687      | 1,672,660           | **1,586,985**  | 1,665,179  |
+| dataset         | raw         | tamp        | tamp (LazyMatching) | zlib          | heatshrink |
+| --------------- | ----------- | ----------- | ------------------- | ------------- | ---------- |
+| enwik8          | 100,000,000 | 51,116,968  | **50,725,098**      | 56,205,166    | 56,110,394 |
+| RPI_PICO (.uf2) | 667,648     | **288,704** | 289,735             | 303,763       | -          |
+| silesia/dickens | 10,192,446  | 5,538,712   | **5,503,021**       | 6,049,169     | 6,155,768  |
+| silesia/mozilla | 51,220,480  | 24,499,954  | **24,311,290**      | 25,104,966    | 25,435,908 |
+| silesia/mr      | 9,970,564   | 4,524,424   | **4,396,124**       | 4,864,734     | 5,442,180  |
+| silesia/nci     | 33,553,445  | 7,093,354   | 7,003,632           | **5,765,521** | 8,247,487  |
+| silesia/ooffice | 6,152,192   | 3,779,238   | **3,763,795**       | 4,077,277     | 3,994,589  |
+| silesia/osdb    | 10,085,684  | 8,467,407   | **8,452,497**       | 8,625,159     | 8,747,527  |
+| silesia/reymont | 6,627,202   | 2,825,458   | **2,793,473**       | 2,897,661     | 2,910,251  |
+| silesia/samba   | 21,606,400  | 8,443,932   | **8,395,048**       | 8,862,423     | 9,223,827  |
+| silesia/sao     | 7,251,944   | 6,136,102   | **6,100,071**       | 6,506,417     | 6,400,926  |
+| silesia/webster | 41,458,703  | 18,259,149  | **18,118,788**      | 20,212,235    | 19,942,817 |
+| silesia/x-ray   | 8,474,240   | 7,509,652   | 7,404,794           | **7,351,750** | 8,059,723  |
+| silesia/xml     | 5,345,280   | 1,493,131   | **1,473,832**       | 1,586,985     | 1,665,179  |
 
-Tamp usually out-performs heatshrink, and is generally very competitive with
-zlib. While trying to be an apples-to-apples comparison, zlib still uses
-significantly more memory during both compression and decompression (see next
-section). Tamp accomplishes competitive performance while using around 10x less
-memory.
+Tamp outperforms both heatshrink and zlib on most datasets, winning 12 out of 14
+benchmarks. This is while using around 10x less memory than zlib during both
+compression and decompression (see next section).
 
 Lazy Matching is a simple technique to improve compression ratios at the expense
 of CPU while requiring very little code. One can expect **50-75%** more CPU
-usage for modest compression gains (around 0.5 - 2.0%). Because of this poor
+usage for modest compression gains (around 0.5 - 2.0%). Because of this
 trade-off, it is disabled by default; however, in applications where we want to
 compress once on a powerful machine (like a desktop/server) and decompress on an
 embedded device, it may be worth it to spend a bit more compute. Lazy matched
@@ -304,6 +303,33 @@ patterns with a maximum length of 258, meaning that it can encode this highly
 repeating data more efficiently. Given Tamp's excellent performance in most of
 the other data compression benchmark files, this is a good tradeoff for most
 real-world scenarios.
+
+### Ablation Study
+
+The following table shows the effect of the `extended` and `lazy_matching`
+compression parameters across all benchmark datasets (`window=10`, `literal=8`).
+
+| dataset         | raw         | Baseline   | +lazy              | +extended          | +lazy +extended    |
+| --------------- | ----------- | ---------- | ------------------ | ------------------ | ------------------ |
+| enwik8          | 100,000,000 | 51,635,633 | 51,252,113 (−0.7%) | 51,116,968 (−1.0%) | 50,725,098 (−1.8%) |
+| RPI_PICO (.uf2) | 667,648     | 331,310    | 329,875 (−0.4%)    | 288,704 (−12.9%)   | 289,735 (−12.5%)   |
+| silesia/dickens | 10,192,446  | 5,546,761  | 5,511,604 (−0.6%)  | 5,538,712 (−0.1%)  | 5,503,021 (−0.8%)  |
+| silesia/mozilla | 51,220,480  | 25,121,385 | 24,936,067 (−0.7%) | 24,499,954 (−2.5%) | 24,311,290 (−3.2%) |
+| silesia/mr      | 9,970,564   | 5,027,032  | 4,886,272 (−2.8%)  | 4,524,424 (−10.0%) | 4,396,124 (−12.6%) |
+| silesia/nci     | 33,553,445  | 8,643,610  | 8,645,299 (+0.0%)  | 7,093,354 (−17.9%) | 7,003,632 (−19.0%) |
+| silesia/ooffice | 6,152,192   | 3,814,938  | 3,798,261 (−0.4%)  | 3,779,238 (−0.9%)  | 3,763,795 (−1.3%)  |
+| silesia/osdb    | 10,085,684  | 8,520,835  | 8,506,443 (−0.2%)  | 8,467,407 (−0.6%)  | 8,452,497 (−0.8%)  |
+| silesia/reymont | 6,627,202   | 2,847,981  | 2,820,870 (−1.0%)  | 2,825,458 (−0.8%)  | 2,793,473 (−1.9%)  |
+| silesia/samba   | 21,606,400  | 9,102,594  | 9,060,692 (−0.5%)  | 8,443,932 (−7.2%)  | 8,395,048 (−7.8%)  |
+| silesia/sao     | 7,251,944   | 6,137,755  | 6,101,744 (−0.6%)  | 6,136,102 (−0.0%)  | 6,100,071 (−0.6%)  |
+| silesia/webster | 41,458,703  | 18,694,172 | 18,567,228 (−0.7%) | 18,259,149 (−2.3%) | 18,118,788 (−3.1%) |
+| silesia/x-ray   | 8,474,240   | 7,510,606  | 7,405,814 (−1.4%)  | 7,509,652 (−0.0%)  | 7,404,794 (−1.4%)  |
+| silesia/xml     | 5,345,280   | 1,681,687  | 1,672,660 (−0.5%)  | 1,493,131 (−11.2%) | 1,473,832 (−12.4%) |
+
+The `extended` parameter enables additional Huffman codes for longer pattern
+matches, which significantly improves compression on datasets with many long
+repeating patterns (e.g., nci, samba, xml). Extended support was added in
+v2.0.0.
 
 ## Memory Usage
 
