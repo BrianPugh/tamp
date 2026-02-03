@@ -43,6 +43,8 @@ export interface TampOptions {
   literal?: number;
   /** Custom dictionary data. If null, no custom dictionary is used. If Uint8Array, uses the provided dictionary. Default: null */
   dictionary?: Uint8Array | null;
+  /** Enable v2 format (RLE, extended match) for better compression ratios. Default: true */
+  v2?: boolean;
   /** Enable lazy matching for better compression ratios. Default: false */
   lazy_matching?: boolean;
 }
@@ -68,6 +70,7 @@ export interface TampDefaults {
   readonly window: 10;
   readonly literal: 8;
   readonly dictionary: null;
+  readonly v2: true;
   readonly lazy_matching: false;
 }
 

@@ -122,6 +122,7 @@ export class TampCompressor {
       window: 10,
       literal: 8,
       dictionary: null,
+      v2: true,
       lazy_matching: false,
       ...options,
     };
@@ -183,7 +184,8 @@ export class TampCompressor {
         (this.options.window & 0xf) |
         ((this.options.literal & 0xf) << 4) |
         ((this.options.dictionary ? 1 : 0) << 8) |
-        ((this.options.lazy_matching ? 1 : 0) << 9);
+        ((this.options.v2 ? 1 : 0) << 9) |
+        ((this.options.lazy_matching ? 1 : 0) << 10);
       this.module.setValue(confPtr, confValue, 'i32');
 
       // Initialize compressor
@@ -790,10 +792,11 @@ export async function compress(data, options = {}) {
   const callbackOptions = {};
 
   // Extract compression-specific options
-  const { window, literal, dictionary, lazy_matching, onPoll, signal, pollIntervalMs, pollIntervalBytes } = options;
+  const { window, literal, dictionary, v2, lazy_matching, onPoll, signal, pollIntervalMs, pollIntervalBytes } = options;
   if (window !== undefined) compressionOptions.window = window;
   if (literal !== undefined) compressionOptions.literal = literal;
   if (dictionary !== undefined) compressionOptions.dictionary = dictionary;
+  if (v2 !== undefined) compressionOptions.v2 = v2;
   if (lazy_matching !== undefined) compressionOptions.lazy_matching = lazy_matching;
 
   // Extract callback options
