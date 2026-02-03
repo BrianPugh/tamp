@@ -145,6 +145,16 @@
                     </select>
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" class="option-checkbox" id="v2" checked>
+                    <label class="checkbox-label" for="v2" style="margin: 0;">V2 Format</label>
+                    <div class="help-tooltip">
+                        <span class="help-icon">?</span>
+                        <div class="tooltip-content">
+                            Enables v2 compression format with RLE and extended match encoding for better compression ratios. Recommended for most use cases.
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <input type="checkbox" class="option-checkbox" id="lazyMatching">
                     <label class="checkbox-label" for="lazyMatching" style="margin: 0;">Lazy Matching</label>
                     <div class="help-tooltip">
@@ -183,6 +193,16 @@
                         </select>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <input type="checkbox" class="option-checkbox" id="textV2" checked>
+                        <label class="checkbox-label" for="textV2" style="margin: 0;">V2 Format</label>
+                        <div class="help-tooltip">
+                            <span class="help-icon">?</span>
+                            <div class="tooltip-content">
+                                Enables v2 compression format with RLE and extended match encoding for better compression ratios. Recommended for most use cases.
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <input type="checkbox" class="option-checkbox" id="textLazyMatching">
                         <label class="checkbox-label" for="textLazyMatching" style="margin: 0;">Lazy Matching</label>
                         <div class="help-tooltip">
@@ -194,7 +214,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="option-group">
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
                     <button type="button" class="toggle-dictionary-btn" id="toggleDictionaryBtn">
