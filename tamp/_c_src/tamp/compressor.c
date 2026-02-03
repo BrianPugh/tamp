@@ -475,6 +475,8 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
             if (next_match_size > match_size &&
                 validate_no_match_overlap(compressor->window_pos, next_match_index, next_match_size)) {
                 // Force literal at current position, cache next match
+                compressor->cached_match_index = next_match_index;
+                compressor->cached_match_size = next_match_size;
                 match_size = 0;  // Will trigger literal write below
             } else {
                 compressor->cached_match_index = -1;

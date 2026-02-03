@@ -1,2 +1,2 @@
 datasets/v1-compressed/** filter=lfs diff=lfs merge=lfs -text
-datasets/v2-compressed/** filter=lfs diff=lfs merge=lfs -text
+datasets/extended-compressed/** filter=lfs diff=lfs merge=lfs -text
