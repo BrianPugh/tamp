@@ -22,26 +22,9 @@ typedef struct TampCompressor {
     unsigned char input[16];  // Input ring buffer
 
     /* WARM: read frequently, often cached in locals */
-    uint8_t min_pattern_size;            // Minimum pattern size (2 bits used; 2 or 3)
-    uint8_t conf_window;                 // Window bits (4 bits used; 8-15)
-    uint8_t conf_literal;                // Literal bits (4 bits used; 5-8)
-    uint8_t conf_use_custom_dictionary;  // Custom dictionary (1 bit used; init only)
-    uint8_t conf_extended;               // Extended format enabled (1 bit used)
-#if TAMP_LAZY_MATCHING
-    uint8_t conf_lazy_matching;  // Lazy matching enabled (1 bit used)
-    int16_t cached_match_index;  // Lazy matching cache
-    uint8_t cached_match_size;
-#endif
-
-#if TAMP_EXTENDED_COMPRESS
-    /* Extended state (only needed when extended compression is enabled) */
-    uint8_t rle_count;                 // Current RLE run length (max 225)
-    uint8_t extended_match_count;      // Current extended match size (max ~126)
-    uint16_t extended_match_position;  // Window position for extended match
-#endif
-
-#else  // Use bitfields for reduced memory-usage
-
+    uint8_t min_pattern_size;  // Minimum pattern size (2 bits used; 2 or 3)
+    TampConf conf;
+#else   // Use bitfields for reduced memory-usage
     /* HOT: accessed every iteration of the compression loop */
     unsigned char *window;    // Pointer to window buffer
     uint32_t bit_buffer;      // Bit buffer for output (32 bits)
@@ -51,28 +34,25 @@ typedef struct TampCompressor {
     uint8_t input_pos;        // Current position in input buffer (4 bits used; 0-15)
     unsigned char input[16];  // Input ring buffer
 
-    /* WARM: read frequently, often cached in locals.
-     * Bitfields: min_pattern_size(2) + conf_window(4) + conf_literal(4) +
-     *            conf_use_custom_dictionary(1) + conf_extended(1) + conf_lazy_matching(1) = 13 bits
-     */
-    uint8_t min_pattern_size : 2;            // Minimum pattern size (2 or 3)
-    uint8_t conf_window : 4;                 // Window bits (8-15)
-    uint8_t conf_literal : 4;                // Literal bits (5-8)
-    uint8_t conf_use_custom_dictionary : 1;  // Custom dictionary (init only)
-    uint8_t conf_extended : 1;               // Extended format enabled
-#if TAMP_LAZY_MATCHING
-    uint8_t conf_lazy_matching : 1;  // Lazy matching enabled
-    int16_t cached_match_index;      // Lazy matching cache
-    uint8_t cached_match_size;
-#endif
+    /* WARM: read frequently, often cached in locals */
+    uint8_t min_pattern_size;  // Minimum pattern size (2 or 3)
+    TampConf conf;
+#endif  // TAMP_ESP32
 
+    /* Fields interleaved to avoid internal padding when both LAZY_MATCHING and EXTENDED_COMPRESS enabled */
+#if TAMP_LAZY_MATCHING
+    int16_t cached_match_index;  // Lazy matching cache
+#endif
 #if TAMP_EXTENDED_COMPRESS
-    uint8_t rle_count;                 // Current RLE run length (max 225)
-    uint8_t extended_match_count;      // Current extended match size (max ~126)
     uint16_t extended_match_position;  // Window position for extended match
 #endif
-
-#endif  // TAMP_ESP32
+#if TAMP_LAZY_MATCHING
+    uint8_t cached_match_size;
+#endif
+#if TAMP_EXTENDED_COMPRESS
+    uint8_t rle_count;             // Current RLE run length (max 225)
+    uint8_t extended_match_count;  // Current extended match size (max ~126)
+#endif
 } TampCompressor;
 
 /**

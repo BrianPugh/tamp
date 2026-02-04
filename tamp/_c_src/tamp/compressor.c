@@ -12,15 +12,15 @@
 #if TAMP_EXTENDED_COMPRESS
 // Extended max pattern: min_pattern_size + 11 + 112 = min_pattern_size + 123
 #define MAX_PATTERN_SIZE_EXTENDED (compressor->min_pattern_size + 123)
-#define MAX_PATTERN_SIZE (compressor->conf_extended ? MAX_PATTERN_SIZE_EXTENDED : (compressor->min_pattern_size + 13))
+#define MAX_PATTERN_SIZE (compressor->conf.extended ? MAX_PATTERN_SIZE_EXTENDED : (compressor->min_pattern_size + 13))
 #else
 #define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
 #endif
-#define WINDOW_SIZE (1 << compressor->conf_window)
+#define WINDOW_SIZE (1 << compressor->conf.window)
 // 0xF because sizeof(TampCompressor.input) == 16;
 #define input_add(offset) ((compressor->input_pos + offset) & 0xF)
 #define read_input(offset) (compressor->input[input_add(offset)])
-#define IS_LITERAL_FLAG (1 << compressor->conf_literal)
+#define IS_LITERAL_FLAG (1 << compressor->conf.literal)
 
 #define FLUSH_CODE (0xAB)
 
@@ -198,15 +198,11 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     uint8_t header = ((conf->window - 8) << 5) | ((conf->literal - 5) << 3) | (conf->use_custom_dictionary << 2) |
                      (conf->extended << 1);
 
-    compressor->conf_literal = conf->literal;
-    compressor->conf_window = conf->window;
-    compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
-    compressor->conf_extended = conf->extended;
+    compressor->conf = *conf;  // Single struct copy
     compressor->window = window;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
 
 #if TAMP_LAZY_MATCHING
-    compressor->conf_lazy_matching = conf->lazy_matching;
     compressor->cached_match_index = -1;  // Initialize cache as invalid
 #endif
 
@@ -222,7 +218,7 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
  * @brief Get the last byte written to the window.
  */
 static inline uint8_t get_last_window_byte(TampCompressor *compressor) {
-    uint16_t prev_pos = (compressor->window_pos - 1) & ((1 << compressor->conf_window) - 1);
+    uint16_t prev_pos = (compressor->window_pos - 1) & ((1 << compressor->conf.window) - 1);
     return compressor->window[prev_pos];
 }
 
@@ -233,7 +229,7 @@ static inline uint8_t get_last_window_byte(TampCompressor *compressor) {
  * @param[in] count Number of repeated bytes (must be >= 2).
  */
 static TAMP_NOINLINE void write_rle_token(TampCompressor *compressor, uint8_t count) {
-    const uint16_t window_mask = (1 << compressor->conf_window) - 1;
+    const uint16_t window_mask = (1 << compressor->conf.window) - 1;
     uint8_t symbol = get_last_window_byte(compressor);
 
     // Write RLE symbol (12) with literal flag
@@ -265,7 +261,7 @@ static TAMP_NOINLINE void write_rle_token(TampCompressor *compressor, uint8_t co
  */
 static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor *compressor, unsigned char *output,
                                                          size_t output_size, size_t *output_written_size) {
-    const uint16_t window_mask = (1 << compressor->conf_window) - 1;
+    const uint16_t window_mask = (1 << compressor->conf.window) - 1;
     const uint8_t count = compressor->extended_match_count;
     const uint16_t position = compressor->extended_match_position;
     tamp_res res;
@@ -287,7 +283,7 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor *compres
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
 
     // Write window position - with ≤7 bits remaining, up to 22 bits total - fits
-    write_to_bit_buffer(compressor, position, compressor->conf_window);
+    write_to_bit_buffer(compressor, position, compressor->conf.window);
 
     // Final flush
     res = partial_flush(compressor, output, output_size, &flush_bytes);
@@ -314,7 +310,7 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor *compres
 TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
                                             size_t *output_written_size) {
     tamp_res res;
-    const uint16_t window_mask = (1 << compressor->conf_window) - 1;
+    const uint16_t window_mask = (1 << compressor->conf.window) - 1;
     size_t output_written_size_proxy;
 
     if (!output_written_size) output_written_size = &output_written_size_proxy;
@@ -339,7 +335,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
 
 #if TAMP_EXTENDED_COMPRESS
     // Extended: Handle extended match continuation
-    if (TAMP_UNLIKELY(compressor->conf_extended && compressor->extended_match_count)) {
+    if (TAMP_UNLIKELY(compressor->conf.extended && compressor->extended_match_count)) {
         // We're in extended match mode - try to extend the match at the current position
         const uint8_t max_ext_match = compressor->min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA;
         const unsigned char *window = compressor->window;
@@ -394,7 +390,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
 
     // Extended: Handle RLE accumulation with persistent state
     // For simplicity in C, we commit RLE immediately when the run ends
-    if (TAMP_UNLIKELY(compressor->conf_extended)) {
+    if (TAMP_UNLIKELY(compressor->conf.extended)) {
         uint8_t last_byte = get_last_window_byte(compressor);
 
         // Count and CONSUME matching bytes
@@ -429,7 +425,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
 #endif  // TAMP_EXTENDED_COMPRESS
 
 #if TAMP_LAZY_MATCHING
-    if (compressor->conf_lazy_matching) {
+    if (compressor->conf.lazy_matching) {
         // Check if we have a cached match from lazy matching
         if (TAMP_UNLIKELY(compressor->cached_match_index >= 0)) {
             match_index = compressor->cached_match_index;
@@ -481,14 +477,14 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
         // Write LITERAL
         match_size = 1;
         unsigned char c = read_input(0);
-        if (TAMP_UNLIKELY(c >> compressor->conf_literal)) {
+        if (TAMP_UNLIKELY(c >> compressor->conf.literal)) {
             return TAMP_EXCESS_BITS;
         }
-        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf_literal + 1);
+        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf.literal + 1);
     } else {
 #if TAMP_EXTENDED_COMPRESS
         // Extended: Check for extended match
-        if (compressor->conf_extended && match_size > compressor->min_pattern_size + 11) {
+        if (compressor->conf.extended && match_size > compressor->min_pattern_size + 11) {
             compressor->extended_match_count = match_size;
             compressor->extended_match_position = match_index;
             // Consume matched bytes from input
@@ -499,8 +495,8 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
 #endif  // TAMP_EXTENDED_COMPRESS
         // Write TOKEN (huffman code + window position)
         uint8_t huffman_index = match_size - compressor->min_pattern_size;
-        write_to_bit_buffer(compressor, (huffman_codes[huffman_index] << compressor->conf_window) | match_index,
-                            huffman_bits[huffman_index] + compressor->conf_window);
+        write_to_bit_buffer(compressor, (huffman_codes[huffman_index] << compressor->conf.window) | match_index,
+                            huffman_bits[huffman_index] + compressor->conf.window);
     }
     // Populate Window
     for (uint8_t i = 0; i < match_size; i++) {
@@ -590,7 +586,7 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
 
 #if TAMP_EXTENDED_COMPRESS
     // Extended: Flush any pending RLE
-    if (compressor->conf_extended && compressor->rle_count >= 1) {
+    if (compressor->conf.extended && compressor->rle_count >= 1) {
         // Partial flush first to make room
         res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
         (*output_written_size) += chunk_output_written_size;
@@ -601,10 +597,10 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
         if (compressor->rle_count == 1) {
             // Single byte - write as literal (can't use RLE token for count < 2)
             uint8_t literal = get_last_window_byte(compressor);
-            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | literal, compressor->conf_literal + 1);
+            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | literal, compressor->conf.literal + 1);
 
             // Write to window
-            const uint16_t window_mask = (1 << compressor->conf_window) - 1;
+            const uint16_t window_mask = (1 << compressor->conf.window) - 1;
             compressor->window[compressor->window_pos] = literal;
             compressor->window_pos = (compressor->window_pos + 1) & window_mask;
         } else {
@@ -622,7 +618,7 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
     }
 
     // Extended: Flush any pending extended match
-    if (compressor->conf_extended && compressor->extended_match_count) {
+    if (compressor->conf.extended && compressor->extended_match_count) {
         // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
         if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
         res = write_extended_match_token(compressor, output, output_size, &chunk_output_written_size);

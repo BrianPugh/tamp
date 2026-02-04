@@ -395,10 +395,10 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 | -------------------------------- | ---------- | ------------ | ------------------------- |
 | Tamp (MicroPython Viper)         | 4676       | 4372         | 7917                      |
 | Tamp (MicroPython Native)        | 3896       | 3559         | 6616                      |
-| Tamp (C, no extended, no stream) | 1756       | 1584         | 3220                      |
-| Tamp (C, no extended)            | 2160       | 2036         | 4076                      |
-| Tamp (C, extended, no stream)    | 2856       | 2436         | 5172                      |
-| Tamp (C, extended)               | 3260       | 2888         | 6028                      |
+| Tamp (C, no extended, no stream) | 1648       | 1584         | 3112                      |
+| Tamp (C, no extended)            | 2052       | 2036         | 3968                      |
+| Tamp (C, extended, no stream)    | 2796       | 2436         | 5112                      |
+| Tamp (C, extended)               | 3200       | 2888         | 5968                      |
 | Heatshrink (C)                   | 2956       | 3876         | 6832                      |
 | uzlib (C)                        | 2355       | 3963         | 6318                      |
 
