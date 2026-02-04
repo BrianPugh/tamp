@@ -357,7 +357,7 @@ on an M3 Macbook Air.
 |                              | Compression (s) | Decompression (s) |
 | ---------------------------- | --------------- | ----------------- |
 | Tamp (Pure Python Reference) | 136.2           | 105.0             |
-| Tamp (C bindings)            | 5.56            | 0.544             |
+| Tamp (C bindings)            | 5.45            | 0.544             |
 | ZLib                         | 3.65            | 0.578             |
 | Heatshrink (with index)      | 4.42            | 0.67              |
 | Heatshrink (without index)   | 27.40           | 0.67              |
@@ -377,7 +377,7 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
 | Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 31,192                | 1,086,957               |
+| Tamp (Micropython Native Module) | 31,949                | 1,086,957               |
 | Tamp (C)                         | 36,127                | 1,400,600               |
 | Deflate (micropython builtin)    | 6,885                 | 294,985                 |
 
@@ -391,19 +391,21 @@ compiled for the Pi Pico (`armv6m`). All libraries were compiled with `-O3`.
 Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 15.2.1 and MicroPython v1.27, and can be regenerated with `make binary-size`.
 
-|                           | Compressor | Decompressor | Compressor + Decompressor |
-| ------------------------- | ---------- | ------------ | ------------------------- |
-| Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
-| Tamp (MicroPython Native) | 3896       | 3559         | 6616                      |
-| Tamp (C, -DTAMP_STREAM=0) | 2028       | 1992         | 3900                      |
-| Tamp (C)                  | 2472       | 2444         | 4796                      |
-| Heatshrink (C)            | 2956       | 3876         | 6832                      |
-| uzlib (C)                 | 2355       | 3963         | 6318                      |
+|                                  | Compressor | Decompressor | Compressor + Decompressor |
+| -------------------------------- | ---------- | ------------ | ------------------------- |
+| Tamp (MicroPython Viper)         | 4676       | 4372         | 7917                      |
+| Tamp (MicroPython Native)        | 3896       | 3559         | 6616                      |
+| Tamp (C, no extended, no stream) | 1800       | 1584         | 3264                      |
+| Tamp (C, no extended)            | 2204       | 2036         | 4120                      |
+| Tamp (C, extended, no stream)    | 2884       | 2436         | 5200                      |
+| Tamp (C, extended)               | 3288       | 2888         | 6056                      |
+| Heatshrink (C)                   | 2956       | 3876         | 6832                      |
+| uzlib (C)                        | 2355       | 3963         | 6318                      |
 
-Tamp C includes a high-level stream API by default. Even with `-DTAMP_STREAM=0`,
-Tamp includes buffer-looping functions (like `tamp_compressor_compress`) that
-Heatshrink lacks (Heatshrink only provides poll/sink primitives). In an
-apples-to-apples comparison, Tamp would be even smaller.
+Tamp C "extended" includes `tamp_compressor_compress_and_flush`. Tamp C includes
+a high-level stream API by default. Even with `no stream`, Tamp includes
+buffer-looping functions (like `tamp_compressor_compress`) that Heatshrink lacks
+(Heatshrink only provides poll/sink primitives).
 
 ## Acknowledgement
 
