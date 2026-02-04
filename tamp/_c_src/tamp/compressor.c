@@ -40,7 +40,7 @@ static const uint8_t huffman_bits[] = {0x2, 0x3, 0x5, 0x5, 0x6, 0x7, 0x7, 0x7, 0
 #define EXTENDED_MATCH_MIN_OUTPUT_BYTES 6
 #endif
 
-static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits, uint8_t n_bits) {
+static TAMP_NOINLINE void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits, uint8_t n_bits) {
     compressor->bit_buffer_pos += n_bits;
     compressor->bit_buffer |= bits << (32 - compressor->bit_buffer_pos);
 }
