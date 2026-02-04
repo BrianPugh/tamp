@@ -338,6 +338,9 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
 
     if (TAMP_UNLIKELY(output_size == 0)) return TAMP_OUTPUT_FULL;
 
+    uint8_t match_size = 0;
+    uint16_t match_index = 0;
+
 #if TAMP_EXTENDED_COMPRESS
     // Extended: Handle extended match continuation
     if (TAMP_UNLIKELY(compressor->conf_extended && compressor->extended_match_count)) {
@@ -392,12 +395,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
         // Ran out of input while extending - return and wait for more
         return TAMP_OK;
     }
-#endif  // TAMP_EXTENDED_COMPRESS
 
-    uint8_t match_size = 0;
-    uint16_t match_index = 0;
-
-#if TAMP_EXTENDED_COMPRESS
     // Extended: Handle RLE accumulation with persistent state
     // For simplicity in C, we commit RLE immediately when the run ends
     if (TAMP_UNLIKELY(compressor->conf_extended)) {
@@ -444,15 +442,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
         } else {
             find_best_match(compressor, &match_index, &match_size);
         }
-    } else {
-        find_best_match(compressor, &match_index, &match_size);
-    }
-#else
-    find_best_match(compressor, &match_index, &match_size);
-#endif
 
-#if TAMP_LAZY_MATCHING
-    if (compressor->conf_lazy_matching) {
         // Lazy matching: if we have a good match, check if position i+1 has a better match
         if (match_size >= compressor->min_pattern_size && match_size <= 8 && compressor->input_size > match_size + 2) {
             // Temporarily advance input position to check next position
@@ -483,7 +473,11 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
         } else {
             compressor->cached_match_index = -1;  // Clear cache
         }
+    } else {
+        find_best_match(compressor, &match_index, &match_size);
     }
+#else
+    find_best_match(compressor, &match_index, &match_size);
 #endif
 
     // Shared token/literal writing logic
