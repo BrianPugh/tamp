@@ -26,11 +26,14 @@ if micropython is None:
         pass
 
 else:
-    from tamp.decompressor_viper import Decompressor as ViperDecompressor
-    from tamp.decompressor_viper import decompress as viper_decompress
+    try:
+        from tamp_native import Decompressor as NativeDecompressor
+        from tamp_native import decompress as native_decompress
 
-    Decompressors.append(ViperDecompressor)
-    decompresses.append(viper_decompress)
+        Decompressors.append(NativeDecompressor)
+        decompresses.append(native_decompress)
+    except ImportError:
+        pass
 
 
 class TestDecompressor(unittest.TestCase):

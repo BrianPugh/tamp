@@ -36,12 +36,6 @@ compresses = []
 NativeExcessBitsError = ExcessBitsError
 
 if micropython:
-    from tamp.compressor_viper import Compressor as ViperCompressor
-    from tamp.compressor_viper import compress as viper_compress
-
-    Compressors.append(ViperCompressor)
-    compresses.append(viper_compress)
-
     try:
         from tamp_native import Compressor as NativeCompressor
         from tamp_native import ExcessBitsError as NativeExcessBitsError
