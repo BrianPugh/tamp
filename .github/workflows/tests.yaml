@@ -267,7 +267,7 @@ jobs:
         implementation: [desktop, embedded]
     env:
       POETRY_HOME: '~/poetry'
-      EXPECTED_COMPRESSED_HASH: '02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038'
+      EXPECTED_COMPRESSED_HASH: '5996293c04a89014580334da4d69374ee414f1ae5087b813bab69209573b6966'
 
     steps:
       - name: Check out repository
