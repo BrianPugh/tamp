@@ -94,8 +94,48 @@ jobs:
           source .venv/bin/activate
           SKIP=wasm-eslint,wasm-npm-test,wasm-file-validation,typescript-check,package-json-lint pre-commit run --show-diff-on-failure --color=always --all-files
 
+  cache-lfs:
+    name: 'Cache LFS files'
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.lfs-key.outputs.key }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: false
+
+      - name: Compute LFS cache key
+        id: lfs-key
+        run: |
+          # Hash pointer files before they get replaced by git lfs pull
+          # Use find for reliable recursive globbing, sort for deterministic order
+          hash=$(find datasets/v1-compressed datasets/extended-compressed -name '*.tamp' -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
+          echo "key=lfs-${hash}" >> $GITHUB_OUTPUT
+          echo "Cache key: lfs-${hash}"
+
+      - name: Restore LFS cache
+        uses: actions/cache/restore@v4
+        id: lfs-cache
+        with:
+          path: .git/lfs
+          key: ${{ steps.lfs-key.outputs.key }}
+
+      - name: Pull LFS files
+        if: steps.lfs-cache.outputs.cache-hit != 'true'
+        run: git lfs pull
+
+      - name: Save LFS cache
+        if: steps.lfs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .git/lfs
+          key: ${{ steps.lfs-key.outputs.key }}
+
   test:
     name: 'Test Python ${{ matrix.python-version }}'
+    needs: cache-lfs
     timeout-minutes: 15
     runs-on: ubuntu-latest
     strategy:
@@ -112,13 +152,12 @@ jobs:
           submodules: recursive
           lfs: false
 
-      - name: Cache LFS files
-        uses: actions/cache@v4
-        id: lfs-cache
+      - name: Restore LFS cache
+        uses: actions/cache/restore@v4
         with:
           path: .git/lfs
-          key: lfs-${{ hashFiles('datasets/v1-compressed/**', 'datasets/extended-compressed/**') }}
-          restore-keys: lfs-
+          key: ${{ needs.cache-lfs.outputs.cache-key }}
+          fail-on-cache-miss: true
 
       - name: Pull LFS files
         run: git lfs pull
