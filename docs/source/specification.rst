@@ -189,7 +189,9 @@ This encoding combines a Huffman code (without the literal flag) with trailing b
 RLE Token (Symbol 12)
 ---------------------
 RLE encodes runs of repeated bytes efficiently. The repeated byte is implicitly
-the last byte written to the window buffer.
+the last byte written to the window buffer. If no bytes have been written yet
+(i.e., ``window_pos == 0``), the byte at position ``window_size - 1`` of the
+initial dictionary is used.
 
 Format: ``0b0 | huffman_code[12] | extended_huffman(count - 2, trailing=4)``
 
