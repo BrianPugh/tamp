@@ -201,14 +201,11 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->conf_window = conf->window;
     compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
     compressor->conf_extended = conf->extended;
-#if TAMP_LAZY_MATCHING
-    compressor->conf_lazy_matching = conf->lazy_matching;
-#endif
-
     compressor->window = window;
     compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
 
 #if TAMP_LAZY_MATCHING
+    compressor->conf_lazy_matching = conf->lazy_matching;
     compressor->cached_match_index = -1;  // Initialize cache as invalid
 #endif
 
