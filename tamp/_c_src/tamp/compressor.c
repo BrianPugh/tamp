@@ -59,11 +59,10 @@ static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits
  * @param[in] trailing_bits Number of trailing bits (3 for extended match, 4 for RLE).
  */
 static TAMP_NOINLINE void write_extended_huffman(TampCompressor *compressor, uint8_t value, uint8_t trailing_bits) {
-    uint8_t mask = (1 << trailing_bits) - 1;
     uint8_t code_index = value >> trailing_bits;
-    // Write huffman code without literal flag (subtract 1 from bit length)
-    write_to_bit_buffer(compressor, huffman_codes[code_index], huffman_bits[code_index] - 1);
-    write_to_bit_buffer(compressor, value & mask, trailing_bits);
+    // Write huffman code (without literal flag) + trailing bits in one call
+    write_to_bit_buffer(compressor, (huffman_codes[code_index] << trailing_bits) | (value & ((1 << trailing_bits) - 1)),
+                        (huffman_bits[code_index] - 1) + trailing_bits);
 }
 
 #endif  // TAMP_EXTENDED_COMPRESS
@@ -211,12 +210,11 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
 
     if (!compressor->conf_use_custom_dictionary) tamp_initialize_dictionary(window, (1 << conf->window));
 
-    // Write header to bit buffer
-    write_to_bit_buffer(compressor, compressor->conf_window - 8, 3);
-    write_to_bit_buffer(compressor, compressor->conf_literal - 5, 2);
-    write_to_bit_buffer(compressor, compressor->conf_use_custom_dictionary, 1);
-    write_to_bit_buffer(compressor, compressor->conf_extended, 1);
-    write_to_bit_buffer(compressor, 0, 1);  // No more header bytes
+    // Write header to bit buffer (8 bits total)
+    // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
+    uint8_t header = ((compressor->conf_window - 8) << 5) | ((compressor->conf_literal - 5) << 3) |
+                     (compressor->conf_use_custom_dictionary << 2) | (compressor->conf_extended << 1);
+    write_to_bit_buffer(compressor, header, 8);
 
     return TAMP_OK;
 }
@@ -501,10 +499,10 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
             return TAMP_OK;
         }
 #endif  // TAMP_EXTENDED_COMPRESS
-        // Write TOKEN
+        // Write TOKEN (huffman code + window position)
         uint8_t huffman_index = match_size - compressor->min_pattern_size;
-        write_to_bit_buffer(compressor, huffman_codes[huffman_index], huffman_bits[huffman_index]);
-        write_to_bit_buffer(compressor, match_index, compressor->conf_window);
+        write_to_bit_buffer(compressor, (huffman_codes[huffman_index] << compressor->conf_window) | match_index,
+                            huffman_bits[huffman_index] + compressor->conf_window);
     }
     // Populate Window
     for (uint8_t i = 0; i < match_size; i++) {
