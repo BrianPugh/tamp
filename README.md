@@ -34,11 +34,8 @@ of RAM and firmware storage.
     - `pip install tamp` will use a python-bound C implementation optimized for
       speed.
   - Micropython:
-    - Native Module (suggested micropython implementation).
+    - Native Module.
       - `mpy_bindings/`
-    - Viper.
-      - `tamp/__init__.py`, `tamp/compressor_viper.py`,
-        `tamp/decompressor_viper.py`
   - C library:
     - `tamp/_c_src/`
   - Javascript/Typescript via Emscripten WASM.
@@ -56,14 +53,12 @@ of RAM and firmware storage.
 
 # Installation
 
-Tamp contains 4 implementations:
+Tamp contains 3 implementations:
 
 1. A reference desktop CPython implementation that is optimized for readability
    (and **not** speed).
 2. A Micropython Native Module implementation (fast).
-3. A Micropython Viper implementation (not recommended, please use Native
-   Module).
-4. A C implementation (with python bindings) for accelerated desktop use and to
+3. A C implementation (with python bindings) for accelerated desktop use and to
    be used in C projects (very fast).
 
 This section instructs how to install each implementation.
@@ -96,42 +91,6 @@ following to `pyproject.toml`.
 ```toml
 [tool.belay.dependencies]
 tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.7.0/tamp-1.7.0-mpy1.23-armv6m.mpy"
-```
-
-### MicroPython Viper
-
-**NOT RECOMMENDED, PLEASE USE NATIVE MODULE**
-
-For micropython use, there are 3 main files:
-
-1. `tamp/__init__.py` - Always required.
-2. `tamp/decompressor_viper.py` - Required for on-device decompression.
-3. `tamp/compressor_viper.py` - Required for on-device compression.
-
-For example, if on-device decompression isn't used, then do not include
-`decompressor_viper.py`. If manually installing, just copy these files to your
-microcontroller's `/lib/tamp` folder.
-
-If using
-[mip](https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip),
-tamp can be installed by specifying the appropriate `package-*.json` file.
-
-```bash
-mip install github:brianpugh/tamp  # Defaults to package.json: Compressor & Decompressor
-mip install github:brianpugh/tamp/package-compressor.json  # Compressor only
-mip install github:brianpugh/tamp/package-decompressor.json  # Decompressor only
-```
-
-If using [Belay](https://github.com/BrianPugh/belay), tamp can be installed by
-adding the following to `pyproject.toml`.
-
-```toml
-[tool.belay.dependencies]
-tamp = [
-   "https://github.com/BrianPugh/tamp/blob/main/tamp/__init__.py",
-   "https://github.com/BrianPugh/tamp/blob/main/tamp/compressor_viper.py",
-   "https://github.com/BrianPugh/tamp/blob/main/tamp/decompressor_viper.py",
-]
 ```
 
 ## C
@@ -376,7 +335,6 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
-| Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
 | Tamp (Micropython Native Module) | 31,949                | 1,086,957               |
 | Tamp (C)                         | 36,127                | 1,400,600               |
 | Deflate (micropython builtin)    | 6,885                 | 294,985                 |
@@ -393,7 +351,6 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 
 |                                  | Compressor | Decompressor | Compressor + Decompressor |
 | -------------------------------- | ---------- | ------------ | ------------------------- |
-| Tamp (MicroPython Viper)         | 4676       | 4372         | 7917                      |
 | Tamp (MicroPython Native)        | 3896       | 3559         | 6616                      |
 | Tamp (C, no extended, no stream) | 1648       | 1584         | 3112                      |
 | Tamp (C, no extended)            | 2052       | 2036         | 3968                      |
