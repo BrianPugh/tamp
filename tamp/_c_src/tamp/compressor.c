@@ -30,11 +30,8 @@ static const uint8_t huffman_codes[] = {0x0, 0x3, 0x8, 0xb, 0x14, 0x24, 0x26, 0x
 static const uint8_t huffman_bits[] = {0x2, 0x3, 0x5, 0x5, 0x6, 0x7, 0x7, 0x7, 0x8, 0x8, 0x9, 0x9, 0x9, 0x7};
 
 #if TAMP_EXTENDED_COMPRESS
-// Extended: Maximum RLE count = (13 << 4) + 15 + 2 = 225
-#define RLE_MAX_COUNT 225
-// Extended: Maximum extended match extra = (13 << 3) + 7 + 1 = 112
-// Total max match = min_pattern_size + 11 + 112 = min_pattern_size + 123
-#define EXTENDED_MATCH_MAX_EXTRA 112
+#define RLE_MAX_COUNT ((13 << 4) + 15 + 2)            // 225
+#define EXTENDED_MATCH_MAX_EXTRA ((13 << 3) + 7 + 1)  // 112
 
 // Minimum output buffer space required for extended match token.
 // Extended match: symbol (7 bits) + extended huffman (11 bits) + window pos (15 bits) = 33 bits.
