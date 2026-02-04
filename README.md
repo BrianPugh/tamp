@@ -351,7 +351,7 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 
 |                                  | Compressor | Decompressor | Compressor + Decompressor |
 | -------------------------------- | ---------- | ------------ | ------------------------- |
-| Tamp (MicroPython Native)        | 3896       | 3559         | 6616                      |
+| Tamp (MicroPython Native)        | 4736       | 4339         | 8236                      |
 | Tamp (C, no extended, no stream) | 1648       | 1584         | 3112                      |
 | Tamp (C, no extended)            | 2052       | 2036         | 3968                      |
 | Tamp (C, extended, no stream)    | 2796       | 2436         | 5112                      |

@@ -75,7 +75,7 @@ MOD = tamp
 # Override -Os with -O2 for better performance (last flag wins)
 CFLAGS_EXTRA = -O2
 
-CFLAGS += -Itamp/_c_src -DTAMP_COMPRESSOR=$(TAMP_COMPRESSOR) -DTAMP_DECOMPRESSOR=$(TAMP_DECOMPRESSOR)
+CFLAGS += -Itamp/_c_src -DTAMP_COMPRESSOR=$(TAMP_COMPRESSOR) -DTAMP_DECOMPRESSOR=$(TAMP_DECOMPRESSOR) -DTAMP_STREAM=0
 # Compiler-specific flags based on target architecture
 ifeq ($(filter $(ARCH),x86 x64),)
 # Cross-compiling for embedded (ARM, xtensa) - use GCC flags
