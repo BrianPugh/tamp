@@ -110,7 +110,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          lfs: true
+          lfs: false
+
+      - name: Cache LFS files
+        uses: actions/cache@v4
+        id: lfs-cache
+        with:
+          path: .git/lfs
+          key: lfs-${{ hashFiles('datasets/v1-compressed/**', 'datasets/extended-compressed/**') }}
+          restore-keys: lfs-
+
+      - name: Pull LFS files
+        run: git lfs pull
 
       - name: Set up python 3.13 (for Poetry)
         id: setup-python-system
