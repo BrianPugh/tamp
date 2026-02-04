@@ -193,6 +193,11 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     for (uint8_t i = 0; i < sizeof(TampCompressor); i++)  // Zero-out the struct
         ((unsigned char *)compressor)[i] = 0;
 
+    // Build header directly from conf (8 bits total)
+    // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
+    uint8_t header = ((conf->window - 8) << 5) | ((conf->literal - 5) << 3) | (conf->use_custom_dictionary << 2) |
+                     (conf->extended << 1);
+
     compressor->conf_literal = conf->literal;
     compressor->conf_window = conf->window;
     compressor->conf_use_custom_dictionary = conf->use_custom_dictionary;
@@ -205,12 +210,8 @@ tamp_res tamp_compressor_init(TampCompressor *compressor, const TampConf *conf, 
     compressor->cached_match_index = -1;  // Initialize cache as invalid
 #endif
 
-    if (!compressor->conf_use_custom_dictionary) tamp_initialize_dictionary(window, (1 << conf->window));
+    if (!conf->use_custom_dictionary) tamp_initialize_dictionary(window, (1 << conf->window));
 
-    // Write header to bit buffer (8 bits total)
-    // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
-    uint8_t header = ((compressor->conf_window - 8) << 5) | ((compressor->conf_literal - 5) << 3) |
-                     (compressor->conf_use_custom_dictionary << 2) | (compressor->conf_extended << 1);
     write_to_bit_buffer(compressor, header, 8);
 
     return TAMP_OK;
