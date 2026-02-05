@@ -682,47 +682,49 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
     }
 
 #if TAMP_EXTENDED_COMPRESS
-    // Extended: Flush any pending RLE
-    if (compressor->conf.extended && compressor->rle_count >= 1) {
-        // Partial flush first to make room
-        res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
-        (*output_written_size) += chunk_output_written_size;
-        if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-        output_size -= chunk_output_written_size;
-        output += chunk_output_written_size;
+    if (compressor->conf.extended) {
+        // Flush any pending RLE
+        if (compressor->rle_count >= 1) {
+            // Partial flush first to make room
+            res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
+            (*output_written_size) += chunk_output_written_size;
+            if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+            output_size -= chunk_output_written_size;
+            output += chunk_output_written_size;
 
-        if (compressor->rle_count == 1) {
-            // Single byte - write as literal (can't use RLE token for count < 2)
-            uint8_t literal = get_last_window_byte(compressor);
-            write_to_bit_buffer(compressor, IS_LITERAL_FLAG | literal, compressor->conf.literal + 1);
+            if (compressor->rle_count == 1) {
+                // Single byte - write as literal (can't use RLE token for count < 2)
+                uint8_t literal = get_last_window_byte(compressor);
+                write_to_bit_buffer(compressor, IS_LITERAL_FLAG | literal, compressor->conf.literal + 1);
 
-            // Write to window
-            const uint16_t window_mask = (1 << compressor->conf.window) - 1;
-            compressor->window[compressor->window_pos] = literal;
-            compressor->window_pos = (compressor->window_pos + 1) & window_mask;
-        } else {
-            // count >= 2: write as RLE token
-            write_rle_token(compressor, compressor->rle_count);
+                // Write to window
+                const uint16_t window_mask = (1 << compressor->conf.window) - 1;
+                compressor->window[compressor->window_pos] = literal;
+                compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+            } else {
+                // count >= 2: write as RLE token
+                write_rle_token(compressor, compressor->rle_count);
+            }
+            compressor->rle_count = 0;
+
+            // Partial flush again after writing token
+            res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
+            (*output_written_size) += chunk_output_written_size;
+            if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+            output_size -= chunk_output_written_size;
+            output += chunk_output_written_size;
         }
-        compressor->rle_count = 0;
 
-        // Partial flush again after writing token
-        res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
-        (*output_written_size) += chunk_output_written_size;
-        if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-        output_size -= chunk_output_written_size;
-        output += chunk_output_written_size;
-    }
-
-    // Extended: Flush any pending extended match
-    if (compressor->conf.extended && compressor->extended_match_count) {
-        // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
-        if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
-        res = write_extended_match_token(compressor, output, output_size, &chunk_output_written_size);
-        (*output_written_size) += chunk_output_written_size;
-        if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-        output_size -= chunk_output_written_size;
-        output += chunk_output_written_size;
+        // Flush any pending extended match
+        else if (compressor->extended_match_count) {
+            // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
+            if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
+            res = write_extended_match_token(compressor, output, output_size, &chunk_output_written_size);
+            (*output_written_size) += chunk_output_written_size;
+            if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+            output_size -= chunk_output_written_size;
+            output += chunk_output_written_size;
+        }
     }
 #endif  // TAMP_EXTENDED_COMPRESS
 
