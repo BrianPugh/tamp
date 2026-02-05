@@ -306,7 +306,13 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor *compres
 TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned char *output, size_t output_size,
                                             size_t *output_written_size) {
     tamp_res res;
-    const uint16_t window_mask = (1 << compressor->conf.window) - 1;
+    // Cache bitfield values for faster access in hot path
+    const uint8_t conf_window = compressor->conf.window;
+    const uint8_t conf_literal = compressor->conf.literal;
+    const uint16_t window_mask = (1 << conf_window) - 1;
+#if TAMP_EXTENDED_COMPRESS
+    const bool conf_extended = compressor->conf.extended;
+#endif
     size_t output_written_size_proxy;
 
     if (!output_written_size) output_written_size = &output_written_size_proxy;
@@ -331,7 +337,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
 
 #if TAMP_EXTENDED_COMPRESS
     // Extended: Handle extended match continuation
-    if (TAMP_UNLIKELY(compressor->conf.extended && compressor->extended_match_count)) {
+    if (TAMP_UNLIKELY(conf_extended && compressor->extended_match_count)) {
         // We're in extended match mode - try to extend the match at the current position
         const uint8_t max_ext_match = compressor->min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA;
         const unsigned char *window = compressor->window;
@@ -385,7 +391,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
     }
 
     // Extended: Handle RLE accumulation with persistent state
-    if (TAMP_UNLIKELY(compressor->conf.extended)) {
+    if (TAMP_UNLIKELY(conf_extended)) {
         uint8_t last_byte = get_last_window_byte(compressor);
 
         // Count and CONSUME matching bytes
@@ -472,14 +478,14 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
         // Write LITERAL
         match_size = 1;
         unsigned char c = read_input(0);
-        if (TAMP_UNLIKELY(c >> compressor->conf.literal)) {
+        if (TAMP_UNLIKELY(c >> conf_literal)) {
             return TAMP_EXCESS_BITS;
         }
-        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf.literal + 1);
+        write_to_bit_buffer(compressor, (1 << conf_literal) | c, conf_literal + 1);
     } else {
 #if TAMP_EXTENDED_COMPRESS
         // Extended: Start extended match continuation
-        if (compressor->conf.extended && match_size > compressor->min_pattern_size + 11) {
+        if (conf_extended && match_size > compressor->min_pattern_size + 11) {
             compressor->extended_match_count = match_size;
             compressor->extended_match_position = match_index;
             // Consume matched bytes from input
@@ -491,8 +497,8 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
 #endif  // TAMP_EXTENDED_COMPRESS
         // Write TOKEN (huffman code + window position)
         uint8_t huffman_index = match_size - compressor->min_pattern_size;
-        write_to_bit_buffer(compressor, (huffman_codes[huffman_index] << compressor->conf.window) | match_index,
-                            huffman_bits[huffman_index] + compressor->conf.window);
+        write_to_bit_buffer(compressor, (huffman_codes[huffman_index] << conf_window) | match_index,
+                            huffman_bits[huffman_index] + conf_window);
     }
     // Populate Window
     for (uint8_t i = 0; i < match_size; i++) {
