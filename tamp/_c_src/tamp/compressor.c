@@ -114,7 +114,7 @@ extern void find_best_match(TampCompressor *compressor, uint16_t *match_index, u
  * @param[out] match_index  If match_size is 0, this value is undefined.
  * @param[out] match_size Size of best found match.
  */
-static inline void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size) {
+static TAMP_NOINLINE void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size) {
     *match_size = 0;
 
     if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return;
