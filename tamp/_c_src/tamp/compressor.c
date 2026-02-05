@@ -156,6 +156,56 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
 #endif
 
+#if TAMP_EXTENDED_COMPRESS
+/**
+ * @brief Search for extended match continuation using implicit pattern comparison.
+ *
+ * Searches for pattern: window[current_pos:current_pos+current_count] + input[0...]
+ * starting from current_pos. Uses implicit comparison - no buffer allocation.
+ *
+ * @param[in] compressor TampCompressor object
+ * @param[in] current_pos Current match position in window (also search start)
+ * @param[in] current_count Current match length
+ * @param[out] new_pos Position of found longer match
+ * @param[out] new_count Length of found match
+ */
+static inline void find_extended_match(TampCompressor *compressor, uint16_t current_pos, uint8_t current_count,
+                                       uint16_t *new_pos, uint8_t *new_count) {
+    *new_count = 0;
+    const unsigned char *window = compressor->window;
+    const uint16_t window_size = WINDOW_SIZE;
+    const uint8_t max_pattern = MIN(current_count + compressor->input_size, MAX_PATTERN_SIZE);
+
+    // Need at least 2 bytes in target to search
+    if (max_pattern < 2) return;
+
+    // First two bytes of pattern (from window at current_pos)
+    const uint8_t first_byte = window[current_pos];
+    const uint8_t second_byte = window[current_pos + 1];
+
+    for (uint16_t cand = current_pos; cand + max_pattern <= window_size; cand++) {
+        // Quick 2-byte check
+        if (TAMP_LIKELY(window[cand] != first_byte)) continue;
+        if (TAMP_LIKELY(window[cand + 1] != second_byte)) continue;
+
+        // Extend match using implicit comparison
+        uint8_t match_len = 2;
+        for (uint8_t i = 2; i < max_pattern; i++) {
+            // Get target byte: from window if i < current_count, else from input
+            uint8_t target = (i < current_count) ? window[current_pos + i] : read_input(i - current_count);
+            if (window[cand + i] != target) break;
+            match_len = i + 1;
+        }
+
+        if (match_len > *new_count) {
+            *new_count = match_len;
+            *new_pos = cand;
+            if (match_len == max_pattern) return;
+        }
+    }
+}
+#endif  // TAMP_EXTENDED_COMPRESS
+
 #if TAMP_LAZY_MATCHING
 /**
  * @brief Check if writing a single byte will overlap with a future match section.
@@ -376,7 +426,22 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
                 compressor->input_size--;
                 // Continue to next iteration to try extending further
             } else {
-                // Match ended - emit current match
+                // O(1) extension failed - search for longer match from current position
+                uint16_t new_pos;
+                uint8_t new_count;
+                find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
+
+                if (new_count > current_count) {
+                    // Found longer match - update and continue
+                    uint8_t extra_bytes = new_count - current_count;
+                    compressor->extended_match_position = new_pos;
+                    compressor->extended_match_count = new_count;
+                    compressor->input_pos = input_add(extra_bytes);
+                    compressor->input_size -= extra_bytes;
+                    continue;
+                }
+
+                // No better match - emit current match
                 // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
                 if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
                 size_t token_bytes;
