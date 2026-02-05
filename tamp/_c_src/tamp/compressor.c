@@ -234,51 +234,33 @@ static inline uint8_t get_last_window_byte(TampCompressor* compressor) {
  */
 static inline void find_extended_match(TampCompressor* compressor, uint16_t current_pos, uint8_t current_count,
                                        uint16_t* new_pos, uint8_t* new_count) {
+    // Preconditions (guaranteed by caller):
+    // - input_size > 0
+    // - current_pos + current_count < WINDOW_SIZE
+    // - current_count < MAX_PATTERN_SIZE
     *new_count = 0;
     const unsigned char* window = compressor->window;
     const uint16_t window_size = WINDOW_SIZE;
     const uint8_t max_pattern = MIN(current_count + compressor->input_size, MAX_PATTERN_SIZE);
-
-    // Need at least current_count + 1 to find a longer match, and room in window
-    if (max_pattern <= current_count) return;
-    if (current_pos + current_count + 1 > window_size) return;
-
-    // First two bytes of pattern (from window at current_pos)
-    const uint8_t first_byte = window[current_pos];
-    const uint8_t second_byte = window[current_pos + 1];
-
-    // The target byte to extend by (input[0], like Python does)
     const uint8_t extend_byte = read_input(0);
 
-    // Search candidates that can fit at least current_count + 1 bytes
     for (uint16_t cand = current_pos; cand + current_count + 1 <= window_size; cand++) {
-        // Quick 2-byte check
-        if (TAMP_LIKELY(window[cand] != first_byte)) continue;
-        if (TAMP_LIKELY(window[cand + 1] != second_byte)) continue;
-
-        // Check if all current_count bytes match
-        bool full_match = true;
-        for (uint8_t i = 2; i < current_count; i++) {
-            if (window[cand + i] != window[current_pos + i]) {
-                full_match = false;
-                break;
-            }
-        }
-        if (!full_match) continue;
-
-        // Check if the extension byte matches
+        // Check extension byte first (most discriminating)
         if (window[cand + current_count] != extend_byte) continue;
 
-        // Found a match of current_count + 1 bytes - now extend as far as possible
+        // Check if current_count bytes match (at cand==current_pos, compares with self)
+        uint8_t i = 0;
+        while (i < current_count && window[cand + i] == window[current_pos + i]) i++;
+        if (i < current_count) continue;
+
+        // Found a match - extend as far as possible
         const uint8_t cand_max = MIN(max_pattern, window_size - cand);
         uint8_t match_len = current_count + 1;
-        for (uint8_t i = current_count + 1; i < cand_max; i++) {
-            uint8_t target = read_input(i - current_count);
-            if (window[cand + i] != target) break;
+        for (i = current_count + 1; i < cand_max; i++) {
+            if (window[cand + i] != read_input(i - current_count)) break;
             match_len = i + 1;
         }
 
-        // Track this match (guaranteed > current_count)
         if (match_len > *new_count) {
             *new_count = match_len;
             *new_pos = cand;
