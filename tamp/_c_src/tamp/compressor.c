@@ -49,6 +49,12 @@ static TAMP_NOINLINE void write_to_bit_buffer(TampCompressor* compressor, uint32
  * @brief Partially flush the internal bit buffer.
  *
  * Flushes complete bytes from the bit buffer. Up to 7 bits may remain.
+ *
+ * @param[in,out] compressor Compressor state.
+ * @param[in,out] output Output buffer pointer (updated on return).
+ * @param[in,out] output_size Available space (updated on return).
+ * @param[in,out] output_written_size Bytes written (accumulated).
+ * @return TAMP_OK on success, TAMP_OUTPUT_FULL if output buffer is too small.
  */
 static TAMP_NOINLINE tamp_res partial_flush(TampCompressor* compressor, unsigned char** output, size_t* output_size,
                                             size_t* output_written_size) {
