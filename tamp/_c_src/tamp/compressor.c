@@ -291,13 +291,28 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor *compres
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
 
     // Write to window (up to end of buffer, no wrap)
+    // Handle overlap: when destination is ahead of source and they overlap,
+    // we must copy in reverse order to avoid reading corrupted data.
     uint16_t remaining = WINDOW_SIZE - compressor->window_pos;
     uint8_t window_write = MIN(count, remaining);
-    for (uint8_t i = 0; i < window_write; i++) {
-        compressor->window[compressor->window_pos] = compressor->window[position + i];
-        compressor->window_pos++;
+
+    // Calculate distance from source to destination in circular buffer
+    const uint16_t src_to_dst = (compressor->window_pos - position) & window_mask;
+
+    if (TAMP_UNLIKELY(src_to_dst < window_write && src_to_dst > 0)) {
+        // Overlap case: copy in reverse order
+        for (uint8_t i = window_write; i-- > 0;) {
+            compressor->window[(compressor->window_pos + i) & window_mask] = compressor->window[position + i];
+        }
+        compressor->window_pos = (compressor->window_pos + window_write) & window_mask;
+    } else {
+        // Normal case: forward copy
+        for (uint8_t i = 0; i < window_write; i++) {
+            compressor->window[compressor->window_pos] = compressor->window[position + i];
+            compressor->window_pos++;
+        }
+        compressor->window_pos &= window_mask;
     }
-    compressor->window_pos &= window_mask;
 
     // Reset extended match state
     compressor->extended_match_count = 0;
@@ -389,7 +404,6 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
     }
 
     // Extended: Handle RLE accumulation with persistent state
-    // For simplicity in C, we commit RLE immediately when the run ends
     if (TAMP_UNLIKELY(compressor->conf.extended)) {
         uint8_t last_byte = get_last_window_byte(compressor);
 
@@ -483,13 +497,14 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
         write_to_bit_buffer(compressor, IS_LITERAL_FLAG | c, compressor->conf.literal + 1);
     } else {
 #if TAMP_EXTENDED_COMPRESS
-        // Extended: Check for extended match
+        // Extended: Start extended match continuation
         if (compressor->conf.extended && match_size > compressor->min_pattern_size + 11) {
             compressor->extended_match_count = match_size;
             compressor->extended_match_position = match_index;
             // Consume matched bytes from input
             compressor->input_pos = input_add(match_size);
             compressor->input_size -= match_size;
+            // Return - continuation code at start of poll will try to extend or emit
             return TAMP_OK;
         }
 #endif  // TAMP_EXTENDED_COMPRESS
