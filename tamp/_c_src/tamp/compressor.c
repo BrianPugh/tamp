@@ -45,25 +45,6 @@ static TAMP_NOINLINE void write_to_bit_buffer(TampCompressor* compressor, uint32
     compressor->bit_buffer |= bits << (32 - compressor->bit_buffer_pos);
 }
 
-#if TAMP_EXTENDED_COMPRESS
-/**
- * @brief Write extended huffman encoding (huffman + trailing bits).
- *
- * Used for both RLE count and extended match size encoding.
- *
- * @param[in,out] compressor Compressor with bit buffer.
- * @param[in] value The value to encode.
- * @param[in] trailing_bits Number of trailing bits (3 for extended match, 4 for RLE).
- */
-static TAMP_NOINLINE void write_extended_huffman(TampCompressor* compressor, uint8_t value, uint8_t trailing_bits) {
-    uint8_t code_index = value >> trailing_bits;
-    // Write huffman code (without literal flag) + trailing bits in one call
-    write_to_bit_buffer(compressor, (huffman_codes[code_index] << trailing_bits) | (value & ((1 << trailing_bits) - 1)),
-                        (huffman_bits[code_index] - 1) + trailing_bits);
-}
-
-#endif  // TAMP_EXTENDED_COMPRESS
-
 /**
  * @brief Partially flush the internal bit buffer.
  *
@@ -156,7 +137,88 @@ static TAMP_NOINLINE void find_best_match(TampCompressor* compressor, uint16_t* 
 
 #endif
 
+#if TAMP_LAZY_MATCHING
+/**
+ * @brief Check if writing a single byte will overlap with a future match section.
+ *
+ * @param[in] write_pos Position where the single byte will be written.
+ * @param[in] match_index Index in window where the match starts.
+ * @param[in] match_size Size of the match to validate.
+ * @return true if no overlap (match is safe), false if there's overlap.
+ */
+static inline bool validate_no_match_overlap(uint16_t write_pos, uint16_t match_index, uint8_t match_size) {
+    // Check if write position falls within the match range [match_index, match_index + match_size - 1]
+    return write_pos < match_index || write_pos >= match_index + match_size;
+}
+#endif
+
+tamp_res tamp_compressor_init(TampCompressor* compressor, const TampConf* conf, unsigned char* window) {
+    const TampConf conf_default = {
+        .window = 10,
+        .literal = 8,
+        .use_custom_dictionary = false,
+#if TAMP_LAZY_MATCHING
+        .lazy_matching = false,
+#endif
 #if TAMP_EXTENDED_COMPRESS
+        .extended = true,  // Default to extended format
+#endif
+    };
+    if (!conf) conf = &conf_default;
+    if (conf->window < 8 || conf->window > 15) return TAMP_INVALID_CONF;
+    if (conf->literal < 5 || conf->literal > 8) return TAMP_INVALID_CONF;
+#if !TAMP_EXTENDED_COMPRESS
+    if (conf->extended) return TAMP_INVALID_CONF;  // Extended requested but not compiled in
+#endif
+
+    for (uint8_t i = 0; i < sizeof(TampCompressor); i++)  // Zero-out the struct
+        ((unsigned char*)compressor)[i] = 0;
+
+    // Build header directly from conf (8 bits total)
+    // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
+    uint8_t header = ((conf->window - 8) << 5) | ((conf->literal - 5) << 3) | (conf->use_custom_dictionary << 2) |
+                     (conf->extended << 1);
+
+    compressor->conf = *conf;  // Single struct copy
+    compressor->window = window;
+    compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
+
+#if TAMP_LAZY_MATCHING
+    compressor->cached_match_index = -1;  // Initialize cache as invalid
+#endif
+
+    if (!conf->use_custom_dictionary) tamp_initialize_dictionary(window, (1 << conf->window));
+
+    write_to_bit_buffer(compressor, header, 8);
+
+    return TAMP_OK;
+}
+
+#if TAMP_EXTENDED_COMPRESS
+/**
+ * @brief Write extended huffman encoding (huffman + trailing bits).
+ *
+ * Used for both RLE count and extended match size encoding.
+ *
+ * @param[in,out] compressor Compressor with bit buffer.
+ * @param[in] value The value to encode.
+ * @param[in] trailing_bits Number of trailing bits (3 for extended match, 4 for RLE).
+ */
+static TAMP_NOINLINE void write_extended_huffman(TampCompressor* compressor, uint8_t value, uint8_t trailing_bits) {
+    uint8_t code_index = value >> trailing_bits;
+    // Write huffman code (without literal flag) + trailing bits in one call
+    write_to_bit_buffer(compressor, (huffman_codes[code_index] << trailing_bits) | (value & ((1 << trailing_bits) - 1)),
+                        (huffman_bits[code_index] - 1) + trailing_bits);
+}
+
+/**
+ * @brief Get the last byte written to the window.
+ */
+static inline uint8_t get_last_window_byte(TampCompressor* compressor) {
+    uint16_t prev_pos = (compressor->window_pos - 1) & ((1 << compressor->conf.window) - 1);
+    return compressor->window[prev_pos];
+}
+
 /**
  * @brief Search for extended match continuation using implicit pattern comparison.
  *
@@ -223,73 +285,6 @@ static inline void find_extended_match(TampCompressor* compressor, uint16_t curr
             if (match_len == max_pattern) return;
         }
     }
-}
-#endif  // TAMP_EXTENDED_COMPRESS
-
-#if TAMP_LAZY_MATCHING
-/**
- * @brief Check if writing a single byte will overlap with a future match section.
- *
- * @param[in] write_pos Position where the single byte will be written.
- * @param[in] match_index Index in window where the match starts.
- * @param[in] match_size Size of the match to validate.
- * @return true if no overlap (match is safe), false if there's overlap.
- */
-static inline bool validate_no_match_overlap(uint16_t write_pos, uint16_t match_index, uint8_t match_size) {
-    // Check if write position falls within the match range [match_index, match_index + match_size - 1]
-    return write_pos < match_index || write_pos >= match_index + match_size;
-}
-#endif
-
-tamp_res tamp_compressor_init(TampCompressor* compressor, const TampConf* conf, unsigned char* window) {
-    const TampConf conf_default = {
-        .window = 10,
-        .literal = 8,
-        .use_custom_dictionary = false,
-#if TAMP_LAZY_MATCHING
-        .lazy_matching = false,
-#endif
-#if TAMP_EXTENDED_COMPRESS
-        .extended = true,  // Default to extended format
-#endif
-    };
-    if (!conf) conf = &conf_default;
-    if (conf->window < 8 || conf->window > 15) return TAMP_INVALID_CONF;
-    if (conf->literal < 5 || conf->literal > 8) return TAMP_INVALID_CONF;
-#if !TAMP_EXTENDED_COMPRESS
-    if (conf->extended) return TAMP_INVALID_CONF;  // Extended requested but not compiled in
-#endif
-
-    for (uint8_t i = 0; i < sizeof(TampCompressor); i++)  // Zero-out the struct
-        ((unsigned char*)compressor)[i] = 0;
-
-    // Build header directly from conf (8 bits total)
-    // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
-    uint8_t header = ((conf->window - 8) << 5) | ((conf->literal - 5) << 3) | (conf->use_custom_dictionary << 2) |
-                     (conf->extended << 1);
-
-    compressor->conf = *conf;  // Single struct copy
-    compressor->window = window;
-    compressor->min_pattern_size = tamp_compute_min_pattern_size(conf->window, conf->literal);
-
-#if TAMP_LAZY_MATCHING
-    compressor->cached_match_index = -1;  // Initialize cache as invalid
-#endif
-
-    if (!conf->use_custom_dictionary) tamp_initialize_dictionary(window, (1 << conf->window));
-
-    write_to_bit_buffer(compressor, header, 8);
-
-    return TAMP_OK;
-}
-
-#if TAMP_EXTENDED_COMPRESS
-/**
- * @brief Get the last byte written to the window.
- */
-static inline uint8_t get_last_window_byte(TampCompressor* compressor) {
-    uint16_t prev_pos = (compressor->window_pos - 1) & ((1 << compressor->conf.window) - 1);
-    return compressor->window[prev_pos];
 }
 
 /**
