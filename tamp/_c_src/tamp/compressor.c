@@ -381,17 +381,54 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
     uint16_t match_index = 0;
 
 #if TAMP_EXTENDED_COMPRESS
-    // Extended: Handle extended match continuation
-    if (TAMP_UNLIKELY(conf_extended && compressor->extended_match_count)) {
-        // We're in extended match mode - try to extend the match
-        const uint8_t max_ext_match = compressor->min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA;
+    if (TAMP_UNLIKELY(conf_extended)) {
+        // Handle extended match continuation
+        if (compressor->extended_match_count) {
+            // We're in extended match mode - try to extend the match
+            const uint8_t max_ext_match = compressor->min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA;
 
-        while (compressor->input_size > 0) {
-            const uint16_t current_pos = compressor->extended_match_position;
-            const uint8_t current_count = compressor->extended_match_count;
+            while (compressor->input_size > 0) {
+                const uint16_t current_pos = compressor->extended_match_position;
+                const uint8_t current_count = compressor->extended_match_count;
 
-            // Check if extending would go beyond window buffer boundary (no wrap-around)
-            if (current_pos + current_count >= WINDOW_SIZE) {
+                // Check if extending would go beyond window buffer boundary (no wrap-around)
+                if (current_pos + current_count >= WINDOW_SIZE) {
+                    // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
+                    if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
+                    size_t token_bytes;
+                    res = write_extended_match_token(compressor, output, output_size, &token_bytes);
+                    (*output_written_size) += token_bytes;
+                    if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+                    return TAMP_OK;
+                }
+
+                // Check if we've reached max extended match size
+                if (current_count >= max_ext_match) {
+                    // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
+                    if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
+                    size_t token_bytes;
+                    res = write_extended_match_token(compressor, output, output_size, &token_bytes);
+                    (*output_written_size) += token_bytes;
+                    if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+                    return TAMP_OK;
+                }
+
+                // Search for longer match (includes O(1) extension at same position)
+                uint16_t new_pos = 0;
+                uint8_t new_count;
+                find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
+
+                if (new_count > current_count) {
+                    // Found longer match - update and continue
+                    uint8_t extra_bytes = new_count - current_count;
+                    compressor->extended_match_position = new_pos;
+                    compressor->extended_match_count = new_count;
+                    compressor->input_pos = input_add(extra_bytes);
+                    compressor->input_size -= extra_bytes;
+                    continue;
+                }
+
+                // No longer match found - emit current match
                 // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
                 if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
                 size_t token_bytes;
@@ -400,48 +437,11 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
                 if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
                 return TAMP_OK;
             }
-
-            // Check if we've reached max extended match size
-            if (current_count >= max_ext_match) {
-                // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
-                if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
-                size_t token_bytes;
-                res = write_extended_match_token(compressor, output, output_size, &token_bytes);
-                (*output_written_size) += token_bytes;
-                if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-                return TAMP_OK;
-            }
-
-            // Search for longer match (includes O(1) extension at same position)
-            uint16_t new_pos = 0;
-            uint8_t new_count;
-            find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
-
-            if (new_count > current_count) {
-                // Found longer match - update and continue
-                uint8_t extra_bytes = new_count - current_count;
-                compressor->extended_match_position = new_pos;
-                compressor->extended_match_count = new_count;
-                compressor->input_pos = input_add(extra_bytes);
-                compressor->input_size -= extra_bytes;
-                continue;
-            }
-
-            // No longer match found - emit current match
-            // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
-            if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
-            size_t token_bytes;
-            res = write_extended_match_token(compressor, output, output_size, &token_bytes);
-            (*output_written_size) += token_bytes;
-            if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+            // Ran out of input while extending - return and wait for more
             return TAMP_OK;
         }
-        // Ran out of input while extending - return and wait for more
-        return TAMP_OK;
-    }
 
-    // Extended: Handle RLE accumulation with persistent state
-    if (TAMP_UNLIKELY(conf_extended)) {
+        // Handle RLE accumulation with persistent state
         uint8_t last_byte = get_last_window_byte(compressor);
 
         // Count RLE bytes in current buffer WITHOUT consuming yet
