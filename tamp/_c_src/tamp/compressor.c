@@ -342,9 +342,7 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compres
     uint8_t window_write = MIN(count, remaining);
     tamp_window_copy(compressor->window, &compressor->window_pos, position, window_write, window_mask);
 
-    // Reset extended match state
-    compressor->extended_match_count = 0;
-    compressor->extended_match_position = 0;
+    compressor->extended_match_count = 0;  // Position reset not needed - only read when count > 0
 
     return TAMP_OK;
 }
