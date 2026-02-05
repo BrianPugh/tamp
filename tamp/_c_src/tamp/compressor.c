@@ -370,11 +370,9 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
 
     if (TAMP_UNLIKELY(compressor->input_size == 0)) return TAMP_OK;
 
-    {
-        // Make sure there's enough room in the bit buffer.
-        res = partial_flush(compressor, &output, &output_size, output_written_size);
-        if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-    }
+    // Make sure there's enough room in the bit buffer.
+    res = partial_flush(compressor, &output, &output_size, output_written_size);
+    if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
 
     if (TAMP_UNLIKELY(output_size == 0)) return TAMP_OUTPUT_FULL;
 
