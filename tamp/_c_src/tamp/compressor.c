@@ -438,7 +438,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor *compressor, unsigned
             }
 
             // Search for longer match (includes O(1) extension at same position)
-            uint16_t new_pos;
+            uint16_t new_pos = 0;
             uint8_t new_count;
             find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
 
