@@ -699,9 +699,7 @@ flush_check:
             write_rle_token(compressor, compressor->rle_count);
         }
         compressor->rle_count = 0;
-
-        // Partial flush again after writing token
-        res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
+        chunk_output_written_size = 0;  // Already handled above; flush_done will flush token bits
     } else if (compressor->conf.extended && compressor->extended_match_count) {
         // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
         if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
