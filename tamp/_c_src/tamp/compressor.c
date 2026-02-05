@@ -308,13 +308,16 @@ static TAMP_NOINLINE void write_rle_token(TampCompressor* compressor, uint8_t co
  */
 static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compressor, unsigned char* output,
                                                          size_t output_size, size_t* output_written_size) {
+    *output_written_size = 0;
+
+    // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
+    if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
+
     const uint16_t window_mask = (1 << compressor->conf.window) - 1;
     const uint8_t count = compressor->extended_match_count;
     const uint16_t position = compressor->extended_match_position;
     tamp_res res;
     size_t flush_bytes;
-
-    *output_written_size = 0;
 
     // Write symbol (7 bits) + extended huffman (up to 11 bits) = 18 bits max
     // With ≤7 bits already in buffer, total ≤25 bits - fits in 32-bit buffer
@@ -393,8 +396,6 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
 
                 // Check if extending would go beyond window buffer boundary (no wrap-around)
                 if (current_pos + current_count >= WINDOW_SIZE) {
-                    // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
-                    if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
                     size_t token_bytes;
                     res = write_extended_match_token(compressor, output, output_size, &token_bytes);
                     (*output_written_size) += token_bytes;
@@ -404,8 +405,6 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
 
                 // Check if we've reached max extended match size
                 if (current_count >= max_ext_match) {
-                    // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
-                    if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
                     size_t token_bytes;
                     res = write_extended_match_token(compressor, output, output_size, &token_bytes);
                     (*output_written_size) += token_bytes;
@@ -429,8 +428,6 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
                 }
 
                 // No longer match found - emit current match
-                // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
-                if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
                 size_t token_bytes;
                 res = write_extended_match_token(compressor, output, output_size, &token_bytes);
                 (*output_written_size) += token_bytes;
@@ -676,8 +673,6 @@ flush_check:
         compressor->rle_count = 0;
         chunk_output_written_size = 0;
     } else if (compressor->conf.extended && compressor->extended_match_count) {
-        // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
-        if (TAMP_UNLIKELY(output_size < EXTENDED_MATCH_MIN_OUTPUT_BYTES)) return TAMP_OUTPUT_FULL;
         res = write_extended_match_token(compressor, output, output_size, &chunk_output_written_size);
     }
 #endif  // TAMP_EXTENDED_COMPRESS
