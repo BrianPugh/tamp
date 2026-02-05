@@ -50,12 +50,15 @@ static TAMP_NOINLINE void write_to_bit_buffer(TampCompressor* compressor, uint32
  *
  * Flushes complete bytes from the bit buffer. Up to 7 bits may remain.
  */
-static TAMP_NOINLINE tamp_res partial_flush(TampCompressor* compressor, unsigned char* output, size_t output_size,
+static TAMP_NOINLINE tamp_res partial_flush(TampCompressor* compressor, unsigned char** output, size_t* output_size,
                                             size_t* output_written_size) {
-    for (*output_written_size = output_size; compressor->bit_buffer_pos >= 8 && output_size;
-         output_size--, compressor->bit_buffer_pos -= 8, compressor->bit_buffer <<= 8)
-        *output++ = compressor->bit_buffer >> 24;
-    *output_written_size -= output_size;
+    while (compressor->bit_buffer_pos >= 8 && *output_size) {
+        *(*output)++ = compressor->bit_buffer >> 24;
+        (*output_size)--;
+        (*output_written_size)++;
+        compressor->bit_buffer_pos -= 8;
+        compressor->bit_buffer <<= 8;
+    }
     return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
 
@@ -317,7 +320,6 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compres
     const uint8_t count = compressor->extended_match_count;
     const uint16_t position = compressor->extended_match_position;
     tamp_res res;
-    size_t flush_bytes;
 
     // Write symbol (7 bits) + extended huffman (up to 11 bits) = 18 bits max
     // With ≤7 bits already in buffer, total ≤25 bits - fits in 32-bit buffer
@@ -326,18 +328,14 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compres
     write_extended_huffman(compressor, count - compressor->min_pattern_size - 11 - 1, TAMP_LEADING_EXTENDED_MATCH_BITS);
 
     // Flush to make room for window position (up to 15 bits)
-    res = partial_flush(compressor, output, output_size, &flush_bytes);
-    *output_written_size += flush_bytes;
-    output += flush_bytes;
-    output_size -= flush_bytes;
+    res = partial_flush(compressor, &output, &output_size, output_written_size);
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
 
     // Write window position - with ≤7 bits remaining, up to 22 bits total - fits
     write_to_bit_buffer(compressor, position, compressor->conf.window);
 
     // Final flush
-    res = partial_flush(compressor, output, output_size, &flush_bytes);
-    *output_written_size += flush_bytes;
+    res = partial_flush(compressor, &output, &output_size, output_written_size);
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
 
     // Write to window (up to end of buffer, no wrap)
@@ -370,12 +368,8 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
 
     {
         // Make sure there's enough room in the bit buffer.
-        size_t flush_bytes_written;
-        res = partial_flush(compressor, output, output_size, &flush_bytes_written);
-        (*output_written_size) += flush_bytes_written;
+        res = partial_flush(compressor, &output, &output_size, output_written_size);
         if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-        output_size -= flush_bytes_written;
-        output += flush_bytes_written;  // cppcheck-suppress unreadVariable
     }
 
     if (TAMP_UNLIKELY(output_size == 0)) return TAMP_OUTPUT_FULL;
@@ -413,7 +407,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
                 }
 
                 // Search for longer match (includes O(1) extension at same position)
-                uint16_t new_pos = 0;
+                uint16_t new_pos;
                 uint8_t new_count;
                 find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
 
@@ -646,11 +640,8 @@ tamp_res tamp_compressor_flush(TampCompressor* compressor, unsigned char* output
 
 flush_check:
     // Flush pending bits before checking for more work
-    res = partial_flush(compressor, output, output_size, &chunk_output_written_size);
-    (*output_written_size) += chunk_output_written_size;
+    res = partial_flush(compressor, &output, &output_size, output_written_size);
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-    output_size -= chunk_output_written_size;
-    output += chunk_output_written_size;
 
     if (TAMP_LIKELY(compressor->input_size)) {
         res = tamp_compressor_poll(compressor, output, output_size, &chunk_output_written_size);
