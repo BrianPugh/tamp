@@ -291,28 +291,9 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor *compres
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
 
     // Write to window (up to end of buffer, no wrap)
-    // Handle overlap: when destination is ahead of source and they overlap,
-    // we must copy in reverse order to avoid reading corrupted data.
     uint16_t remaining = WINDOW_SIZE - compressor->window_pos;
     uint8_t window_write = MIN(count, remaining);
-
-    // Calculate distance from source to destination in circular buffer
-    const uint16_t src_to_dst = (compressor->window_pos - position) & window_mask;
-
-    if (TAMP_UNLIKELY(src_to_dst < window_write && src_to_dst > 0)) {
-        // Overlap case: copy in reverse order
-        for (uint8_t i = window_write; i-- > 0;) {
-            compressor->window[(compressor->window_pos + i) & window_mask] = compressor->window[position + i];
-        }
-        compressor->window_pos = (compressor->window_pos + window_write) & window_mask;
-    } else {
-        // Normal case: forward copy
-        for (uint8_t i = 0; i < window_write; i++) {
-            compressor->window[compressor->window_pos] = compressor->window[position + i];
-            compressor->window_pos++;
-        }
-        compressor->window_pos &= window_mask;
-    }
+    tamp_window_copy(compressor->window, &compressor->window_pos, position, window_write, window_mask);
 
     // Reset extended match state
     compressor->extended_match_count = 0;

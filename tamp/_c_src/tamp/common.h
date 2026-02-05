@@ -324,6 +324,26 @@ void tamp_initialize_dictionary(unsigned char *buffer, size_t size);
  */
 int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal);
 
+/**
+ * @brief Copy pattern from window to window, updating window_pos.
+ *
+ * Handles potential overlap between source and destination regions by
+ * copying backwards when the destination would "catch up" to the source.
+ *
+ * IMPORTANT: Caller must validate that (window_offset + match_size) does not
+ * exceed window bounds before calling this function. This function assumes
+ * window_offset and match_size are pre-validated and does not perform
+ * bounds checking on source reads.
+ *
+ * @param window Circular buffer (size must be power of 2)
+ * @param window_pos Current write position (updated by this function)
+ * @param window_offset Source position to copy from
+ * @param match_size Number of bytes to copy
+ * @param window_mask Bitmask for wrapping (window_size - 1)
+ */
+void tamp_window_copy(unsigned char *window, uint16_t *window_pos, uint16_t window_offset, uint8_t match_size,
+                      uint16_t window_mask);
+
 #ifdef __cplusplus
 }
 #endif
