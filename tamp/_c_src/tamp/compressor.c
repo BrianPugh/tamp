@@ -716,22 +716,25 @@ flush_check:
     goto flush_check;
 
 flush_done:
-
-    // Check if there's enough output buffer space
-    if (compressor->bit_buffer_pos) {
-        if (output_size == 0) {
-            return TAMP_OUTPUT_FULL;
-        }
-        if (write_token) {
-            if (output_size < 2) return TAMP_OUTPUT_FULL;
-            write_to_bit_buffer(compressor, FLUSH_CODE, 9);
-        }
+    // At this point, up to 7 bits may remain in the compressor->bit_buffer
+    // The output buffer may have 0 bytes remaining.
+    if (write_token && compressor->bit_buffer_pos) {
+        // We don't want to write the FLUSH token to the bit_buffer unless
+        // we are confident that it'll wind up in the output buffer
+        // in THIS function call.
+        // Otherwise, if we wind up with a TAMP_OUTPUT_FULL result, we could
+        // end up accidentally writing multiple FLUSH tokens.
+        if (TAMP_UNLIKELY(output_size < 2)) return TAMP_OUTPUT_FULL;
+        write_to_bit_buffer(compressor, FLUSH_CODE, 9);
     }
+
+    // At this point, up to 16 bits may remain in the compressor->bit_buffer
+    // The output buffer may have 0 bytes remaining.
 
     // Flush the remainder of the output bit-buffer
     while (compressor->bit_buffer_pos) {
-        *output = compressor->bit_buffer >> 24;
-        output++;
+        if (TAMP_UNLIKELY(output_size == 0)) return TAMP_OUTPUT_FULL;
+        *output++ = compressor->bit_buffer >> 24;
         compressor->bit_buffer <<= 8;
         compressor->bit_buffer_pos -= MIN(compressor->bit_buffer_pos, 8);
         output_size--;
