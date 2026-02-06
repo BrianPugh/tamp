@@ -24,6 +24,10 @@
 
 #define FLUSH_CODE (0xAB)
 
+// Internal return value for poll_extended_handling: signals caller to
+// proceed with normal pattern matching rather than returning immediately.
+#define TAMP_POLL_CONTINUE ((tamp_res)127)
+
 // encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths
 static const uint8_t huffman_codes[] = {0x0, 0x3, 0x8, 0xb, 0x14, 0x24, 0x26, 0x2b, 0x4b, 0x54, 0x94, 0x95, 0xaa, 0x27};
 // These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
@@ -237,14 +241,18 @@ static TAMP_NOINLINE uint8_t get_last_window_byte(TampCompressor* compressor) {
  * starting from current_pos. Returns the longest match found (which may be at
  * current_pos itself if O(1) extension works, or at a different position).
  *
+ * NOINLINE + Os: Called only during extended match continuation (rare path).
+ * Outlining saves ~100 bytes in poll on armv6m.
+ *
  * @param[in] compressor TampCompressor object
  * @param[in] current_pos Current match position in window (also search start)
  * @param[in] current_count Current match length
  * @param[out] new_pos Position of found match (only valid if new_count > current_count)
  * @param[out] new_count Length of found match
  */
-static inline void find_extended_match(TampCompressor* compressor, uint16_t current_pos, uint8_t current_count,
-                                       uint16_t* new_pos, uint8_t* new_count) {
+static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE void find_extended_match(TampCompressor* compressor, uint16_t current_pos,
+                                                                 uint8_t current_count, uint16_t* new_pos,
+                                                                 uint8_t* new_count) {
     // Preconditions (guaranteed by caller):
     // - input_size > 0
     // - current_pos + current_count < WINDOW_SIZE
@@ -353,6 +361,92 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compres
 
     return TAMP_OK;
 }
+
+/**
+ * @brief Handle all extended-specific logic in poll (match continuation + RLE).
+ *
+ * NOINLINE + Os: Extended paths are rarely executed. Outlining from poll saves
+ * significant code size on register-constrained Cortex-M0+ where the compiler
+ * otherwise spills heavily to stack (~48 bytes saved on armv6m).
+ *
+ * @return TAMP_OK if fully handled (caller should return TAMP_OK),
+ *         TAMP_POLL_CONTINUE if caller should proceed to normal pattern matching,
+ *         other tamp_res on error.
+ */
+static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE tamp_res poll_extended_handling(TampCompressor* compressor,
+                                                                        unsigned char** output, size_t* output_size,
+                                                                        size_t* output_written_size) {
+    // Handle extended match continuation
+    if (compressor->extended_match_count) {
+        const uint8_t max_ext_match = compressor->min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA;
+
+        while (compressor->input_size > 0) {
+            const uint16_t current_pos = compressor->extended_match_position;
+            const uint8_t current_count = compressor->extended_match_count;
+
+            if (current_pos + current_count >= WINDOW_SIZE || current_count >= max_ext_match) {
+                return write_extended_match_token(compressor, output, output_size, output_written_size);
+            }
+
+            uint16_t new_pos;
+            uint8_t new_count;
+            find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
+
+            if (new_count > current_count) {
+                uint8_t extra_bytes = new_count - current_count;
+                compressor->extended_match_position = new_pos;
+                compressor->extended_match_count = new_count;
+                compressor->input_pos = input_add(extra_bytes);
+                compressor->input_size -= extra_bytes;
+                continue;
+            }
+
+            return write_extended_match_token(compressor, output, output_size, output_written_size);
+        }
+        return TAMP_OK;
+    }
+
+    // Handle RLE accumulation
+    uint8_t last_byte = get_last_window_byte(compressor);
+
+    uint8_t rle_available = 0;
+    while (rle_available < compressor->input_size && compressor->rle_count + rle_available < RLE_MAX_COUNT &&
+           compressor->input[input_add(rle_available)] == last_byte) {
+        rle_available++;
+    }
+
+    uint8_t total_rle = compressor->rle_count + rle_available;
+    bool rle_ended = (rle_available < compressor->input_size) || (total_rle >= RLE_MAX_COUNT);
+
+    if (!rle_ended && total_rle > 0) {
+        compressor->rle_count = total_rle;
+        compressor->input_pos = input_add(rle_available);
+        compressor->input_size -= rle_available;
+        return TAMP_OK;
+    }
+
+    if (total_rle >= 2) {
+        if (total_rle == rle_available && total_rle <= 6) {
+            uint16_t pattern_index;
+            uint8_t pattern_size;
+            find_best_match(compressor, &pattern_index, &pattern_size);
+
+            if (pattern_size > total_rle) {
+                compressor->rle_count = 0;
+                return TAMP_POLL_CONTINUE;  // Proceed to pattern matching
+            }
+        }
+
+        compressor->input_pos = input_add(rle_available);
+        compressor->input_size -= rle_available;
+        write_rle_token(compressor, total_rle);
+        compressor->rle_count = 0;
+        return TAMP_OK;
+    }
+
+    if (total_rle == 1) compressor->rle_count = 0;
+    return TAMP_POLL_CONTINUE;  // Proceed to pattern matching
+}
 #endif  // TAMP_EXTENDED_COMPRESS
 
 TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned char* output, size_t output_size,
@@ -362,9 +456,6 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
     const uint8_t conf_window = compressor->conf.window;
     const uint8_t conf_literal = compressor->conf.literal;
     const uint16_t window_mask = (1 << conf_window) - 1;
-#if TAMP_EXTENDED_COMPRESS
-    const bool conf_extended = compressor->conf.extended;
-#endif
     size_t output_written_size_proxy;
 
     if (!output_written_size) output_written_size = &output_written_size_proxy;
@@ -382,105 +473,11 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
     uint16_t match_index = 0;
 
 #if TAMP_EXTENDED_COMPRESS
-    if (TAMP_UNLIKELY(conf_extended)) {
-        // Handle extended match continuation
-        if (compressor->extended_match_count) {
-            // We're in extended match mode - try to extend the match
-            const uint8_t max_ext_match = compressor->min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA;
-
-            while (compressor->input_size > 0) {
-                const uint16_t current_pos = compressor->extended_match_position;
-                const uint8_t current_count = compressor->extended_match_count;
-
-                // Check if extending would go beyond window buffer boundary (no wrap-around)
-                if (current_pos + current_count >= WINDOW_SIZE) {
-                    res = write_extended_match_token(compressor, &output, &output_size, output_written_size);
-                    if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-                    return TAMP_OK;
-                }
-
-                // Check if we've reached max extended match size
-                if (current_count >= max_ext_match) {
-                    res = write_extended_match_token(compressor, &output, &output_size, output_written_size);
-                    if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-                    return TAMP_OK;
-                }
-
-                // Search for longer match (includes O(1) extension at same position)
-                uint16_t new_pos;
-                uint8_t new_count;
-                find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
-
-                if (new_count > current_count) {
-                    // Found longer match - update and continue
-                    uint8_t extra_bytes = new_count - current_count;
-                    compressor->extended_match_position = new_pos;
-                    compressor->extended_match_count = new_count;
-                    compressor->input_pos = input_add(extra_bytes);
-                    compressor->input_size -= extra_bytes;
-                    continue;
-                }
-
-                // No longer match found - emit current match
-                res = write_extended_match_token(compressor, &output, &output_size, output_written_size);
-                if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-                return TAMP_OK;
-            }
-            // Ran out of input while extending - return and wait for more
-            return TAMP_OK;
-        }
-
-        // Handle RLE accumulation with persistent state
-        uint8_t last_byte = get_last_window_byte(compressor);
-
-        // Count RLE bytes in current buffer WITHOUT consuming yet
-        uint8_t rle_available = 0;
-        while (rle_available < compressor->input_size && compressor->rle_count + rle_available < RLE_MAX_COUNT &&
-               compressor->input[input_add(rle_available)] == last_byte) {
-            rle_available++;
-        }
-
-        uint8_t total_rle = compressor->rle_count + rle_available;
-        bool rle_ended = (rle_available < compressor->input_size) || (total_rle >= RLE_MAX_COUNT);
-
-        // If RLE hasn't ended and we haven't hit max, consume and wait for more
-        if (!rle_ended && total_rle > 0) {
-            compressor->rle_count = total_rle;
-            compressor->input_pos = input_add(rle_available);
-            compressor->input_size -= rle_available;
-            return TAMP_OK;
-        }
-
-        // RLE run has ended - decide between RLE and pattern match
-        if (total_rle >= 2) {
-            bool use_pattern = false;
-
-            // For short RLE runs (all from this call), check if pattern match is better
-            if (total_rle == rle_available && total_rle <= 6) {
-                uint16_t pattern_index;
-                uint8_t pattern_size;
-                find_best_match(compressor, &pattern_index, &pattern_size);
-
-                if (pattern_size > total_rle) {
-                    use_pattern = true;
-                    // Don't consume RLE bytes - fall through to pattern matching
-                }
-            }
-
-            if (!use_pattern) {
-                // Use RLE - consume bytes and write token
-                compressor->input_pos = input_add(rle_available);
-                compressor->input_size -= rle_available;
-                write_rle_token(compressor, total_rle);
-                compressor->rle_count = 0;
-                return TAMP_OK;
-            }
-            compressor->rle_count = 0;
-        } else if (total_rle == 1) {
-            // Single byte - not worth RLE, will be handled as literal/pattern
-            // Byte is still in input buffer (not consumed), just reset RLE state
-            compressor->rle_count = 0;
-        }
+    if (TAMP_UNLIKELY(compressor->conf.extended)) {
+        // Handle extended match continuation + RLE (outlined for code size)
+        res = poll_extended_handling(compressor, &output, &output_size, output_written_size);
+        if (res != TAMP_POLL_CONTINUE) return res;
+        // TAMP_POLL_CONTINUE: proceed to pattern matching below
     }
 #endif  // TAMP_EXTENDED_COMPRESS
 
@@ -544,7 +541,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
     } else {
 #if TAMP_EXTENDED_COMPRESS
         // Extended: Start extended match continuation
-        if (conf_extended && match_size > compressor->min_pattern_size + 11) {
+        if (compressor->conf.extended && match_size > compressor->min_pattern_size + 11) {
             compressor->extended_match_count = match_size;
             compressor->extended_match_position = match_index;
             // Consume matched bytes from input
