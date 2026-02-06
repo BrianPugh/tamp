@@ -60,8 +60,8 @@ static TAMP_NOINLINE void write_to_bit_buffer(TampCompressor* compressor, uint32
  * @param[in,out] output_written_size Bytes written (accumulated).
  * @return TAMP_OK on success, TAMP_OUTPUT_FULL if output buffer is too small.
  */
-static TAMP_NOINLINE tamp_res partial_flush(TampCompressor* compressor, unsigned char** output, size_t* output_size,
-                                            size_t* output_written_size) {
+static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE tamp_res partial_flush(TampCompressor* compressor, unsigned char** output,
+                                                               size_t* output_size, size_t* output_written_size) {
     while (compressor->bit_buffer_pos >= 8 && *output_size) {
         *(*output)++ = compressor->bit_buffer >> 24;
         (*output_size)--;
@@ -165,7 +165,8 @@ static inline bool validate_no_match_overlap(uint16_t write_pos, uint16_t match_
 }
 #endif
 
-tamp_res tamp_compressor_init(TampCompressor* compressor, const TampConf* conf, unsigned char* window) {
+TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, const TampConf* conf,
+                                                 unsigned char* window) {
     const TampConf conf_default = {
         .window = 10,
         .literal = 8,
@@ -217,7 +218,8 @@ tamp_res tamp_compressor_init(TampCompressor* compressor, const TampConf* conf, 
  * @param[in] value The value to encode.
  * @param[in] trailing_bits Number of trailing bits (3 for extended match, 4 for RLE).
  */
-static TAMP_NOINLINE void write_extended_huffman(TampCompressor* compressor, uint8_t value, uint8_t trailing_bits) {
+static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE void write_extended_huffman(TampCompressor* compressor, uint8_t value,
+                                                                    uint8_t trailing_bits) {
     uint8_t code_index = value >> trailing_bits;
     // Write huffman code (without literal flag) + trailing bits in one call
     write_to_bit_buffer(compressor, (huffman_codes[code_index] << trailing_bits) | (value & ((1 << trailing_bits) - 1)),
@@ -229,7 +231,7 @@ static TAMP_NOINLINE void write_extended_huffman(TampCompressor* compressor, uin
  *
  * NOINLINE: called from 3 sites; outlining saves ~44 bytes on armv6m.
  */
-static TAMP_NOINLINE uint8_t get_last_window_byte(TampCompressor* compressor) {
+static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE uint8_t get_last_window_byte(TampCompressor* compressor) {
     uint16_t prev_pos = (compressor->window_pos - 1) & ((1 << compressor->conf.window) - 1);
     return compressor->window[prev_pos];
 }
@@ -583,9 +585,11 @@ void tamp_compressor_sink(TampCompressor* compressor, const unsigned char* input
     }
 }
 
-tamp_res tamp_compressor_compress_cb(TampCompressor* compressor, unsigned char* output, size_t output_size,
-                                     size_t* output_written_size, const unsigned char* input, size_t input_size,
-                                     size_t* input_consumed_size, tamp_callback_t callback, void* user_data) {
+TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_cb(TampCompressor* compressor, unsigned char* output,
+                                                        size_t output_size, size_t* output_written_size,
+                                                        const unsigned char* input, size_t input_size,
+                                                        size_t* input_consumed_size, tamp_callback_t callback,
+                                                        void* user_data) {
     tamp_res res;
     size_t input_consumed_size_proxy = 0, output_written_size_proxy = 0;
     size_t total_input_size = input_size;
@@ -700,10 +704,11 @@ flush_done:
     return res;
 }
 
-tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor* compressor, unsigned char* output, size_t output_size,
-                                               size_t* output_written_size, const unsigned char* input,
-                                               size_t input_size, size_t* input_consumed_size, bool write_token,
-                                               tamp_callback_t callback, void* user_data) {
+TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor* compressor, unsigned char* output,
+                                                                  size_t output_size, size_t* output_written_size,
+                                                                  const unsigned char* input, size_t input_size,
+                                                                  size_t* input_consumed_size, bool write_token,
+                                                                  tamp_callback_t callback, void* user_data) {
     tamp_res res;
     size_t flush_size;
     size_t output_written_size_proxy;
@@ -726,9 +731,10 @@ tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor* compressor, unsig
 
 #if TAMP_STREAM
 
-tamp_res tamp_compress_stream(TampCompressor* compressor, tamp_read_t read_cb, void* read_handle, tamp_write_t write_cb,
-                              void* write_handle, size_t* input_consumed_size, size_t* output_written_size,
-                              tamp_callback_t callback, void* user_data) {
+TAMP_OPTIMIZE_SIZE tamp_res tamp_compress_stream(TampCompressor* compressor, tamp_read_t read_cb, void* read_handle,
+                                                 tamp_write_t write_cb, void* write_handle, size_t* input_consumed_size,
+                                                 size_t* output_written_size, tamp_callback_t callback,
+                                                 void* user_data) {
     size_t input_consumed_size_proxy, output_written_size_proxy;
     if (!input_consumed_size) input_consumed_size = &input_consumed_size_proxy;
     if (!output_written_size) output_written_size = &output_written_size_proxy;

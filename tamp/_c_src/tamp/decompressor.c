@@ -273,9 +273,10 @@ tamp_res tamp_decompressor_read_header(TampConf* conf, const unsigned char* inpu
  *   * window
  *   * window_bits_max
  */
-static tamp_res tamp_decompressor_populate_from_conf(TampDecompressor* decompressor, uint8_t conf_window,
-                                                     uint8_t conf_literal, uint8_t conf_use_custom_dictionary,
-                                                     uint8_t conf_extended) {
+static TAMP_OPTIMIZE_SIZE tamp_res tamp_decompressor_populate_from_conf(TampDecompressor* decompressor,
+                                                                        uint8_t conf_window, uint8_t conf_literal,
+                                                                        uint8_t conf_use_custom_dictionary,
+                                                                        uint8_t conf_extended) {
     if (conf_window < 8 || conf_window > 15) return TAMP_INVALID_CONF;
     if (conf_literal < 5 || conf_literal > 8) return TAMP_INVALID_CONF;
     if (conf_window > decompressor->window_bits_max) return TAMP_INVALID_CONF;
@@ -511,9 +512,10 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
 
 #if TAMP_STREAM
 
-tamp_res tamp_decompress_stream(TampDecompressor* decompressor, tamp_read_t read_cb, void* read_handle,
-                                tamp_write_t write_cb, void* write_handle, size_t* input_consumed_size,
-                                size_t* output_written_size, tamp_callback_t callback, void* user_data) {
+TAMP_OPTIMIZE_SIZE tamp_res tamp_decompress_stream(TampDecompressor* decompressor, tamp_read_t read_cb,
+                                                   void* read_handle, tamp_write_t write_cb, void* write_handle,
+                                                   size_t* input_consumed_size, size_t* output_written_size,
+                                                   tamp_callback_t callback, void* user_data) {
     size_t input_consumed_size_proxy, output_written_size_proxy;
     if (!input_consumed_size) input_consumed_size = &input_consumed_size_proxy;
     if (!output_written_size) output_written_size = &output_written_size_proxy;

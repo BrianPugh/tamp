@@ -24,7 +24,7 @@ static inline uint32_t xorshift32(uint32_t *state) {
     return x;
 }
 
-void tamp_initialize_dictionary(unsigned char *buffer, size_t size) {
+TAMP_OPTIMIZE_SIZE void tamp_initialize_dictionary(unsigned char *buffer, size_t size) {
     uint32_t seed = 3758097560;  // This was experimentally discovered with tools/find_seed.py
     uint32_t randbuf = 0;
     for (size_t i = 0; i < size; i++) {
@@ -34,7 +34,7 @@ void tamp_initialize_dictionary(unsigned char *buffer, size_t size) {
     }
 }
 
-int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal) {
+TAMP_OPTIMIZE_SIZE int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal) {
     return 2 + (window > (10 + ((literal - 5) << 1)));
 }
 
