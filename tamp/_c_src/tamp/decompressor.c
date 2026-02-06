@@ -331,6 +331,10 @@ static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** 
     }
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("-fno-tree-pre")
+#endif
 tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigned char* output, size_t output_size,
                                          size_t* output_written_size, const unsigned char* input, size_t input_size,
                                          size_t* input_consumed_size, tamp_callback_t callback, void* user_data) {
@@ -509,6 +513,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
     }
     return TAMP_INPUT_EXHAUSTED;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
 
 #if TAMP_STREAM
 

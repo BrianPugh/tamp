@@ -327,6 +327,10 @@ static TAMP_NOINLINE void write_rle_token(TampCompressor* compressor, uint8_t co
  * @param[in,out] output_written_size Bytes written (accumulated).
  * @return TAMP_OK on success, TAMP_OUTPUT_FULL if output buffer is too small.
  */
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("-fno-reorder-blocks")
+#endif
 static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compressor, unsigned char** output,
                                                          size_t* output_size, size_t* output_written_size) {
     // Pre-check output space to prevent OUTPUT_FULL mid-token (would corrupt bit_buffer)
@@ -363,6 +367,9 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compres
 
     return TAMP_OK;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
 
 /**
  * @brief Handle all extended-specific logic in poll (match continuation + RLE).
@@ -451,6 +458,10 @@ static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE tamp_res poll_extended_handling(TampComp
 }
 #endif  // TAMP_EXTENDED_COMPRESS
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("-fno-schedule-insns2")
+#endif
 TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned char* output, size_t output_size,
                                             size_t* output_written_size) {
     tamp_res res;
@@ -568,6 +579,9 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
 
     return TAMP_OK;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
 
 void tamp_compressor_sink(TampCompressor* compressor, const unsigned char* input, size_t input_size,
                           size_t* consumed_size) {
@@ -628,6 +642,10 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_cb(TampCompressor* compress
     return TAMP_OK;
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("-fno-tree-pre")
+#endif
 tamp_res tamp_compressor_flush(TampCompressor* compressor, unsigned char* output, size_t output_size,
                                size_t* output_written_size, bool write_token) {
     tamp_res res;
@@ -703,6 +721,9 @@ flush_done:
 
     return res;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
 
 TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor* compressor, unsigned char* output,
                                                                   size_t output_size, size_t* output_written_size,
