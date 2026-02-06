@@ -316,6 +316,9 @@ tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* 
  * @brief Refill bit buffer from input stream.
  *
  * Consumes bytes from input until bit_buffer has at least 25 bits or input is exhausted.
+ *
+ * NOTE: NOINLINE saves ~192 bytes on armv6m but causes ~10% decompression
+ * speed regression. Keep this inlined for performance.
  */
 static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end,
                                      size_t* input_consumed_size) {
