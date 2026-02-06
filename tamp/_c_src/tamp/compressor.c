@@ -222,8 +222,10 @@ static TAMP_NOINLINE void write_extended_huffman(TampCompressor* compressor, uin
 
 /**
  * @brief Get the last byte written to the window.
+ *
+ * NOINLINE: called from 3 sites; outlining saves ~44 bytes on armv6m.
  */
-static inline uint8_t get_last_window_byte(TampCompressor* compressor) {
+static TAMP_NOINLINE uint8_t get_last_window_byte(TampCompressor* compressor) {
     uint16_t prev_pos = (compressor->window_pos - 1) & ((1 << compressor->conf.window) - 1);
     return compressor->window[prev_pos];
 }
@@ -688,17 +690,17 @@ flush_done:
     // At this point, up to 16 bits may remain in the compressor->bit_buffer
     // The output buffer may have 0 bytes remaining.
 
-    // Flush the remainder of the output bit-buffer
-    while (compressor->bit_buffer_pos) {
+    // Flush whole bytes, then write trailing partial byte
+    res = partial_flush(compressor, &output, &output_size, output_written_size);
+    if (compressor->bit_buffer_pos) {
         if (TAMP_UNLIKELY(output_size == 0)) return TAMP_OUTPUT_FULL;
-        *output++ = compressor->bit_buffer >> 24;
-        compressor->bit_buffer <<= 8;
-        compressor->bit_buffer_pos -= MIN(compressor->bit_buffer_pos, 8);
-        output_size--;
+        *output = compressor->bit_buffer >> 24;
         (*output_written_size)++;
+        compressor->bit_buffer_pos = 0;
+        compressor->bit_buffer = 0;
     }
 
-    return TAMP_OK;
+    return res;
 }
 
 tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor* compressor, unsigned char* output, size_t output_size,
