@@ -42,12 +42,19 @@ extern "C" {
 #if defined(_MSC_VER)
 #define TAMP_ALWAYS_INLINE __forceinline
 #define TAMP_NOINLINE __declspec(noinline)
-#elif defined(__GNUC__) || defined(__clang__)
+#define TAMP_OPTIMIZE_SIZE /* not supported */
+#elif defined(__GNUC__) && !defined(__clang__)
 #define TAMP_ALWAYS_INLINE inline __attribute__((always_inline))
 #define TAMP_NOINLINE __attribute__((noinline))
+#define TAMP_OPTIMIZE_SIZE __attribute__((optimize("Os")))
+#elif defined(__clang__)
+#define TAMP_ALWAYS_INLINE inline __attribute__((always_inline))
+#define TAMP_NOINLINE __attribute__((noinline))
+#define TAMP_OPTIMIZE_SIZE /* clang doesn't support per-function optimize */
 #else
 #define TAMP_ALWAYS_INLINE inline
 #define TAMP_NOINLINE
+#define TAMP_OPTIMIZE_SIZE
 #endif
 
 /* Include stream API (tamp_compress_stream, tamp_decompress_stream).
