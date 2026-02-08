@@ -26,7 +26,8 @@ The bit-location 0 is equivalent to typical MSb position 7 of the first byte.
 | [2]     | custom_dictionary | A custom dictionary initialization method was used                  |
 |         |                   | and must be provided at decompression.                              |
 +---------+-------------------+---------------------------------------------------------------------+
-| [1]     | reserved          | Reserved for future use. Must be 0.                                 |
+| [1]     | extended          | Enables extended format features (RLE, extended match encoding).    |
+|         |                   | Generally improves compression, introduced in tamp v2.0.0.          |
 +---------+-------------------+---------------------------------------------------------------------+
 | [0]     | more_header       | If ``True``, then the next byte in the stream is more header data.  |
 |         |                   | Currently always ``False``, but allows for future expandability.    |
@@ -60,8 +61,9 @@ Modifications are made to make the implementation simpler/faster.
       and points at the offset from the beginning of the dictionary buffer to the pattern.
       The shortest pattern-length is either going to be 2 or 3 bytes, depending on ``window``
       and ``literal`` parameters. The shortest pattern-length encoding must be shorter than
-      an equivalent stream of literals. The longest pattern-length will the minimum
-      pattern-length plus 13.
+      an equivalent stream of literals. In the basic (non-extended) format, the longest
+      pattern-length is the minimum pattern-length plus 13. When the ``extended`` flag
+      is set, longer matches are possible via extended match encoding.
 
 Classically, the ``offset`` is from the current position in the buffer. Doing so results
 in the ``offset`` distribution slightly favoring smaller numbers. Intuitively, it makes
@@ -166,6 +168,87 @@ The maximum match-size is more likely than the second-highest match-size because
    :alt: Match Size Plot
 
 For any given huffman coding schema, a equivalent coding can be obtained by inverting all the bits (reflecting the huffman tree). The single-bit, most common code ``0b0`` representing a pattern-size 2 is intentionally represented as ``0b0`` instead of ``0b1``. This makes the MSb of all other codes be 1, simplifying the decoding procedure because the number of bits read doesn't strictly have to be recorded.
+
+Extended Format (v2.0.0+)
+^^^^^^^^^^^^^^^^^^^^^^^^^
+When the ``extended`` header bit is set, two additional token types are available:
+RLE (Run-Length Encoding) and Extended Match. These use Huffman symbols 12 and 13
+respectively, which in the basic format would represent match sizes ``min_pattern_size + 12``
+and ``min_pattern_size + 13``.
+
+Extended Huffman Encoding
+-------------------------
+Both RLE and Extended Match use a secondary Huffman encoding to represent their payload values.
+This encoding combines a Huffman code (without the literal flag) with trailing bits:
+
+1. Read the Huffman symbol (12 for RLE, 13 for Extended Match) with the literal flag (``0b0``).
+2. Decode an additional Huffman code (reusing the same table, but without the leading literal flag bit).
+3. Read trailing bits (4 bits for RLE, 3 bits for Extended Match).
+4. Combine: ``value = (huffman_index << trailing_bits) + trailing_bits_value``
+
+RLE Token (Symbol 12)
+---------------------
+RLE encodes runs of repeated bytes efficiently. The repeated byte is implicitly
+the last byte written to the window buffer. If no bytes have been written yet
+(i.e., ``window_pos == 0``), the byte at position ``window_size - 1`` of the
+initial dictionary is used.
+
+Format: ``0b0 | huffman_code[12] | extended_huffman(count - 2, trailing=4)``
+
+Where:
+
+- ``huffman_code[12]`` = ``0xAA`` (9 bits including literal flag)
+- ``extended_huffman`` encodes ``count - 2`` with 4 trailing bits
+- ``count`` ranges from 2 to 225: ``(13 << 4) + 15 + 2 = 225``
+
+Window update: Only the first 8 bytes are written to the dictionary (no wrap-around).
+If fewer than 8 bytes remain before the end of the window buffer, only those bytes
+are written. This bounds the window update cost while still allowing the decompressor
+to find subsequent pattern matches.
+
+.. code-block:: text
+
+   RLE Token Structure:
+   +---+------------+-------------------+----------------+
+   | 0 | huffman[12]| huffman(cnt>>4)   | cnt & 0xF      |
+   +---+------------+-------------------+----------------+
+   |1b |   8 bits   | 1-8 bits          | 4 bits         |
+   +---+------------+-------------------+----------------+
+
+Extended Match Token (Symbol 13)
+--------------------------------
+Extended Match allows pattern matches longer than the basic format's maximum of
+``min_pattern_size + 13``. It is used when a match exceeds ``min_pattern_size + 11``.
+
+Format: ``0b0 | huffman_code[13] | extended_huffman(size - min_pattern_size - 12, trailing=3) | offset``
+
+Where:
+
+- ``huffman_code[13]`` = ``0x27`` (7 bits including literal flag)
+- ``extended_huffman`` encodes ``size - min_pattern_size - 12`` with 3 trailing bits
+- ``offset`` is ``window`` bits, pointing to the start of the pattern
+- Maximum extra size: ``(13 << 3) + 7 + 1 = 112``
+- Maximum total match size: ``min_pattern_size + 11 + 112 = min_pattern_size + 123``
+
+The ``-12`` offset ensures extended matches start at ``min_pattern_size + 12``, leaving
+symbols 0-11 for basic matches (0-11 maps to ``min_pattern_size`` through ``min_pattern_size + 11``).
+
+Window constraints: The source pattern cannot span past the window buffer boundary;
+the compressor terminates extended matches early if they would cross this boundary.
+Similarly, destination writes do not wrap-around; only bytes up to the end of the
+window buffer are written. This simplifies implementation while having minimal
+impact on compression ratio (approximately 0.02% loss).
+
+.. code-block:: text
+
+   Extended Match Token Structure:
+   +---+------------+-------------------+----------------+--------+
+   | 0 | huffman[13]| huffman(sz>>3)    | sz & 0x7       | offset |
+   +---+------------+-------------------+----------------+--------+
+   |1b |   6 bits   | 1-8 bits          | 3 bits         | window |
+   +---+------------+-------------------+----------------+--------+
+
+   Where sz = match_size - min_pattern_size - 12
 
 Flush Symbol
 ------------

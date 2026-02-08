@@ -99,9 +99,9 @@ jobs:
           cd build
           HASH=$(sha256sum enwik8-js.tamp | cut -d' ' -f1)
           echo "Compression hash: $HASH"
-          if [ "$HASH" != "02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038" ]; then
+          if [ "$HASH" != "dd5e431b0cbaa6ee001b10493c2b08e6235f42e3f4ce00958e88b1b97581872e" ]; then
             echo "❌ Hash mismatch!"
-            echo "Expected: 02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038"
+            echo "Expected: dd5e431b0cbaa6ee001b10493c2b08e6235f42e3f4ce00958e88b1b97581872e"
             echo "Got:      $HASH"
             exit 1
           fi

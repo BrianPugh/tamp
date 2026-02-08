@@ -51,7 +51,7 @@ class TestCli(unittest.TestCase):
             test_file.write_bytes(b"foo foo foo")
 
             with patch("sys.stdout.buffer.write") as mock_stdout:
-                app(["compress", str(test_file)], **_app_kwargs)
+                app(["compress", "--no-extended", str(test_file)], **_app_kwargs)
                 mock_stdout.assert_called_once_with(compressed_foo_foo_foo)
 
     def test_compress_stdin_to_stdout(self):
@@ -59,7 +59,7 @@ class TestCli(unittest.TestCase):
             patch("sys.stdout.buffer.write") as mock_stdout,
             patch("sys.stdin.buffer.read", return_value="foo foo foo"),
         ):
-            app("compress", **_app_kwargs)
+            app(["compress", "--no-extended"], **_app_kwargs)
             mock_stdout.assert_called_once_with(compressed_foo_foo_foo)
 
     def test_decompress_file_to_stdout(self):

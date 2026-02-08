@@ -11,21 +11,40 @@ extern "C" {
  * Fields are ordered by access frequency for cache efficiency.
  */
 typedef struct {
-    /* HOT: accessed every iteration of the decompression loop.
-     * Full-width types avoid bitfield access overhead. */
-    unsigned char *window;   // Pointer to window buffer
-    uint32_t bit_buffer;     // Bit buffer for reading compressed data (32 bits)
-    uint16_t window_pos;     // Current position in window (15 bits)
-    uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits)
+    /* HOT: accessed every iteration of the decompression loop. */
+    unsigned char *window;  // Pointer to window buffer
+    uint32_t bit_buffer;    // Bit buffer for reading compressed data (32 bits)
+    uint16_t window_pos;    // Current position in window (15 bits)
+
+    /* Union allows single zero-check in main loop instead of two separate checks. */
+#if TAMP_EXTENDED_DECOMPRESS
+    union {
+        struct {
+            uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits needed)
+            uint8_t token_state;     // 0=none, 1=RLE, 2=ext match, 3=ext match fresh (2 bits used)
+        };
+        uint16_t pos_and_state;  // Combined for fast 16-bit zero-check
+    };
+#else
+    union {
+        uint8_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits needed)
+        uint8_t pos_and_state;   // Alias for consistent access in main loop
+    };
+#endif
+#if TAMP_EXTENDED_DECOMPRESS
+    uint16_t pending_window_offset;  // Saved window_offset for extended match output-full resume
+    uint16_t pending_match_size;     // Saved match_size for extended match resume
+#endif
 
     /* WARM: read once at start of decompress, cached in locals */
     uint8_t conf_window : 4;       // Window bits from config
     uint8_t conf_literal : 4;      // Literal bits from config
     uint8_t min_pattern_size : 2;  // Minimum pattern size, 2 or 3
+    uint8_t conf_extended : 1;     // Extended format enabled (from header)
 
     /* COLD: rarely accessed (init or edge cases).
      * Bitfields save space; add new cold fields here. */
-    uint8_t skip_bytes : 4;       // For output-buffer-limited resumption
+    uint8_t skip_bytes;           // For output-buffer-limited resumption (v2 needs >4 bits)
     uint8_t window_bits_max : 4;  // Max window bits buffer can hold
     uint8_t configured : 1;       // Whether config has been set
 } TampDecompressor;

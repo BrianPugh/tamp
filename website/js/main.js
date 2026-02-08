@@ -23,8 +23,10 @@ let dropZone,
   compressionOptions,
   textMode,
   windowBitsSelect,
+  extendedCheckbox,
   lazyMatchingCheckbox,
   textWindowBitsSelect,
+  textExtendedCheckbox,
   textLazyMatchingCheckbox,
   plainTextArea,
   compressedTextArea,
@@ -87,8 +89,10 @@ document.addEventListener('DOMContentLoaded', () => {
   compressionOptions = document.getElementById('compressionOptions');
   textMode = document.getElementById('textMode');
   windowBitsSelect = document.getElementById('windowBits');
+  extendedCheckbox = document.getElementById('extended');
   lazyMatchingCheckbox = document.getElementById('lazyMatching');
   textWindowBitsSelect = document.getElementById('textWindowBits');
+  textExtendedCheckbox = document.getElementById('textExtended');
   textLazyMatchingCheckbox = document.getElementById('textLazyMatching');
   plainTextArea = document.getElementById('plainText');
   compressedTextArea = document.getElementById('compressedText');
@@ -348,6 +352,7 @@ async function processFiles() {
         const windowBits = parseInt(windowBitsSelect.value);
         const options = {
           window: windowBits,
+          extended: extendedCheckbox.checked,
           // Add progress callback for compression with overall progress calculation
           onPoll: async progressInfo => {
             const bytesProcessed = progressInfo.bytesProcessed || 0;
@@ -583,6 +588,7 @@ async function compressTextContent() {
   try {
     const options = {
       window: windowBits,
+      extended: textExtendedCheckbox.checked,
       // Add progress callback for text compression
       onPoll: async progressInfo => {
         const bytesProcessed = progressInfo.bytesProcessed || 0;
@@ -624,9 +630,11 @@ async function compressTextContent() {
     const ratio = data.length > 0 ? (data.length / compressed.length).toFixed(2) : '0';
     const savings = data.length > 0 ? ((1 - compressed.length / data.length) * 100).toFixed(1) : '0';
 
-    const configStr = `${windowBits}-bit window${isPureAscii ? ', 7-bit literals' : ''}${
-      textLazyMatchingCheckbox.checked ? ', lazy matching' : ''
-    }${dictionaryValidation.dictionaryBytes ? ', custom dictionary' : ''}`;
+    const configStr = `${windowBits}-bit window${textExtendedCheckbox.checked ? ', extended' : ', basic'}${
+      isPureAscii ? ', 7-bit literals' : ''
+    }${textLazyMatchingCheckbox.checked ? ', lazy matching' : ''}${
+      dictionaryValidation.dictionaryBytes ? ', custom dictionary' : ''
+    }`;
 
     const stats = [
       { label: 'Configuration', value: configStr },

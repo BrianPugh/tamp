@@ -41,7 +41,15 @@ export class TampCompressionStream extends TransformStream {
         } finally {
           if (compressor) {
             compressor.destroy();
+            compressor = null;
           }
+        }
+      },
+
+      cancel(_reason) {
+        if (compressor) {
+          compressor.destroy();
+          compressor = null;
         }
       },
     });
@@ -88,7 +96,15 @@ export class TampDecompressionStream extends TransformStream {
         } finally {
           if (decompressor) {
             decompressor.destroy();
+            decompressor = null;
           }
+        }
+      },
+
+      cancel(_reason) {
+        if (decompressor) {
+          decompressor.destroy();
+          decompressor = null;
         }
       },
     });

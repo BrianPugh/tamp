@@ -7,58 +7,52 @@ extern "C" {
 
 #include "common.h"
 
-/* Externally, do not directly edit ANY of these attributes */
+/* Externally, do not directly edit ANY of these attributes.
+ * Fields are ordered by access frequency for cache efficiency.
+ */
 typedef struct TampCompressor {
-    /* nicely aligned attributes */
-
 #if TAMP_ESP32  // Avoid bitfields for speed.
-    uint32_t window_pos;
-    uint32_t bit_buffer_pos;
+    /* HOT: accessed every iteration of the compression loop */
+    unsigned char *window;    // Pointer to window buffer
+    uint32_t bit_buffer;      // Bit buffer for output (32 bits)
+    uint32_t window_pos;      // Current position in window (15 bits used)
+    uint32_t bit_buffer_pos;  // Bits currently in bit_buffer (6 bits used)
+    uint32_t input_size;      // Bytes in input buffer (5 bits used; 0-16)
+    uint32_t input_pos;       // Current position in input buffer (4 bits used; 0-15)
+    unsigned char input[16];  // Input ring buffer
 
-    uint32_t input_size;
-    uint32_t input_pos;
+    /* WARM: read frequently, often cached in locals */
+    uint8_t min_pattern_size;  // Minimum pattern size (2 bits used; 2 or 3)
+    TampConf conf;
+#else   // Use bitfields for reduced memory-usage
+    /* HOT: accessed every iteration of the compression loop */
+    unsigned char *window;    // Pointer to window buffer
+    uint32_t bit_buffer;      // Bit buffer for output (32 bits)
+    uint16_t window_pos;      // Current position in window (15 bits used)
+    uint8_t bit_buffer_pos;   // Bits currently in bit_buffer (6 bits used)
+    uint8_t input_size;       // Bytes in input buffer (5 bits used; 0-16)
+    uint8_t input_pos;        // Current position in input buffer (4 bits used; 0-15)
+    unsigned char input[16];  // Input ring buffer
 
-    /* Conf attributes */
-    uint8_t conf_window;                 // number of window bits
-    uint8_t conf_literal;                // number of literal bits
-    uint8_t conf_use_custom_dictionary;  // Use a custom initialized dictionary.
-#if TAMP_LAZY_MATCHING
-    uint8_t conf_lazy_matching;  // Use lazy matching for better compression
-#endif
-    uint8_t min_pattern_size;
-
-#if TAMP_LAZY_MATCHING
-    /* Lazy matching cache */
-    int16_t cached_match_index;
-    uint8_t cached_match_size;
-#endif
-#else  // Use bitfields for reduced memory-usage
-    /* Conf attributes */
-    uint32_t conf_window : 4;                 // number of window bits
-    uint32_t conf_literal : 4;                // number of literal bits
-    uint32_t conf_use_custom_dictionary : 1;  // Use a custom initialized dictionary.
-#if TAMP_LAZY_MATCHING
-    uint32_t conf_lazy_matching : 1;  // Use lazy matching for better compression
-#endif
-
-    /* Other small attributes */
-    uint32_t window_pos : 15;
-    uint32_t bit_buffer_pos : 6;
-    uint32_t min_pattern_size : 2;
-
-    uint32_t input_size : 5;
-    uint32_t input_pos : 4;
-
-#if TAMP_LAZY_MATCHING
-    /* Lazy matching cache */
-    int16_t cached_match_index;
-    uint8_t cached_match_size;
-#endif
+    /* WARM: read frequently, often cached in locals */
+    uint8_t min_pattern_size;  // Minimum pattern size (2 or 3)
+    TampConf conf;
 #endif  // TAMP_ESP32
-    unsigned char input[16] /* __attribute__ ((aligned (16)))*/;
-    uint32_t bit_buffer;
 
-    unsigned char *window;
+    /* Fields interleaved to avoid internal padding when both LAZY_MATCHING and EXTENDED_COMPRESS enabled */
+#if TAMP_LAZY_MATCHING
+    int16_t cached_match_index;  // Lazy matching cache
+#endif
+#if TAMP_EXTENDED_COMPRESS
+    uint16_t extended_match_position;  // Window position for extended match
+#endif
+#if TAMP_LAZY_MATCHING
+    uint8_t cached_match_size;
+#endif
+#if TAMP_EXTENDED_COMPRESS
+    uint8_t rle_count;             // Current RLE run length (max 225)
+    uint8_t extended_match_count;  // Current extended match size (max ~126)
+#endif
 } TampCompressor;
 
 /**

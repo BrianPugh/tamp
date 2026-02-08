@@ -19,20 +19,15 @@ if micropython is None:
         CCompressor = None
         CDecompressor = None
 
-    ViperCompressor = None
-    ViperDecompressor = None
     NativeCompressor = None
     NativeDecompressor = None
 else:
-    # MicroPython: only test Viper and Native implementations
+    # MicroPython: only test Native implementation
     # Pure Python and Cython implementations use CPython-specific features
     PyCompressor = None
     PyDecompressor = None
     CCompressor = None
     CDecompressor = None
-
-    from tamp.compressor_viper import Compressor as ViperCompressor
-    from tamp.decompressor_viper import Decompressor as ViperDecompressor
 
     try:
         from tamp_native import Compressor as NativeCompressor
@@ -43,8 +38,8 @@ else:
         NativeDecompressor = None
 
 
-Compressors = (PyCompressor, CCompressor, ViperCompressor, NativeCompressor)
-Decompressors = (PyDecompressor, CDecompressor, ViperDecompressor, NativeDecompressor)
+Compressors = (PyCompressor, CCompressor, NativeCompressor)
+Decompressors = (PyDecompressor, CDecompressor, NativeDecompressor)
 
 
 def walk_compressors_decompressors():

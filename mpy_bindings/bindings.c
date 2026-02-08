@@ -9,13 +9,14 @@
  **********/
 
 #include "tamp/common.h"
-#define CHUNK_SIZE 32  // Must be <= 65535
+#define CHUNK_SIZE 32  // Must be >= 32 and <= 65535
+_Static_assert(CHUNK_SIZE >= 32, "CHUNK_SIZE must be >= 32 to hold flush output");
 #define mp_type_bytearray (*(mp_obj_type_t *)(mp_load_global(MP_QSTR_bytearray)))
 
 static void TAMP_CHECK(tamp_res res) {
-    if (res == TAMP_EXCESS_BITS) {
+    if (TAMP_UNLIKELY(res == TAMP_EXCESS_BITS)) {
         nlr_raise(mp_obj_new_exception(mp_load_global(MP_QSTR_ExcessBitsError)));
-    } else if (res < TAMP_OK) {
+    } else if (TAMP_UNLIKELY(res < TAMP_OK)) {
         mp_raise_ValueError("");
     }
 }
@@ -67,6 +68,7 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
         .window = mp_obj_get_int(args_in[1]),
         .literal = mp_obj_get_int(args_in[2]),
         .use_custom_dictionary = mp_obj_get_int(args_in[4]),
+        .extended = mp_obj_get_int(args_in[5]),
     };
 
     mp_obj_compressor_t *o = mp_obj_malloc(mp_obj_compressor_t, type);
@@ -75,7 +77,7 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
 
     mp_buffer_info_t dictionary_buffer_info;
     mp_get_buffer_raise(o->dictionary, &dictionary_buffer_info, MP_BUFFER_RW);
-    if (dictionary_buffer_info.len < (1 << conf.window)) {
+    if (TAMP_UNLIKELY(dictionary_buffer_info.len < (1 << conf.window))) {
         mp_raise_ValueError("");
     }
 
@@ -175,7 +177,7 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
 
     const uint16_t window_size = 1 << conf.window;
     if (o->dictionary == mp_const_none) {
-        if (conf.use_custom_dictionary) {
+        if (TAMP_UNLIKELY(conf.use_custom_dictionary)) {
             mp_raise_ValueError("");
         }
         o->dictionary = mp_obj_new_bytearray_by_ref(window_size, m_malloc(window_size));
@@ -184,7 +186,7 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
     {
         mp_buffer_info_t dictionary_buffer_info;
         mp_get_buffer_raise(o->dictionary, &dictionary_buffer_info, MP_BUFFER_RW);
-        if (dictionary_buffer_info.len < window_size) {
+        if (TAMP_UNLIKELY(dictionary_buffer_info.len < window_size)) {
             mp_raise_ValueError("");
         }
 

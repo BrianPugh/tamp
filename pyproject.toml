@@ -102,6 +102,9 @@ unittest = [
 ]
 uprofiler = "https://github.com/BrianPugh/micropython-libs/blob/main/lib/uprofiler.py"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.coverage.run]
 branch = true
 omit = [

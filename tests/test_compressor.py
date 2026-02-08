@@ -36,12 +36,6 @@ compresses = []
 NativeExcessBitsError = ExcessBitsError
 
 if micropython:
-    from tamp.compressor_viper import Compressor as ViperCompressor
-    from tamp.compressor_viper import compress as viper_compress
-
-    Compressors.append(ViperCompressor)
-    compresses.append(viper_compress)
-
     try:
         from tamp_native import Compressor as NativeCompressor
         from tamp_native import ExcessBitsError as NativeExcessBitsError
@@ -94,7 +88,7 @@ class TestCompressor(unittest.TestCase):
 
                 bytes_written = 0
                 with io.BytesIO() as f:
-                    compressor = Compressor(f)
+                    compressor = Compressor(f, extended=False)
                     bytes_written += compressor.write(test_string)
                     bytes_written += compressor.flush(write_token=False)
 
@@ -106,7 +100,7 @@ class TestCompressor(unittest.TestCase):
 
                 # Test Context Manager
                 bytes_written = 0
-                with io.BytesIO() as f, Compressor(f) as compressor:
+                with io.BytesIO() as f, Compressor(f, extended=False) as compressor:
                     bytes_written += compressor.write(test_string)
                     bytes_written += compressor.flush(write_token=False)
 
@@ -137,7 +131,7 @@ class TestCompressor(unittest.TestCase):
                 )
 
                 with io.BytesIO() as f:
-                    compressor = Compressor(f)
+                    compressor = Compressor(f, extended=False)
                     compressor.write(b"f")
                     compressor.write(b"oo")
                     compressor.write(b" fo")
@@ -171,7 +165,7 @@ class TestCompressor(unittest.TestCase):
                     # fmt: on
                 )
                 with io.BytesIO() as f:
-                    compressor = Compressor(f, literal=7)
+                    compressor = Compressor(f, literal=7, extended=False)
                     compressor.write(test_string)
                     compressor.flush(write_token=False)
 
@@ -200,7 +194,7 @@ class TestCompressor(unittest.TestCase):
                 )
 
                 with io.BytesIO() as f:
-                    compressor = Compressor(f, window=8, literal=7, dictionary=dictionary)
+                    compressor = Compressor(f, window=8, literal=7, dictionary=dictionary, extended=False)
                     compressor.write(test_string)
                     compressor.flush(write_token=False)
 
@@ -223,7 +217,7 @@ class TestCompressor(unittest.TestCase):
                 test_string = memoryview(test_string_extended)[:3]  # b"Q\x00Q"
 
                 with io.BytesIO() as f:
-                    compressor = Compressor(f)
+                    compressor = Compressor(f, extended=False)
                     compressor.write(test_string)
                     compressor.flush(write_token=False)
 
@@ -245,7 +239,7 @@ class TestCompressor(unittest.TestCase):
     def test_excess_bits(self):
         for Compressor in Compressors:
             with self.subTest(Compressor=Compressor), io.BytesIO() as f:
-                compressor = Compressor(f, literal=7)
+                compressor = Compressor(f, literal=7, extended=False)
 
                 with self.assertRaises((ExcessBitsError, NativeExcessBitsError)):
                     compressor.write(b"\xff")
@@ -271,7 +265,7 @@ class TestCompressor(unittest.TestCase):
                     ]
                     # fmt: on
                 )
-                self.assertEqual(compress("foo foo foo"), expected)
+                self.assertEqual(compress("foo foo foo", extended=False), expected)
 
     def test_single_shot_compress_binary(self):
         for compress in compresses:
@@ -293,7 +287,7 @@ class TestCompressor(unittest.TestCase):
                     ]
                     # fmt: on
                 )
-                self.assertEqual(compress(b"foo foo foo"), expected)
+                self.assertEqual(compress(b"foo foo foo", extended=False), expected)
 
     def test_invalid_conf(self):
         for Compressor in Compressors:

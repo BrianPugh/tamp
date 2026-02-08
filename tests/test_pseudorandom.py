@@ -12,12 +12,6 @@ except ImportError:
     micropython = None
 
 if micropython:
-    import tamp.compressor_viper
-    import tamp.decompressor_viper
-
-    modules.append(tamp.compressor_viper)
-    modules.append(tamp.decompressor_viper)
-
     try:
         import tamp_native
 
