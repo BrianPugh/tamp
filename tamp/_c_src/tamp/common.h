@@ -39,6 +39,14 @@ extern "C" {
 #define TAMP_UNLIKELY(c) (c)
 #endif
 
+/* Per-function optimize attributes and #pragma GCC push/pop_options require
+ * GCC on a target that supports them. Xtensa GCC does not. */
+#if defined(__GNUC__) && !defined(__clang__) && !defined(__XTENSA__)
+#define TAMP_HAS_GCC_OPTIMIZE 1
+#else
+#define TAMP_HAS_GCC_OPTIMIZE 0
+#endif
+
 #if defined(_MSC_VER)
 #define TAMP_ALWAYS_INLINE __forceinline
 #define TAMP_NOINLINE __declspec(noinline)
@@ -46,7 +54,11 @@ extern "C" {
 #elif defined(__GNUC__) && !defined(__clang__)
 #define TAMP_ALWAYS_INLINE inline __attribute__((always_inline))
 #define TAMP_NOINLINE __attribute__((noinline))
+#if TAMP_HAS_GCC_OPTIMIZE
 #define TAMP_OPTIMIZE_SIZE __attribute__((optimize("Os")))
+#else
+#define TAMP_OPTIMIZE_SIZE
+#endif
 #elif defined(__clang__)
 #define TAMP_ALWAYS_INLINE inline __attribute__((always_inline))
 #define TAMP_NOINLINE __attribute__((noinline))
