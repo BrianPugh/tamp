@@ -185,10 +185,7 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
     if (conf->extended) return TAMP_INVALID_CONF;  // Extended requested but not compiled in
 #endif
 
-    {  // volatile prevents any GCC version/target from converting this loop to a memset call
-        volatile unsigned char* p = (volatile unsigned char*)compressor;
-        for (uint8_t i = 0; i < sizeof(TampCompressor); i++) p[i] = 0;
-    }
+    TAMP_MEMSET(compressor, 0, sizeof(TampCompressor));
 
     // Build header directly from conf (8 bits total)
     // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]

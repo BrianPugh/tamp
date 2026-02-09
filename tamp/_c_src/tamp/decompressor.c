@@ -131,9 +131,8 @@ static tamp_res decode_rle(TampDecompressor* d, unsigned char** output, const un
     }
 
     /* Write repeated bytes to output */
-    for (uint8_t i = 0; i < to_write; i++) {
-        *(*output)++ = symbol;
-    }
+    TAMP_MEMSET(*output, symbol, to_write);
+    *output += to_write;
     *output_written_size += to_write;
 
     /* Update window only on first chunk (skip==0).
@@ -301,8 +300,7 @@ tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* 
     // Validate window_bits parameter
     if (window_bits < 8 || window_bits > 15) return TAMP_INVALID_CONF;
 
-    for (uint8_t i = 0; i < sizeof(TampDecompressor); i++)  // Zero-out the struct
-        ((unsigned char*)decompressor)[i] = 0;
+    TAMP_MEMSET(decompressor, 0, sizeof(TampDecompressor));
     decompressor->window = window;
     decompressor->window_bits_max = window_bits;
     if (conf) {

@@ -57,6 +57,25 @@ extern "C" {
 #define TAMP_OPTIMIZE_SIZE
 #endif
 
+/* TAMP_USE_MEMSET: Use libc memset (default: 1).
+ * Set to 0 for environments without libc (e.g. MicroPython native modules).
+ * When disabled, uses a volatile loop that prevents GCC from emitting a
+ * memset call at the cost of inhibiting store coalescing. */
+#ifndef TAMP_USE_MEMSET
+#define TAMP_USE_MEMSET 1
+#endif
+
+#if TAMP_USE_MEMSET
+#include <string.h>
+#define TAMP_MEMSET(dst, val, n) memset((dst), (val), (n))
+#else
+#define TAMP_MEMSET(dst, val, n)                                                     \
+    do {                                                                             \
+        volatile unsigned char *_tamp_p = (volatile unsigned char *)(dst);           \
+        for (size_t _tamp_i = 0; _tamp_i < (n); _tamp_i++) _tamp_p[_tamp_i] = (val); \
+    } while (0)
+#endif
+
 /* Include stream API (tamp_compress_stream, tamp_decompress_stream).
  * Enabled by default. Disable with -DTAMP_STREAM=0 to save ~2.8KB.
  */
