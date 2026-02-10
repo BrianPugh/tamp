@@ -5,7 +5,7 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-#define FLUSH 15
+#define FLUSH 14
 
 #if TAMP_EXTENDED_DECOMPRESS
 /* Token state for extended decode suspend/resume (2 bits).
@@ -21,14 +21,14 @@
 
 /**
  * Huffman lookup table indexed by 7 bits (after first "1" bit consumed).
- * Upper 4 bits = additional bits to consume, lower 4 bits = symbol (15 = FLUSH).
+ * Upper 4 bits = additional bits to consume, lower 4 bits = symbol (14 = FLUSH).
  *
  * Note: A 64-byte table with special-cased symbol 1 was tried but was ~10% slower
  * and only saved 8 bytes in final firmware due to added branch logic.
  */
 static const uint8_t HUFFMAN_TABLE[128] = {
     50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,  50,  85,  85,  85, 85, 122, 123, 104, 104, 86, 86,
-    86, 86, 93, 93, 93, 93, 68, 68, 68, 68, 68, 68, 68, 68, 105, 105, 124, 127, 87, 87, 87,  87,  51,  51,  51, 51,
+    86, 86, 93, 93, 93, 93, 68, 68, 68, 68, 68, 68, 68, 68, 105, 105, 124, 126, 87, 87, 87,  87,  51,  51,  51, 51,
     51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 17, 17, 17,  17,  17,  17,  17, 17, 17,  17,  17,  17,  17, 17,
     17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,  17,  17,  17,  17, 17, 17,  17,  17,  17,  17, 17,
     17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,  17,  17,  17,  17, 17, 17,  17,  17,  17};
@@ -42,7 +42,7 @@ static const uint8_t HUFFMAN_TABLE[128] = {
  * @param bit_buffer Pointer to bit buffer (modified in place)
  * @param bit_buffer_pos Pointer to bit position (modified in place)
  * @param trailing_bits Number of trailing bits to read (0, 3, or 4)
- * @param result Output: (huffman << trailing_bits) + trailing (max 223 for trailing_bits=4)
+ * @param result Output: (huffman << trailing_bits) + trailing (max 239 for trailing_bits=4)
  * @return TAMP_OK on success, TAMP_INPUT_EXHAUSTED if more bits needed
  */
 static tamp_res decode_huffman(uint32_t* bit_buffer, uint8_t* bit_buffer_pos, uint8_t trailing_bits, uint8_t* result) {
@@ -90,7 +90,7 @@ static tamp_res decode_huffman(uint32_t* bit_buffer, uint8_t* bit_buffer_pos, ui
  */
 static tamp_res decode_rle(TampDecompressor* d, unsigned char** output, const unsigned char* output_end,
                            size_t* output_written_size) {
-    uint8_t rle_count; /* max 225: (13 << 4) + 15 + 2 */
+    uint8_t rle_count; /* max 241: (14 << 4) + 15 + 2 */
     uint8_t skip = d->skip_bytes;
 
     if (skip > 0) {
@@ -165,7 +165,7 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
                                       size_t* output_written_size) {
     const uint8_t conf_window = d->conf_window;
     uint16_t window_offset;
-    uint8_t match_size; /* max 126: (13<<3)+7 + 3 + 12 */
+    uint8_t match_size; /* max 134: (14<<3)+7 + 3 + 12 */
     uint8_t skip = d->skip_bytes;
 
     if (skip > 0) {

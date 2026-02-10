@@ -183,6 +183,8 @@ This encoding combines a Huffman code (without the literal flag) with trailing b
 
 1. Read the Huffman symbol (12 for RLE, 13 for Extended Match) with the literal flag (``0b0``).
 2. Decode an additional Huffman code (reusing the same table, but without the leading literal flag bit).
+   In this secondary context, symbol 14 (the FLUSH bit pattern ``0b10101011``) is a valid value,
+   giving Huffman indices 0 through 14.
 3. Read trailing bits (4 bits for RLE, 3 bits for Extended Match).
 4. Combine: ``value = (huffman_index << trailing_bits) + trailing_bits_value``
 
@@ -199,7 +201,7 @@ Where:
 
 - ``huffman_code[12]`` = ``0xAA`` (9 bits including literal flag)
 - ``extended_huffman`` encodes ``count - 2`` with 4 trailing bits
-- ``count`` ranges from 2 to 225: ``(13 << 4) + 15 + 2 = 225``
+- ``count`` ranges from 2 to 241: ``(14 << 4) + 15 + 2 = 241``
 
 Window update: Only the first 8 bytes are written to the dictionary (no wrap-around).
 If fewer than 8 bytes remain before the end of the window buffer, only those bytes
@@ -227,8 +229,8 @@ Where:
 - ``huffman_code[13]`` = ``0x27`` (7 bits including literal flag)
 - ``extended_huffman`` encodes ``size - min_pattern_size - 12`` with 3 trailing bits
 - ``offset`` is ``window`` bits, pointing to the start of the pattern
-- Maximum extra size: ``(13 << 3) + 7 + 1 = 112``
-- Maximum total match size: ``min_pattern_size + 11 + 112 = min_pattern_size + 123``
+- Maximum extra size: ``(14 << 3) + 7 + 1 = 120``
+- Maximum total match size: ``min_pattern_size + 11 + 120 = min_pattern_size + 131``
 
 The ``-12`` offset ensures extended matches start at ``min_pattern_size + 12``, leaving
 symbols 0-11 for basic matches (0-11 maps to ``min_pattern_size`` through ``min_pattern_size + 11``).

@@ -8,7 +8,7 @@ except ImportError:
 from . import compute_min_pattern_size, initialize_dictionary
 
 _CHUNK_SIZE = 1 << 20
-_FLUSH = object()
+_FLUSH = 14
 
 # These variables must match compressor.py
 _RLE_SYMBOL = 12
@@ -243,7 +243,7 @@ class Decompressor:
                         self._window_buffer.write_bytes(string)
                     else:
                         match_size = self._bit_reader.read_huffman()
-                        if match_size is _FLUSH:
+                        if match_size == _FLUSH:
                             self._bit_reader.clear()
                             continue
                         if self.extended and match_size > 11:

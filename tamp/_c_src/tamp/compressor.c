@@ -10,8 +10,9 @@
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2 * !!(condition)]))
 
 #if TAMP_EXTENDED_COMPRESS
-// Extended max pattern: min_pattern_size + 11 + 112 = min_pattern_size + 123
-#define MAX_PATTERN_SIZE_EXTENDED (compressor->min_pattern_size + 123)
+// Extended max pattern: min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA
+// = min_pattern_size + 11 + (14 << 3) + 7 + 1 = min_pattern_size + 131
+#define MAX_PATTERN_SIZE_EXTENDED (compressor->min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA)
 #define MAX_PATTERN_SIZE (compressor->conf.extended ? MAX_PATTERN_SIZE_EXTENDED : (compressor->min_pattern_size + 13))
 #else
 #define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
@@ -28,14 +29,15 @@
 // proceed with normal pattern matching rather than returning immediately.
 #define TAMP_POLL_CONTINUE ((tamp_res)127)
 
-// encodes [min_pattern_bytes, min_pattern_bytes + 13] pattern lengths
-static const uint8_t huffman_codes[] = {0x0, 0x3, 0x8, 0xb, 0x14, 0x24, 0x26, 0x2b, 0x4b, 0x54, 0x94, 0x95, 0xaa, 0x27};
+// encodes [min_pattern_bytes, min_pattern_bytes + 14] pattern lengths (14 = FLUSH pattern, used in secondary reads)
+static const uint8_t huffman_codes[] = {0x0,  0x3,  0x8,  0xb,  0x14, 0x24, 0x26, 0x2b,
+                                        0x4b, 0x54, 0x94, 0x95, 0xaa, 0x27, 0xab};
 // These bit lengths pre-add the 1 bit for the 0-value is_literal flag.
-static const uint8_t huffman_bits[] = {0x2, 0x3, 0x5, 0x5, 0x6, 0x7, 0x7, 0x7, 0x8, 0x8, 0x9, 0x9, 0x9, 0x7};
+static const uint8_t huffman_bits[] = {0x2, 0x3, 0x5, 0x5, 0x6, 0x7, 0x7, 0x7, 0x8, 0x8, 0x9, 0x9, 0x9, 0x7, 0x09};
 
 #if TAMP_EXTENDED_COMPRESS
-#define RLE_MAX_COUNT ((13 << 4) + 15 + 2)            // 225
-#define EXTENDED_MATCH_MAX_EXTRA ((13 << 3) + 7 + 1)  // 112
+#define RLE_MAX_COUNT ((14 << 4) + 15 + 2)            // 241
+#define EXTENDED_MATCH_MAX_EXTRA ((14 << 3) + 7 + 1)  // 120
 
 // Minimum output buffer space required for extended match token.
 // Extended match: symbol (7 bits) + extended huffman (11 bits) + window pos (15 bits) = 33 bits.

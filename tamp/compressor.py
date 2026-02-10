@@ -179,7 +179,7 @@ class Compressor:
         self._rle_count = 0
 
         # "+1" Because a RLE of 1 is not valid.
-        self._rle_max_size = (13 << _LEADING_RLE_HUFFMAN_BITS) + (1 << _LEADING_RLE_HUFFMAN_BITS) + 1
+        self._rle_max_size = (14 << _LEADING_RLE_HUFFMAN_BITS) + (1 << _LEADING_RLE_HUFFMAN_BITS) + 1
 
         self._extended_match_count = 0
         self._extended_match_position = 0
@@ -202,7 +202,7 @@ class Compressor:
             self.max_pattern_size = (
                 self.min_pattern_size
                 + 11
-                + (13 << _LEADING_EXTENDED_MATCH_HUFFMAN_BITS)
+                + (14 << _LEADING_EXTENDED_MATCH_HUFFMAN_BITS)
                 + (1 << _LEADING_EXTENDED_MATCH_HUFFMAN_BITS)
             )
         else:
@@ -392,7 +392,7 @@ class Compressor:
         bytes_written = 0
         # the upper bits can have values [0, 13]
         mask = (1 << leading_bits) - 1
-        if value > ((13 << leading_bits) + mask) or value < 0:
+        if value > ((14 << leading_bits) + mask) or value < 0:
             raise ValueError
         code_index = value >> leading_bits
         # Don't use write_huffman_and_literal_flag since we don't want to write a flag.
