@@ -187,6 +187,8 @@ make website-clean         # Clean website build artifacts
   `TAMP_STREAM_FATFS` - Enable built-in I/O handlers for specific backends
 - `TAMP_USE_EMBEDDED_MATCH=1` - Force embedded `find_best_match` implementation
   on desktop (for testing)
+- `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
+  environments without libc (e.g. MicroPython native modules).
 
 **Build Environment Variables (Python):**
 

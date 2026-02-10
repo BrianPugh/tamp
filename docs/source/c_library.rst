@@ -43,8 +43,18 @@ Pass these flags to your compiler (e.g., ``-DTAMP_STREAM=0``).
 +----------------------------------+-------------------+------------------------------------------------------------------------------+
 | ``TAMP_STREAM_FATFS``            | ``0``             | Enable FatFs (ChaN's FAT filesystem) stream handlers. Requires FatFs headers.|
 +----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_COMPRESSOR``              | ``1``             | Include compressor implementation. Set to ``0`` to exclude compressor code   |
+|                                  |                   | entirely, reducing binary size for decompressor-only builds.                 |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_DECOMPRESSOR``            | ``1``             | Include decompressor implementation. Set to ``0`` to exclude decompressor    |
+|                                  |                   | code entirely, reducing binary size for compressor-only builds.              |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
 | ``TAMP_ESP32``                   | ``0``             | Use ESP32-optimized variant. Avoids bitfields for speed at the cost of       |
 |                                  |                   | slightly higher memory usage. Automatically enabled via Kconfig on ESP-IDF.  |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_USE_MEMSET``              | ``1``             | Use libc ``memset``. Set to ``0`` for environments without libc              |
+|                                  |                   | (e.g. MicroPython native modules). When disabled, uses a volatile byte loop  |
+|                                  |                   | that avoids emitting a ``memset`` call at the cost of store coalescing.      |
 +----------------------------------+-------------------+------------------------------------------------------------------------------+
 
 **Example: Minimal decompressor-only build**
