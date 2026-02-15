@@ -44,7 +44,7 @@ of RAM and firmware storage.
     - See documentation [here](https://docs.rs/tamp/latest/tamp/index.html).
 - High compression ratios, low memory use, and fast.
 - Compact compression and decompression implementations.
-  - Compiled C library is <4KB (compressor + decompressor).
+  - Compiled C library is <5KB (compressor + decompressor).
 - Mid-stream flushing.
   - Allows for submission of messages while continuing to compress subsequent
     data.
@@ -53,13 +53,14 @@ of RAM and firmware storage.
 
 # Installation
 
-Tamp contains 3 implementations:
+Tamp contains several implementations:
 
 1. A reference desktop CPython implementation that is optimized for readability
    (and **not** speed).
 2. A Micropython Native Module implementation (fast).
 3. A C implementation (with python bindings) for accelerated desktop use and to
    be used in C projects (very fast).
+4. A JavaScript/TypeScript implementation via Emscripten WASM (see `wasm/`).
 
 This section instructs how to install each implementation.
 
@@ -246,22 +247,6 @@ compress once on a powerful machine (like a desktop/server) and decompress on an
 embedded device, it may be worth it to spend a bit more compute. Lazy matched
 compressed data is the exact same format; it appears no different to the tamp
 decoder.
-
-One might wonder "Why did Tamp perform so much worse than zlib on the nci
-dataset?" The `nci` dataset contains highly compressible data with **long
-patterns**. For example, the following 49-character **text** appears repeatedly
-in the dataset:
-
-```
-    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
-```
-
-Tamp's maximum pattern length peaks at around 15 characters, meaning that these
-49 characters has to be compressed as 4 pattern-matches. Zlib can handle
-patterns with a maximum length of 258, meaning that it can encode this highly
-repeating data more efficiently. Given Tamp's excellent performance in most of
-the other data compression benchmark files, this is a good tradeoff for most
-real-world scenarios.
 
 ### Ablation Study
 

@@ -195,39 +195,30 @@ the last byte written to the window buffer. If no bytes have been written yet
 (i.e., ``window_pos == 0``), the byte at position ``window_size - 1`` of the
 initial dictionary is used.
 
-Format: ``0b0 | huffman_code[12] | extended_huffman(count - 2, trailing=4)``
-
-Where:
-
 - ``huffman_code[12]`` = ``0xAA`` (9 bits including literal flag)
-- ``extended_huffman`` encodes ``count - 2`` with 4 trailing bits
 - ``count`` ranges from 2 to 241: ``(14 << 4) + 15 + 2 = 241``
 
 Window update: Only the first 8 bytes are written to the dictionary (no wrap-around).
 If fewer than 8 bytes remain before the end of the window buffer, only those bytes
-are written. This bounds the window update cost while still allowing the decompressor
-to find subsequent pattern matches.
+are written. Writing only 8 bytes preserves useful dictionary content for future
+pattern matches, since filling the window with a single repeated byte would reduce
+match opportunities.
 
 .. code-block:: text
 
    RLE Token Structure:
-   +---+------------+-------------------+----------------+
-   | 0 | huffman[12]| huffman(cnt>>4)   | cnt & 0xF      |
-   +---+------------+-------------------+----------------+
-   |1b |   8 bits   | 1-8 bits          | 4 bits         |
-   +---+------------+-------------------+----------------+
+   +---+------------+----------------------------+
+   | 0 | huffman[12]| extended_huffman(count - 2) |
+   +---+------------+----------------------------+
+   |1b |   8 bits   | (1 ~ 8) + 4 bits           |
+   +---+------------+----------------------------+
 
 Extended Match Token (Symbol 13)
 --------------------------------
 Extended Match allows pattern matches longer than the basic format's maximum of
 ``min_pattern_size + 13``. It is used when a match exceeds ``min_pattern_size + 11``.
 
-Format: ``0b0 | huffman_code[13] | extended_huffman(size - min_pattern_size - 12, trailing=3) | offset``
-
-Where:
-
 - ``huffman_code[13]`` = ``0x27`` (7 bits including literal flag)
-- ``extended_huffman`` encodes ``size - min_pattern_size - 12`` with 3 trailing bits
 - ``offset`` is ``window`` bits, pointing to the start of the pattern
 - Maximum extra size: ``(14 << 3) + 7 + 1 = 120``
 - Maximum total match size: ``min_pattern_size + 11 + 120 = min_pattern_size + 131``
@@ -244,11 +235,11 @@ impact on compression ratio (approximately 0.02% loss).
 .. code-block:: text
 
    Extended Match Token Structure:
-   +---+------------+-------------------+----------------+--------+
-   | 0 | huffman[13]| huffman(sz>>3)    | sz & 0x7       | offset |
-   +---+------------+-------------------+----------------+--------+
-   |1b |   6 bits   | 1-8 bits          | 3 bits         | window |
-   +---+------------+-------------------+----------------+--------+
+   +---+------------+-------------------------+--------+
+   | 0 | huffman[13]| extended_huffman(sz)     | offset |
+   +---+------------+-------------------------+--------+
+   |1b |   6 bits   | (1 ~ 8) + 3 bits        | window |
+   +---+------------+-------------------------+--------+
 
    Where sz = match_size - min_pattern_size - 12
 
@@ -264,19 +255,21 @@ while still continuing to compress more data. Examples include:
 
 2. Pushing a chunk of collected data to a remote server.
 
-Internally, Tamp uses a 1-byte buffer to store compressed bits until a full byte is available for writing.
+Since the output bit stream must be byte-aligned for writing, there may be up to 7
+pending bits that have not yet formed a complete byte.
 Invoking the ``flush`` method can have one of two results:
 
-1. If the buffer **is** empty, no action is performed.
+1. If the output is already byte-aligned, no action is performed.
 
-2. If the buffer **is not** empty, then the FLUSH Huffman code is written.
+2. If there are pending bits, the FLUSH Huffman code is written.
    No ``offset`` bits are written following the FLUSH code.
-   The remaining buffer bits are zero-padded and flushed.
+   The remaining bits are zero-padded to the next byte boundary.
 
-
-On reading, if a FLUSH is read, the reader will discard the remainder of it's 1-byte buffer.
-In the best-case-scenario (write buffer is empty), a FLUSH symbol will not be emitted.
-In the worst-case-scenario (1 bit in the write buffer), a FLUSH symbol (9 bits) and the remaining empty 6 bits are flushed. This adds 15 bits of overhead to the output stream.
+On reading, if a FLUSH is read, the reader discards the remaining bits up to the
+next byte boundary.
+In the best case (already byte-aligned), no FLUSH symbol is emitted.
+In the worst case (1 pending bit), a FLUSH symbol (9 bits) and 6 padding bits are
+written, adding 15 bits of overhead to the output stream.
 
 At the very end of a stream, the FLUSH symbol is unnecessary and **may be omitted** to save an additional one or two bytes.
 

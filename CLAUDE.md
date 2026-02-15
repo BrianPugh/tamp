@@ -32,7 +32,8 @@ different platforms:
   higher-level compress/flush API)
 - `decompressor.h/c` - Decompression implementation
 - `compressor_find_match_desktop.c` - Desktop-optimized match finding (included
-  by `compressor.c` on non-embedded targets)
+  by `compressor.c` on 64-bit targets: x86_64, aarch64, unless
+  `TAMP_USE_EMBEDDED_MATCH=1`)
 
 ## Development Commands
 
@@ -174,7 +175,8 @@ make website-clean         # Clean website build artifacts
 
 - `TAMP_LAZY_MATCHING=1` - Enable lazy matching optimization (default in
   build.py)
-- `TAMP_ESP32=1` - ESP32-specific optimizations (avoids bitfields for speed)
+- `TAMP_ESP32=1` - ESP32-specific optimizations (uses `uint32_t` instead of
+  narrower types for hot struct fields, avoiding costly narrow-type conversions)
 - `TAMP_COMPRESSOR`/`TAMP_DECOMPRESSOR` - Include/exclude components
 - `TAMP_EXTENDED=1` - Master switch for extended format: RLE and extended match
   (default: 1). `TAMP_EXTENDED_COMPRESS` and `TAMP_EXTENDED_DECOMPRESS` can
