@@ -51,6 +51,12 @@ Customize compression behavior with options:
      // For general use, 8 (the whole byte) is appropriate.
      literal: 7,
 
+     // Enable extended format (RLE, extended match) for better compression ratios.
+     // The extended format provides better compression for typical data at the
+     // cost of slightly more complex encoding.
+     // Default: true
+     extended: true,
+
      // Enable lazy matching to slightly improve compression (0.5-2.0%) ratios
      // at the cost of 50-75% slower compression.
      // Most embedded systems will **not** want to use this feature and disable it.
@@ -136,6 +142,7 @@ Configure compression parameters by passing in options:
    const options = {
      window: 12,           // Larger window for (usually) better compression
      literal: 7,           // ASCII text only requires 7 bits.
+     extended: true,       // Enable extended format (RLE, extended match)
      lazy_matching: true   // Better compression ratios; slower to compress
    };
 

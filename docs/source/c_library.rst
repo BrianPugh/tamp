@@ -5,6 +5,71 @@ C Library
 Tamp provides a C library optimized for low-memory-usage, fast runtime, and small binary footprint.
 This page describes how to use the provided library.
 
+Compile-Time Flags
+^^^^^^^^^^^^^^^^^^
+Tamp's C library can be customized via compile-time flags to control features, code size, and performance.
+Pass these flags to your compiler (e.g., ``-DTAMP_STREAM=0``).
+
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| Flag                             | Default           | Description                                                                  |
++==================================+===================+==============================================================================+
+| ``TAMP_EXTENDED``                | ``1``             | Default value for extended format support (RLE, extended match encoding).    |
+|                                  |                   | Set to ``0`` to disable extended support in both compressor and decompressor.|
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_EXTENDED_COMPRESS``       | ``TAMP_EXTENDED`` | Enable extended format compression. Defaults to ``TAMP_EXTENDED`` but can    |
+|                                  |                   | be individually overridden for compressor-only or decompressor-only builds.  |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_EXTENDED_DECOMPRESS``     | ``TAMP_EXTENDED`` | Enable extended format decompression. Defaults to ``TAMP_EXTENDED`` but can  |
+|                                  |                   | be individually overridden for compressor-only or decompressor-only builds.  |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_LAZY_MATCHING``           | ``0``             | Enable lazy matching support. When enabled, ``TampConf.lazy_matching``       |
+|                                  |                   | becomes available. Improves compression ratio by 0.5-2% at the cost of       |
+|                                  |                   | 50-75% slower compression. Most embedded systems should leave disabled.      |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_STREAM``                  | ``1``             | Include stream API (``tamp_compress_stream``, ``tamp_decompress_stream``).   |
+|                                  |                   | Disable with ``-DTAMP_STREAM=0`` to save ~2.8KB if only using low-level API. |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_STREAM_WORK_BUFFER_SIZE`` | ``32``            | Stack-allocated work buffer size (bytes) for stream API. Split in half       |
+|                                  |                   | for input/output. Larger values reduce I/O callback invocations,             |
+|                                  |                   | improving decompression speed. 256+ bytes recommended when stack permits.    |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_STREAM_STDIO``            | ``0``             | Enable stdio (``FILE*``) stream handlers. Works with standard C library,     |
+|                                  |                   | ESP-IDF VFS, and POSIX-compatible systems.                                   |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_STREAM_MEMORY``           | ``0``             | Enable memory buffer stream handlers (``TampMemReader``, ``TampMemWriter``). |
+|                                  |                   | Useful for file-to-memory or memory-to-file operations.                      |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_STREAM_LITTLEFS``         | ``0``             | Enable LittleFS stream handlers. Requires LittleFS headers.                  |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_STREAM_FATFS``            | ``0``             | Enable FatFs (ChaN's FAT filesystem) stream handlers. Requires FatFs headers.|
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_COMPRESSOR``              | ``1``             | Include compressor implementation. Set to ``0`` to exclude compressor code   |
+|                                  |                   | entirely, reducing binary size for decompressor-only builds.                 |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_DECOMPRESSOR``            | ``1``             | Include decompressor implementation. Set to ``0`` to exclude decompressor    |
+|                                  |                   | code entirely, reducing binary size for compressor-only builds.              |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_ESP32``                   | ``0``             | Use ESP32-optimized variant. Avoids bitfields for speed at the cost of       |
+|                                  |                   | slightly higher memory usage. Automatically enabled via Kconfig on ESP-IDF.  |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+| ``TAMP_USE_MEMSET``              | ``1``             | Use libc ``memset``. Set to ``0`` for environments without libc              |
+|                                  |                   | (e.g. MicroPython native modules). When disabled, uses a volatile byte loop  |
+|                                  |                   | that avoids emitting a ``memset`` call at the cost of store coalescing.      |
++----------------------------------+-------------------+------------------------------------------------------------------------------+
+
+**Example: Minimal decompressor-only build**
+
+.. code-block:: bash
+
+   gcc -DTAMP_EXTENDED_COMPRESS=0 -DTAMP_STREAM=0 -c decompressor.c common.c
+
+**Example: Full-featured build with LittleFS support**
+
+.. code-block:: bash
+
+   gcc -DTAMP_LAZY_MATCHING=1 -DTAMP_STREAM_LITTLEFS=1 -DTAMP_STREAM_WORK_BUFFER_SIZE=256 \
+       -c compressor.c decompressor.c common.c
+
 Overview
 ^^^^^^^^
 To use Tamp in your C project, simply copy the contents of ``tamp/_c_src`` into your project.

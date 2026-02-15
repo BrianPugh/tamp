@@ -34,11 +34,8 @@ of RAM and firmware storage.
     - `pip install tamp` will use a python-bound C implementation optimized for
       speed.
   - Micropython:
-    - Native Module (suggested micropython implementation).
+    - Native Module.
       - `mpy_bindings/`
-    - Viper.
-      - `tamp/__init__.py`, `tamp/compressor_viper.py`,
-        `tamp/decompressor_viper.py`
   - C library:
     - `tamp/_c_src/`
   - Javascript/Typescript via Emscripten WASM.
@@ -47,7 +44,7 @@ of RAM and firmware storage.
     - See documentation [here](https://docs.rs/tamp/latest/tamp/index.html).
 - High compression ratios, low memory use, and fast.
 - Compact compression and decompression implementations.
-  - Compiled C library is <4KB (compressor + decompressor).
+  - Compiled C library is <5KB (compressor + decompressor).
 - Mid-stream flushing.
   - Allows for submission of messages while continuing to compress subsequent
     data.
@@ -56,15 +53,14 @@ of RAM and firmware storage.
 
 # Installation
 
-Tamp contains 4 implementations:
+Tamp contains several implementations:
 
 1. A reference desktop CPython implementation that is optimized for readability
    (and **not** speed).
 2. A Micropython Native Module implementation (fast).
-3. A Micropython Viper implementation (not recommended, please use Native
-   Module).
-4. A C implementation (with python bindings) for accelerated desktop use and to
+3. A C implementation (with python bindings) for accelerated desktop use and to
    be used in C projects (very fast).
+4. A JavaScript/TypeScript implementation via Emscripten WASM (see `wasm/`).
 
 This section instructs how to install each implementation.
 
@@ -96,42 +92,6 @@ following to `pyproject.toml`.
 ```toml
 [tool.belay.dependencies]
 tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.7.0/tamp-1.7.0-mpy1.23-armv6m.mpy"
-```
-
-### MicroPython Viper
-
-**NOT RECOMMENDED, PLEASE USE NATIVE MODULE**
-
-For micropython use, there are 3 main files:
-
-1. `tamp/__init__.py` - Always required.
-2. `tamp/decompressor_viper.py` - Required for on-device decompression.
-3. `tamp/compressor_viper.py` - Required for on-device compression.
-
-For example, if on-device decompression isn't used, then do not include
-`decompressor_viper.py`. If manually installing, just copy these files to your
-microcontroller's `/lib/tamp` folder.
-
-If using
-[mip](https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip),
-tamp can be installed by specifying the appropriate `package-*.json` file.
-
-```bash
-mip install github:brianpugh/tamp  # Defaults to package.json: Compressor & Decompressor
-mip install github:brianpugh/tamp/package-compressor.json  # Compressor only
-mip install github:brianpugh/tamp/package-decompressor.json  # Decompressor only
-```
-
-If using [Belay](https://github.com/BrianPugh/belay), tamp can be installed by
-adding the following to `pyproject.toml`.
-
-```toml
-[tool.belay.dependencies]
-tamp = [
-   "https://github.com/BrianPugh/tamp/blob/main/tamp/__init__.py",
-   "https://github.com/BrianPugh/tamp/blob/main/tamp/compressor_viper.py",
-   "https://github.com/BrianPugh/tamp/blob/main/tamp/decompressor_viper.py",
-]
 ```
 
 ## C
@@ -258,52 +218,62 @@ input data sourced from the
 [Enwik8](https://mattmahoney.net/dc/textdata.html). This should give a general
 idea of how these algorithms perform over a variety of input data types.
 
-| dataset         | raw         | tamp           | tamp (LazyMatching) | zlib           | heatshrink |
-| --------------- | ----------- | -------------- | ------------------- | -------------- | ---------- |
-| enwik8          | 100,000,000 | **51,635,633** | 51,252,113          | 56,205,166     | 56,110,394 |
-| silesia/dickens | 10,192,446  | **5,546,761**  | 5,511,604           | 6,049,169      | 6,155,768  |
-| silesia/mozilla | 51,220,480  | 25,121,385     | 24,936,067          | **25,104,966** | 25,435,908 |
-| silesia/mr      | 9,970,564   | 5,027,032      | 4,886,272           | **4,864,734**  | 5,442,180  |
-| silesia/nci     | 33,553,445  | 8,643,610      | 8,645,299           | **5,765,521**  | 8,247,487  |
-| silesia/ooffice | 6,152,192   | **3,814,938**  | 3,798,261           | 4,077,277      | 3,994,589  |
-| silesia/osdb    | 10,085,684  | **8,520,835**  | 8,506,443           | 8,625,159      | 8,747,527  |
-| silesia/reymont | 6,627,202   | **2,847,981**  | 2,820,870           | 2,897,661      | 2,910,251  |
-| silesia/samba   | 21,606,400  | 9,102,594      | 9,060,692           | **8,862,423**  | 9,223,827  |
-| silesia/sao     | 7,251,944   | **6,137,755**  | 6,101,744           | 6,506,417      | 6,400,926  |
-| silesia/webster | 41,458,703  | **18,694,172** | 18,567,288          | 20,212,235     | 19,942,817 |
-| silesia/x-ray   | 8,474,240   | 7,510,606      | 7,405,814           | **7,351,750**  | 8,059,723  |
-| silesia/xml     | 5,345,280   | 1,681,687      | 1,672,660           | **1,586,985**  | 1,665,179  |
+| dataset         | raw         | tamp        | tamp (LazyMatching) | zlib          | heatshrink |
+| --------------- | ----------- | ----------- | ------------------- | ------------- | ---------- |
+| enwik8          | 100,000,000 | 51,016,917  | **50,625,930**      | 56,205,166    | 56,110,394 |
+| RPI_PICO (.uf2) | 667,648     | **289,454** | 290,577             | 303,763       | -          |
+| silesia/dickens | 10,192,446  | 5,538,353   | **5,502,834**       | 6,049,169     | 6,155,768  |
+| silesia/mozilla | 51,220,480  | 24,413,362  | **24,229,925**      | 25,104,966    | 25,435,908 |
+| silesia/mr      | 9,970,564   | 4,520,091   | **4,391,864**       | 4,864,734     | 5,442,180  |
+| silesia/nci     | 33,553,445  | 6,824,403   | 6,772,307           | **5,765,521** | 8,247,487  |
+| silesia/ooffice | 6,152,192   | 3,773,003   | **3,755,046**       | 4,077,277     | 3,994,589  |
+| silesia/osdb    | 10,085,684  | 8,466,875   | **8,464,328**       | 8,625,159     | 8,747,527  |
+| silesia/reymont | 6,627,202   | 2,818,554   | **2,788,774**       | 2,897,661     | 2,910,251  |
+| silesia/samba   | 21,606,400  | 8,383,534   | **8,346,076**       | 8,862,423     | 9,223,827  |
+| silesia/sao     | 7,251,944   | 6,136,077   | **6,100,061**       | 6,506,417     | 6,400,926  |
+| silesia/webster | 41,458,703  | 18,146,641  | **18,010,981**      | 20,212,235    | 19,942,817 |
+| silesia/x-ray   | 8,474,240   | 7,509,449   | 7,404,794           | **7,351,750** | 8,059,723  |
+| silesia/xml     | 5,345,280   | 1,472,562   | **1,455,641**       | 1,586,985     | 1,665,179  |
 
-Tamp usually out-performs heatshrink, and is generally very competitive with
-zlib. While trying to be an apples-to-apples comparison, zlib still uses
-significantly more memory during both compression and decompression (see next
-section). Tamp accomplishes competitive performance while using around 10x less
-memory.
+Tamp outperforms both heatshrink and zlib on most datasets, winning 12 out of 14
+benchmarks. This is while using around 10x less memory than zlib during both
+compression and decompression (see next section).
 
 Lazy Matching is a simple technique to improve compression ratios at the expense
 of CPU while requiring very little code. One can expect **50-75%** more CPU
-usage for modest compression gains (around 0.5 - 2.0%). Because of this poor
+usage for modest compression gains (around 0.5 - 2.0%). Because of this
 trade-off, it is disabled by default; however, in applications where we want to
 compress once on a powerful machine (like a desktop/server) and decompress on an
 embedded device, it may be worth it to spend a bit more compute. Lazy matched
 compressed data is the exact same format; it appears no different to the tamp
 decoder.
 
-One might wonder "Why did Tamp perform so much worse than zlib on the nci
-dataset?" The `nci` dataset contains highly compressible data with **long
-patterns**. For example, the following 49-character **text** appears repeatedly
-in the dataset:
+### Ablation Study
 
-```
-    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
-```
+The following table shows the effect of the `extended` and `lazy_matching`
+compression parameters across all benchmark datasets (`window=10`, `literal=8`).
 
-Tamp's maximum pattern length peaks at around 15 characters, meaning that these
-49 characters has to be compressed as 4 pattern-matches. Zlib can handle
-patterns with a maximum length of 258, meaning that it can encode this highly
-repeating data more efficiently. Given Tamp's excellent performance in most of
-the other data compression benchmark files, this is a good tradeoff for most
-real-world scenarios.
+| dataset         | raw         | Baseline   | +lazy              | +extended          | +lazy +extended    |
+| --------------- | ----------- | ---------- | ------------------ | ------------------ | ------------------ |
+| enwik8          | 100,000,000 | 51,635,633 | 51,252,694 (−0.7%) | 51,016,917 (−1.2%) | 50,625,930 (−2.0%) |
+| RPI_PICO (.uf2) | 667,648     | 331,310    | 329,893 (−0.4%)    | 289,454 (−12.6%)   | 290,577 (−12.3%)   |
+| silesia/dickens | 10,192,446  | 5,546,761  | 5,511,681 (−0.6%)  | 5,538,353 (−0.2%)  | 5,502,834 (−0.8%)  |
+| silesia/mozilla | 51,220,480  | 25,121,385 | 24,937,036 (−0.7%) | 24,413,362 (−2.8%) | 24,229,925 (−3.5%) |
+| silesia/mr      | 9,970,564   | 5,027,032  | 4,888,930 (−2.7%)  | 4,520,091 (−10.1%) | 4,391,864 (−12.6%) |
+| silesia/nci     | 33,553,445  | 8,643,610  | 8,645,399 (+0.0%)  | 6,824,403 (−21.0%) | 6,772,307 (−21.6%) |
+| silesia/ooffice | 6,152,192   | 3,814,938  | 3,798,393 (−0.4%)  | 3,773,003 (−1.1%)  | 3,755,046 (−1.6%)  |
+| silesia/osdb    | 10,085,684  | 8,520,835  | 8,518,502 (−0.0%)  | 8,466,875 (−0.6%)  | 8,464,328 (−0.7%)  |
+| silesia/reymont | 6,627,202   | 2,847,981  | 2,820,948 (−0.9%)  | 2,818,554 (−1.0%)  | 2,788,774 (−2.1%)  |
+| silesia/samba   | 21,606,400  | 9,102,594  | 9,061,143 (−0.5%)  | 8,383,534 (−7.9%)  | 8,346,076 (−8.3%)  |
+| silesia/sao     | 7,251,944   | 6,137,755  | 6,101,747 (−0.6%)  | 6,136,077 (−0.0%)  | 6,100,061 (−0.6%)  |
+| silesia/webster | 41,458,703  | 18,694,172 | 18,567,618 (−0.7%) | 18,146,641 (−2.9%) | 18,010,981 (−3.7%) |
+| silesia/x-ray   | 8,474,240   | 7,510,606  | 7,406,001 (−1.4%)  | 7,509,449 (−0.0%)  | 7,404,794 (−1.4%)  |
+| silesia/xml     | 5,345,280   | 1,681,687  | 1,672,827 (−0.5%)  | 1,472,562 (−12.4%) | 1,455,641 (−13.4%) |
+
+The `extended` parameter enables additional Huffman codes for longer pattern
+matches, which significantly improves compression on datasets with many long
+repeating patterns (e.g., nci, samba, xml). Extended support was added in
+v2.0.0.
 
 ## Memory Usage
 
@@ -331,7 +301,7 @@ on an M3 Macbook Air.
 |                              | Compression (s) | Decompression (s) |
 | ---------------------------- | --------------- | ----------------- |
 | Tamp (Pure Python Reference) | 136.2           | 105.0             |
-| Tamp (C bindings)            | 5.56            | 0.544             |
+| Tamp (C bindings)            | 5.45            | 0.544             |
 | ZLib                         | 3.65            | 0.578             |
 | Heatshrink (with index)      | 4.42            | 0.67              |
 | Heatshrink (without index)   | 27.40           | 0.67              |
@@ -350,8 +320,7 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
-| Tamp (MicroPython Viper)         | 4,300                 | 42,000                  |
-| Tamp (Micropython Native Module) | 31,192                | 1,086,957               |
+| Tamp (Micropython Native Module) | 31,949                | 1,086,957               |
 | Tamp (C)                         | 36,127                | 1,400,600               |
 | Deflate (micropython builtin)    | 6,885                 | 294,985                 |
 
@@ -365,19 +334,20 @@ compiled for the Pi Pico (`armv6m`). All libraries were compiled with `-O3`.
 Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 15.2.1 and MicroPython v1.27, and can be regenerated with `make binary-size`.
 
-|                           | Compressor | Decompressor | Compressor + Decompressor |
-| ------------------------- | ---------- | ------------ | ------------------------- |
-| Tamp (MicroPython Viper)  | 4676       | 4372         | 7917                      |
-| Tamp (MicroPython Native) | 3896       | 3559         | 6616                      |
-| Tamp (C, -DTAMP_STREAM=0) | 2028       | 1992         | 3900                      |
-| Tamp (C)                  | 2472       | 2444         | 4796                      |
-| Heatshrink (C)            | 2956       | 3876         | 6832                      |
-| uzlib (C)                 | 2355       | 3963         | 6318                      |
+|                                  | Compressor | Decompressor | Compressor + Decompressor |
+| -------------------------------- | ---------- | ------------ | ------------------------- |
+| Tamp (MicroPython Native)        | 4708       | 4339         | 8124                      |
+| Tamp (C, no extended, no stream) | 1466       | 1312         | 2592                      |
+| Tamp (C, no extended)            | 1748       | 1550         | 3112                      |
+| Tamp (C, extended, no stream)    | 2558       | 2072         | 4444                      |
+| Tamp (C, extended)               | 2840       | 2310         | 4964                      |
+| Heatshrink (C)                   | 2956       | 3876         | 6832                      |
+| uzlib (C)                        | 2355       | 3963         | 6318                      |
 
-Tamp C includes a high-level stream API by default. Even with `-DTAMP_STREAM=0`,
-Tamp includes buffer-looping functions (like `tamp_compressor_compress`) that
-Heatshrink lacks (Heatshrink only provides poll/sink primitives). In an
-apples-to-apples comparison, Tamp would be even smaller.
+Tamp C "extended" includes `tamp_compressor_compress_and_flush`. Tamp C includes
+a high-level stream API by default. Even with `no stream`, Tamp includes
+buffer-looping functions (like `tamp_compressor_compress`) that Heatshrink lacks
+(Heatshrink only provides poll/sink primitives).
 
 ## Acknowledgement
 

@@ -119,6 +119,7 @@ def compress(
         ),
     ] = 8,
     lazy_matching: bool = False,
+    extended: bool = True,
     implementation: ImplementationType = None,
 ):
     """Compress an input file or stream.
@@ -135,6 +136,8 @@ def compress(
         Number of bits used to represent a literal.
     lazy_matching: bool
         Use roughly 50% more cpu to get 0~2% better compression.
+    extended: bool
+        Use extended compression format (RLE, extended match encoding).
     implementation: Optional[Literal["c", "python"]]
         Explicitly specify which implementation to use (c or python). Defaults to auto-detection.
     """
@@ -145,6 +148,7 @@ def compress(
         window=window,
         literal=literal,
         lazy_matching=lazy_matching,
+        extended=extended,
     )
     write(output, output_bytes)
 

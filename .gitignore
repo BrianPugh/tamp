@@ -249,10 +249,12 @@ Temporary Items
 # Compression benchmark datasets
 datasets/*
 !datasets/v1-compressed/
+!datasets/extended-compressed/
 enwik8*
 *.pkl
 *.tamp
 !datasets/v1-compressed/**
+!datasets/extended-compressed/**
 
 # Cython-generated files
 tamp/_c_compressor.c
@@ -434,6 +436,9 @@ wasm/build/
 *.swp
 *.swo
 *~
+
+# clangd (C/C++ language server)
+.clangd
 
 # Emacs
 *~

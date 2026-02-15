@@ -57,10 +57,13 @@ repos:
         args: ['-style=file', '-i']
         exclude: ^espidf/tamp/private/tamp_search\.hpp$
 
-  - repo: https://github.com/pocc/pre-commit-hooks
-    rev: v1.3.5
+  - repo: local
     hooks:
       - id: cppcheck
+        name: cppcheck
+        entry: cppcheck
+        language: system
+        files: \.(c|h|cpp|hpp)$
         exclude: ^(espidf|mpy_bindings|ctests|tools)/
         args: [
             '-Itamp/_c_src',
