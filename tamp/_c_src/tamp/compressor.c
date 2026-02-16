@@ -636,7 +636,7 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_cb(TampCompressor* compress
             output_size -= chunk_output_written_size;
             (*output_written_size) += chunk_output_written_size;
             if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
-            if (TAMP_UNLIKELY(callback && (res = callback(user_data, *output_written_size, total_input_size))))
+            if (TAMP_UNLIKELY(callback && (res = callback(user_data, *input_consumed_size, total_input_size))))
                 return (tamp_res)res;
         }
     }
@@ -747,6 +747,13 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor
     (*output_written_size) += flush_size;
 
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+
+    // Final callback to signal 100% completion (compress_cb's last callback may
+    // have reported less than input_size if the final sink didn't trigger a poll).
+    if (TAMP_UNLIKELY(callback)) {
+        int cb_res = callback(user_data, input_size, input_size);
+        if (TAMP_UNLIKELY(cb_res)) return (tamp_res)cb_res;
+    }
 
     return TAMP_OK;
 }

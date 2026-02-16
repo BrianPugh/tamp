@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -179,4 +180,84 @@ void test_stdio_handlers_roundtrip(void) {
     fclose(temp_input);
     fclose(temp_compressed);
     fclose(temp_output);
+}
+
+void test_compress_stream_callback_receives_input_consumed(void) {
+    const char *original =
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog.";
+    size_t original_len = strlen(original);
+
+    TampMemReader reader = {.data = (const unsigned char *)original, .size = original_len, .pos = 0};
+    unsigned char compressed[512];
+    TampMemWriter writer = {.data = compressed, .capacity = sizeof(compressed), .pos = 0};
+
+    unsigned char window[1 << 10];
+    TampConf conf = {.window = 10, .literal = 8};
+    TampCompressor compressor;
+    tamp_compressor_init(&compressor, &conf, window);
+
+    CallbackTracker tracker;
+    callback_tracker_init(&tracker, 0);
+
+    size_t input_consumed, output_written;
+    tamp_res res = tamp_compress_stream(&compressor, tamp_stream_mem_read, &reader, tamp_stream_mem_write, &writer,
+                                        &input_consumed, &output_written, tracking_callback, &tracker);
+
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_GREATER_THAN(0, tracker.call_count);
+
+    // Monotonicity and total_bytes consistency are checked in the callback itself.
+    // Final bytes_processed should equal total input consumed
+    TEST_ASSERT_EQUAL(input_consumed, tracker.last_bytes_processed);
+}
+
+void test_decompress_stream_callback_receives_input_consumed(void) {
+    // First compress some data
+    const char *original =
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog.";
+    size_t original_len = strlen(original);
+
+    TampMemReader compress_reader = {.data = (const unsigned char *)original, .size = original_len, .pos = 0};
+    unsigned char compressed[512];
+    TampMemWriter compress_writer = {.data = compressed, .capacity = sizeof(compressed), .pos = 0};
+
+    unsigned char window[1 << 10];
+    TampConf conf = {.window = 10, .literal = 8};
+    TampCompressor compressor;
+    tamp_compressor_init(&compressor, &conf, window);
+
+    size_t compress_in, compress_out;
+    tamp_compress_stream(&compressor, tamp_stream_mem_read, &compress_reader, tamp_stream_mem_write, &compress_writer,
+                         &compress_in, &compress_out, NULL, NULL);
+
+    // Now decompress with callback
+    TampMemReader decompress_reader = {.data = compressed, .size = compress_out, .pos = 0};
+    unsigned char decompressed[512];
+    TampMemWriter decompress_writer = {.data = decompressed, .capacity = sizeof(decompressed), .pos = 0};
+
+    TampDecompressor decompressor;
+    tamp_decompressor_init(&decompressor, NULL, window, 10);
+
+    CallbackTracker tracker;
+    callback_tracker_init(&tracker, 0);
+
+    size_t decompress_in, decompress_out;
+    tamp_res res =
+        tamp_decompress_stream(&decompressor, tamp_stream_mem_read, &decompress_reader, tamp_stream_mem_write,
+                               &decompress_writer, &decompress_in, &decompress_out, tracking_callback, &tracker);
+
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_GREATER_THAN(0, tracker.call_count);
+
+    // Monotonicity and total_bytes consistency are checked in the callback itself.
+    // Final bytes_processed should equal total input consumed
+    TEST_ASSERT_EQUAL(decompress_in, tracker.last_bytes_processed);
+
+    // Verify decompression worked
+    TEST_ASSERT_EQUAL(original_len, decompress_out);
+    TEST_ASSERT_EQUAL_MEMORY(original, decompressed, original_len);
 }

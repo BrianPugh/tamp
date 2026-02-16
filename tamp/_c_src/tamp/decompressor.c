@@ -506,7 +506,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                 decompressor->window_pos = wp;
             }
         }
-        if (TAMP_UNLIKELY(callback && (res = callback(user_data, *output_written_size, input_size))))
+        if (TAMP_UNLIKELY(callback && (res = callback(user_data, *input_consumed_size, input_size))))
             return (tamp_res)res;
     }
     return TAMP_INPUT_EXHAUSTED;
@@ -566,7 +566,7 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_decompress_stream(TampDecompressor* decompresso
         if (TAMP_UNLIKELY(res == TAMP_INPUT_EXHAUSTED && eof_reached)) break;
 
         if (TAMP_UNLIKELY(callback)) {
-            int cb_res = callback(user_data, *output_written_size, 0);
+            int cb_res = callback(user_data, *input_consumed_size, 0);
             if (TAMP_UNLIKELY(cb_res)) return (tamp_res)cb_res;
         }
     }

@@ -109,17 +109,17 @@ format entirely, producing a v1-only build.
 
 CLI
 ^^^
-The ``--extended`` flag defaults to enabled. To produce v1 output:
+The new ``--extended`` flag defaults to enabled. To produce v1 output:
 
 .. code-block:: bash
 
-   tamp compress --no-extended -i input.txt -o output.tamp
+   tamp compress --no-extended input.txt output.tamp
 
 Decompression handles both v1 and v2 data automatically:
 
 .. code-block:: bash
 
-   tamp decompress -i output.tamp -o restored.txt
+   tamp decompress output.tamp restored.txt
 
 Python
 ^^^^^^
@@ -135,7 +135,7 @@ The new ``extended`` parameter defaults to ``True``:
 
 JavaScript/WASM
 ^^^^^^^^^^^^^^^
-The ``extended`` option defaults to ``true``:
+The new ``extended`` option defaults to ``true``:
 
 .. code-block:: javascript
 

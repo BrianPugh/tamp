@@ -182,6 +182,7 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
  * Callback-variant of tamp_compressor_compress.
  *
  * @param[in] callback User-provided function to be called every compression-cycle.
+ *                     Receives (user_data, input_bytes_consumed, total_input_size).
  * @param[in,out] user_data Passed along to callback.
  */
 tamp_res tamp_compressor_compress_cb(TampCompressor *compressor, unsigned char *output, size_t output_size,
@@ -286,7 +287,7 @@ TAMP_ALWAYS_INLINE tamp_res tamp_compressor_compress_and_flush(TampCompressor *c
  * @param[out] input_consumed_size Total input bytes read. May be NULL.
  * @param[out] output_written_size Total compressed bytes written. May be NULL.
  * @param[in] callback Optional progress callback invoked periodically. May be NULL.
- *                     Note: total_bytes passed to callback will be 0 (unknown).
+ *                     Receives (user_data, input_bytes_consumed, 0).
  * @param[in] user_data User data passed to progress callback.
  *
  * @return TAMP_OK on success, or an error code:

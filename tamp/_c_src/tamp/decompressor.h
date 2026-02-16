@@ -77,9 +77,10 @@ tamp_res tamp_decompressor_init(TampDecompressor *decompressor, const TampConf *
                                 uint8_t window_bits);
 
 /**
- * Callback-variant of tamp_compressor_decompress.
+ * Callback-variant of tamp_decompressor_decompress.
  *
  * @param[in] callback User-provided function to be called every decompression-cycle.
+ *                     Receives (user_data, input_bytes_consumed, total_input_size).
  * @param[in,out] user_data Passed along to callback.
  */
 tamp_res tamp_decompressor_decompress_cb(TampDecompressor *decompressor, unsigned char *output, size_t output_size,
@@ -170,7 +171,7 @@ TAMP_ALWAYS_INLINE tamp_res tamp_decompressor_decompress(TampDecompressor *decom
  * @param[out] input_consumed_size Total compressed bytes read. May be NULL.
  * @param[out] output_written_size Total decompressed bytes written. May be NULL.
  * @param[in] callback Optional progress callback invoked periodically. May be NULL.
- *                     Note: total_bytes passed to callback will be 0 (unknown).
+ *                     Receives (user_data, input_bytes_consumed, 0).
  * @param[in] user_data User data passed to progress callback.
  *
  * @return TAMP_OK on success (stream fully decompressed), or an error code:

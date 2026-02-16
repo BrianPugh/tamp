@@ -19,14 +19,19 @@ int main(void) {
     // Decompressor tests
     RUN_TEST(test_decompressor_byte_by_byte);
     RUN_TEST(test_decompressor_malicious_oob);
+    RUN_TEST(test_decompress_cb_callback_receives_input_consumed);
 
     // Compressor tests
     RUN_TEST(test_compressor_init);
     RUN_TEST(test_compressor_simple);
+    RUN_TEST(test_compress_cb_callback_receives_input_consumed);
+    RUN_TEST(test_compress_cb_callback_abort);
 
     // Stream tests
     RUN_TEST(test_decompress_stream_simple);
     RUN_TEST(test_stream_roundtrip);
+    RUN_TEST(test_compress_stream_callback_receives_input_consumed);
+    RUN_TEST(test_decompress_stream_callback_receives_input_consumed);
 
     // Built-in I/O handler tests
     RUN_TEST(test_stdio_handlers_roundtrip);

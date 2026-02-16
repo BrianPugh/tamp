@@ -165,13 +165,26 @@ typedef struct TampConf {
 } TampConf;
 
 /**
- * User-provied callback to be invoked after each compression cycle in the higher-level API.
- * @param[in,out] user_data Arbitrary user-provided data.
- * @param[in] bytes_processed Number of input bytes consumed so far.
- * @param[in] total_bytes Total number of input bytes.
+ * User-provided callback to be invoked periodically by the higher-level API.
  *
- * @return Some error code. If non-zero, abort current compression and return the value.
- *         For clarity, is is recommend to avoid already-used tamp_res values.
+ * In all contexts, bytes_processed tracks input bytes consumed and total_bytes
+ * is the total input size (or 0 if unknown). This allows computing a meaningful
+ * progress percentage as bytes_processed / total_bytes.
+ *
+ * Non-stream API (total_bytes is known):
+ *   tamp_compressor_compress_cb:   (input_consumed, total_input_size)
+ *   tamp_decompressor_decompress_cb: (input_consumed, total_input_size)
+ *
+ * Stream API (total_bytes is 0; input size unknown):
+ *   tamp_compress_stream:   (input_consumed, 0)
+ *   tamp_decompress_stream: (input_consumed, 0)
+ *
+ * @param[in,out] user_data Arbitrary user-provided data.
+ * @param[in] bytes_processed Input bytes consumed so far.
+ * @param[in] total_bytes Total input size, or 0 if unknown (stream API).
+ *
+ * @return Some error code. If non-zero, abort current operation and return the value.
+ *         For clarity, it is recommended to avoid already-used tamp_res values.
  *         e.g. start custom error codes at 100.
  */
 typedef int (*tamp_callback_t)(void *user_data, size_t bytes_processed, size_t total_bytes);

@@ -1,6 +1,9 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <string.h>
 
+#include "tamp/compressor.h"
 #include "tamp/decompressor.h"
 #include "unity.h"
 
@@ -92,4 +95,50 @@ void test_decompressor_malicious_oob(void) {
     res = tamp_decompressor_decompress(&d, output_buffer, sizeof(output_buffer), &output_written_size, compressed,
                                        sizeof(compressed), NULL);
     TEST_ASSERT_EQUAL(res, TAMP_OOB);
+}
+
+void test_decompress_cb_callback_receives_input_consumed(void) {
+    // First, compress some data to get valid compressed input
+    TampCompressor compressor;
+    unsigned char window[1 << 10];
+    unsigned char compressed[256];
+    size_t compressed_size, input_consumed;
+    TampConf conf = {.window = 10, .literal = 8};
+
+    tamp_compressor_init(&compressor, &conf, window);
+
+    const char *original =
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog.";
+    size_t original_len = strlen(original);
+
+    tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size,
+                                       (const unsigned char *)original, original_len, &input_consumed, false);
+
+    // Now decompress with callback tracking
+    // Skip the header byte for total_bytes calculation
+    TampDecompressor decompressor;
+    tamp_decompressor_init(&decompressor, NULL, window, 10);
+
+    unsigned char output[256];
+    size_t output_written;
+    size_t decompress_input_consumed;
+
+    CallbackTracker tracker;
+    callback_tracker_init(&tracker, compressed_size);
+
+    tamp_res res =
+        tamp_decompressor_decompress_cb(&decompressor, output, sizeof(output), &output_written, compressed,
+                                        compressed_size, &decompress_input_consumed, tracking_callback, &tracker);
+
+    // Callback should have been called
+    TEST_ASSERT_GREATER_THAN(0, tracker.call_count);
+
+    // Monotonicity and total_bytes consistency are checked in the callback itself.
+    // Final bytes_processed should equal input_consumed
+    TEST_ASSERT_EQUAL(decompress_input_consumed, tracker.last_bytes_processed);
+
+    // Verify decompression worked
+    TEST_ASSERT_EQUAL(original_len, output_written);
+    TEST_ASSERT_EQUAL_MEMORY(original, output, original_len);
 }
