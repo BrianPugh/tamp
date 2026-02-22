@@ -122,31 +122,33 @@
     </div>
 
     <div class="options show" id="compressionOptions">
-        <h3 style="margin-bottom: 0.75rem; font-weight: 500; color: #333;">Configuration</h3>
-        <div class="option-group inline">
-            <div style="display: flex; align-items: center; gap: 2rem;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <label class="option-label" for="windowBits" style="margin-bottom: 0;">Window Bits:</label>
+        <div class="config-toolbar">
+            <div class="config-select">
+                <div class="config-select-label">
+                    <label for="windowBits">Window Bits</label>
                     <div class="help-tooltip">
                         <span class="help-icon">?</span>
                         <div class="tooltip-content">
                             Controls the sliding window size (2^n bytes). Larger values typically provide better compression, but use more memory during compression & decompression. Range: 8-15 bits (256B-32KB window).
                         </div>
                     </div>
-                    <select class="option-select narrow" id="windowBits">
-                        <option value="8">8</option>
-                        <option value="9">9</option>
-                        <option value="10" selected>10 (default)</option>
-                        <option value="11">11</option>
-                        <option value="12">12</option>
-                        <option value="13">13</option>
-                        <option value="14">14</option>
-                        <option value="15">15</option>
-                    </select>
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <input type="checkbox" class="option-checkbox" id="extended" checked>
-                    <label class="checkbox-label" for="extended" style="margin: 0;">Extended</label>
+                <select class="option-select narrow" id="windowBits">
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10" selected>10 (default)</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                    <option value="13">13</option>
+                    <option value="14">14</option>
+                    <option value="15">15</option>
+                </select>
+            </div>
+            <div class="config-divider"></div>
+            <div class="config-checks">
+                <div class="config-check">
+                    <input type="checkbox" id="extended" checked>
+                    <label class="checkbox-label" for="extended">Extended</label>
                     <div class="help-tooltip">
                         <span class="help-icon">?</span>
                         <div class="tooltip-content">
@@ -154,9 +156,9 @@
                         </div>
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <input type="checkbox" class="option-checkbox" id="lazyMatching">
-                    <label class="checkbox-label" for="lazyMatching" style="margin: 0;">Lazy Matching</label>
+                <div class="config-check">
+                    <input type="checkbox" id="lazyMatching" checked>
+                    <label class="checkbox-label" for="lazyMatching">Lazy Matching</label>
                     <div class="help-tooltip">
                         <span class="help-icon">?</span>
                         <div class="tooltip-content">
@@ -170,31 +172,33 @@
 
     <div class="text-mode hidden" id="textMode">
         <div class="options show">
-            <h3 style="margin-bottom: 0.75rem; font-weight: 500; color: #333;">Configuration</h3>
-            <div class="option-group inline">
-                <div style="display: flex; align-items: center; gap: 2rem;">
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <label class="option-label" for="textWindowBits" style="margin-bottom: 0;">Window Bits:</label>
+            <div class="config-toolbar">
+                <div class="config-select">
+                    <div class="config-select-label">
+                        <label for="textWindowBits">Window Bits</label>
                         <div class="help-tooltip">
                             <span class="help-icon">?</span>
                             <div class="tooltip-content">
                                 Controls the sliding window size (2^n bytes). Larger values provide better compression but use more memory. Range: 8-15 bits (256B-32KB window).
                             </div>
                         </div>
-                        <select class="option-select narrow" id="textWindowBits">
-                            <option value="8">8</option>
-                            <option value="9">9</option>
-                            <option value="10" selected>10 (default)</option>
-                            <option value="11">11</option>
-                            <option value="12">12</option>
-                            <option value="13">13</option>
-                            <option value="14">14</option>
-                            <option value="15">15</option>
-                        </select>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <input type="checkbox" class="option-checkbox" id="textExtended" checked>
-                        <label class="checkbox-label" for="textExtended" style="margin: 0;">Extended</label>
+                    <select class="option-select narrow" id="textWindowBits">
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10" selected>10 (default)</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                        <option value="13">13</option>
+                        <option value="14">14</option>
+                        <option value="15">15</option>
+                    </select>
+                </div>
+                <div class="config-divider"></div>
+                <div class="config-checks">
+                    <div class="config-check">
+                        <input type="checkbox" id="textExtended" checked>
+                        <label class="checkbox-label" for="textExtended">Extended</label>
                         <div class="help-tooltip">
                             <span class="help-icon">?</span>
                             <div class="tooltip-content">
@@ -202,9 +206,9 @@
                             </div>
                         </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <input type="checkbox" class="option-checkbox" id="textLazyMatching">
-                        <label class="checkbox-label" for="textLazyMatching" style="margin: 0;">Lazy Matching</label>
+                    <div class="config-check">
+                        <input type="checkbox" id="textLazyMatching" checked>
+                        <label class="checkbox-label" for="textLazyMatching">Lazy Matching</label>
                         <div class="help-tooltip">
                             <span class="help-icon">?</span>
                             <div class="tooltip-content">
