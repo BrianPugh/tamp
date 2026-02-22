@@ -107,6 +107,17 @@ The ``TAMP_EXTENDED`` family of flags controls extended format support:
 No existing flags changed behavior. Setting ``-DTAMP_EXTENDED=0`` disables extended
 format entirely, producing a v1-only build.
 
+Installation
+^^^^^^^^^^^^
+The CLI is now an optional extra.
+If you use the ``tamp`` command line tool, update your install command:
+
+.. code-block:: bash
+
+   pip install tamp[cli]
+
+The core library (``pip install tamp``) no longer pulls in CLI dependencies.
+
 CLI
 ^^^
 The new ``--extended`` flag defaults to enabled. To produce v1 output:

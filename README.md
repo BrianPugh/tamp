@@ -66,10 +66,16 @@ This section instructs how to install each implementation.
 
 ## Desktop Python
 
-The Tamp library and CLI requires Python `>=3.9` and can be installed via:
+The Tamp library requires Python `>=3.9` and can be installed via:
 
 ```bash
 pip install tamp
+```
+
+To also install the `tamp` command line tool:
+
+```bash
+pip install tamp[cli]
 ```
 
 ## MicroPython
@@ -101,8 +107,9 @@ Copy the `tamp/_c_src/tamp` folder into your project. For more information, see
 
 # Usage
 
-Tamp works on desktop python and micropython. On desktop, Tamp is bundled with
-the `tamp` command line tool for compressing and decompressing tamp files.
+Tamp works on desktop python and micropython. On desktop, Tamp can be bundled
+with the `tamp` command line tool for compressing and decompressing tamp files.
+Install with `pip install tamp[cli]`.
 
 ## CLI
 

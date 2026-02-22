@@ -35,7 +35,10 @@ tamp = "tamp.cli.main:run_app"
 [tool.poetry.dependencies]
 # Be as loose as possible if writing a library.
 python = "^3.9"
-cyclopts = ">=1.0.0"
+cyclopts = {version = ">=1.0.0", optional = true}
+
+[tool.poetry.extras]
+cli = ["cyclopts"]
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=4.5.0"
