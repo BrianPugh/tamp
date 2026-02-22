@@ -254,6 +254,20 @@ function formatBytes(bytes) {
   return bytes.toLocaleString() + ' bytes';
 }
 
+function formatTime(ms) {
+  if (ms < 1) return '<1 ms';
+  if (ms < 100) return `${ms.toFixed(1)} ms`;
+  return `${Math.round(ms)} ms`;
+}
+
+function formatThroughput(bytes, ms) {
+  if (ms <= 0) return '\u221e';
+  const bytesPerSec = (bytes / ms) * 1000;
+  if (bytesPerSec >= 1e6) return `${(bytesPerSec / 1e6).toFixed(1)} MB/s`;
+  if (bytesPerSec >= 1e3) return `${(bytesPerSec / 1e3).toFixed(1)} KB/s`;
+  return `${Math.round(bytesPerSec)} B/s`;
+}
+
 function showLoading() {
   loading.classList.remove('hidden');
   loading.classList.add('show');
@@ -353,11 +367,9 @@ async function processFiles() {
         const options = {
           window: windowBits,
           extended: extendedCheckbox.checked,
-          // Add progress callback for compression with overall progress calculation
           onPoll: async progressInfo => {
             const bytesProcessed = progressInfo.bytesProcessed || 0;
             const totalBytes = progressInfo.totalBytes || 0;
-
             const fileProgress = totalBytes > 0 ? bytesProcessed / totalBytes : 0;
             const overallProgress =
               totalFileSize > 0 ? ((processedFileSize + fileProgress * file.size) / totalFileSize) * 100 : 0;
@@ -365,7 +377,6 @@ async function processFiles() {
           },
         };
 
-        // Add lazy matching option if supported (requires TAMP_LAZY_MATCHING during compilation)
         if (lazyMatchingCheckbox.checked) {
           options.lazy_matching = true;
         }
@@ -373,8 +384,6 @@ async function processFiles() {
         processedData = await compress(data, options);
         newFileName = file.name + '.tamp';
       } else {
-        // For decompression, remove .tamp extension if present
-        // Show basic progress for decompression (no callback support)
         const fileProgress = ((fileIndex + 1) / selectedFiles.length) * 100;
         updateProgress(fileProgress);
 
@@ -382,8 +391,7 @@ async function processFiles() {
         newFileName = file.name.endsWith('.tamp') ? file.name.slice(0, -5) : file.name + '.decompressed';
       }
 
-      const endTime = performance.now();
-      const processingTime = endTime - startTime;
+      const processingTime = performance.now() - startTime;
       totalProcessingTime += processingTime;
 
       // Update processed file size for overall progress
@@ -419,7 +427,8 @@ async function processFiles() {
       },
       { label: 'Compression Ratio', value: `${ratio}:1` },
       { label: currentOperation === 'compress' ? 'Space Saved' : 'Size Change', value: `${savings}%` },
-      { label: 'Time', value: `${totalProcessingTime.toFixed(2)} ms` },
+      { label: 'Time', value: formatTime(totalProcessingTime) },
+      { label: 'Throughput', value: formatThroughput(totalOriginalSize, totalProcessingTime) },
     ];
 
     showResults('Complete', stats);
@@ -589,14 +598,6 @@ async function compressTextContent() {
     const options = {
       window: windowBits,
       extended: textExtendedCheckbox.checked,
-      // Add progress callback for text compression
-      onPoll: async progressInfo => {
-        const bytesProcessed = progressInfo.bytesProcessed || 0;
-        const totalBytes = progressInfo.totalBytes || 0;
-
-        const percentage = totalBytes > 0 ? (bytesProcessed / totalBytes) * 100 : 0;
-        await updateProgress(percentage);
-      },
     };
 
     if (textLazyMatchingCheckbox.checked) {
@@ -619,8 +620,7 @@ async function compressTextContent() {
 
     const startTime = performance.now();
     const compressed = await compress(data, options);
-    const endTime = performance.now();
-    const compressionTime = endTime - startTime;
+    const compressionTime = performance.now() - startTime;
 
     // Convert to base64 for display
     const base64 = btoa(String.fromCharCode(...compressed));
@@ -642,7 +642,8 @@ async function compressTextContent() {
       { label: 'Compressed Size', value: `${compressed.length.toLocaleString()} bytes` },
       { label: 'Compression Ratio', value: `${ratio}:1` },
       { label: 'Space Saved', value: `${savings}%` },
-      { label: 'Time', value: `${compressionTime.toFixed(2)} ms` },
+      { label: 'Time', value: formatTime(compressionTime) },
+      { label: 'Throughput', value: formatThroughput(data.length, compressionTime) },
       { label: 'ASCII Optimized', value: isPureAscii ? 'Yes' : 'No' },
     ];
 
@@ -700,8 +701,7 @@ async function decompressTextContent() {
 
     const startTime = performance.now();
     const decompressed = await decompress(compressed, options);
-    const endTime = performance.now();
-    const decompressionTime = endTime - startTime;
+    const decompressionTime = performance.now() - startTime;
 
     const text = new TextDecoder().decode(decompressed);
 
@@ -723,7 +723,8 @@ async function decompressTextContent() {
       { label: 'Compressed Size', value: `${compressed.length.toLocaleString()} bytes` },
       { label: 'Compression Ratio', value: `${ratio}:1` },
       { label: 'Size Increase', value: `${sizeChange}%` },
-      { label: 'Time', value: `${decompressionTime.toFixed(2)} ms` },
+      { label: 'Time', value: formatTime(decompressionTime) },
+      { label: 'Throughput', value: formatThroughput(compressed.length, decompressionTime) },
       { label: 'ASCII Optimized', value: isAscii ? 'Yes' : 'No' },
     ];
 
