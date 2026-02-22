@@ -10,65 +10,85 @@ Compile-Time Flags
 Tamp's C library can be customized via compile-time flags to control features, code size, and performance.
 Pass these flags to your compiler (e.g., ``-DTAMP_STREAM=0``).
 
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| Flag                             | Default           | Description                                                                  |
-+==================================+===================+==============================================================================+
-| ``TAMP_EXTENDED``                | ``1``             | Default value for extended format support (RLE, extended match encoding).    |
-|                                  |                   | Set to ``0`` to disable extended support in both compressor and decompressor.|
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_EXTENDED_COMPRESS``       | ``TAMP_EXTENDED`` | Enable extended format compression. Defaults to ``TAMP_EXTENDED`` but can    |
-|                                  |                   | be individually overridden for compressor-only or decompressor-only builds.  |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_EXTENDED_DECOMPRESS``     | ``TAMP_EXTENDED`` | Enable extended format decompression. Defaults to ``TAMP_EXTENDED`` but can  |
-|                                  |                   | be individually overridden for compressor-only or decompressor-only builds.  |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_LAZY_MATCHING``           | ``0``             | Enable lazy matching support. When enabled, ``TampConf.lazy_matching``       |
-|                                  |                   | becomes available. Improves compression ratio by 0.5-2% at the cost of       |
-|                                  |                   | 50-75% slower compression. Most embedded systems should leave disabled.      |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_STREAM``                  | ``1``             | Include stream API (``tamp_compress_stream``, ``tamp_decompress_stream``).   |
-|                                  |                   | Disable with ``-DTAMP_STREAM=0`` to save ~2.8KB if only using low-level API. |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_STREAM_WORK_BUFFER_SIZE`` | ``32``            | Stack-allocated work buffer size (bytes) for stream API. Split in half       |
-|                                  |                   | for input/output. Larger values reduce I/O callback invocations,             |
-|                                  |                   | improving decompression speed. 256+ bytes recommended when stack permits.    |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_STREAM_STDIO``            | ``0``             | Enable stdio (``FILE*``) stream handlers. Works with standard C library,     |
-|                                  |                   | ESP-IDF VFS, and POSIX-compatible systems.                                   |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_STREAM_MEMORY``           | ``0``             | Enable memory buffer stream handlers (``TampMemReader``, ``TampMemWriter``). |
-|                                  |                   | Useful for file-to-memory or memory-to-file operations.                      |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_STREAM_LITTLEFS``         | ``0``             | Enable LittleFS stream handlers. Requires LittleFS headers.                  |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_STREAM_FATFS``            | ``0``             | Enable FatFs (ChaN's FAT filesystem) stream handlers. Requires FatFs headers.|
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_COMPRESSOR``              | ``1``             | Include compressor implementation. Set to ``0`` to exclude compressor code   |
-|                                  |                   | entirely, reducing binary size for decompressor-only builds.                 |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_DECOMPRESSOR``            | ``1``             | Include decompressor implementation. Set to ``0`` to exclude decompressor    |
-|                                  |                   | code entirely, reducing binary size for compressor-only builds.              |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_ESP32``                   | ``0``             | Use ESP32-optimized variant. Avoids bitfields for speed at the cost of       |
-|                                  |                   | slightly higher memory usage. Automatically enabled via Kconfig on ESP-IDF.  |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
-| ``TAMP_USE_MEMSET``              | ``1``             | Use libc ``memset``. Set to ``0`` for environments without libc              |
-|                                  |                   | (e.g. MicroPython native modules). When disabled, uses a volatile byte loop  |
-|                                  |                   | that avoids emitting a ``memset`` call at the cost of store coalescing.      |
-+----------------------------------+-------------------+------------------------------------------------------------------------------+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   * - Flag
+     - Default
+     - Description
+   * - TAMP_COMPRESSOR
+     - 1
+     - Include compressor implementation. Set to ``0`` to exclude compressor code
+       entirely, reducing binary size for decompressor-only builds.
+   * - TAMP_DECOMPRESSOR
+     - 1
+     - Include decompressor implementation. Set to ``0`` to exclude decompressor
+       code entirely, reducing binary size for compressor-only builds.
+   * - TAMP_ESP32
+     - 0
+     - Use ESP32-optimized variant. Avoids bitfields for speed at the cost of
+       slightly higher memory usage. Automatically enabled via Kconfig on ESP-IDF.
+   * - TAMP_EXTENDED
+     - 1
+     - Default value for extended format support (RLE, extended match encoding).
+       Set to ``0`` to disable extended support in both compressor and decompressor.
+   * - TAMP_EXTENDED_COMPRESS
+     - TAMP_EXTENDED
+     - Enable extended format compression. Defaults to TAMP_EXTENDED but can
+       be individually overridden for compressor-only or decompressor-only builds.
+   * - TAMP_EXTENDED_DECOMPRESS
+     - TAMP_EXTENDED
+     - Enable extended format decompression. Defaults to TAMP_EXTENDED but can
+       be individually overridden for compressor-only or decompressor-only builds.
+   * - TAMP_LAZY_MATCHING
+     - 0
+     - Enable lazy matching support. When enabled, ``TampConf.lazy_matching``
+       becomes available. Improves compression ratio by 0.5-2% at the cost of
+       50-75% slower compression. Most embedded systems should leave disabled.
+   * - TAMP_STREAM
+     - 1
+     - Include stream API (``tamp_compress_stream``, ``tamp_decompress_stream``).
+       Most users don't need to change this; with ``-ffunction-sections`` and
+       ``--gc-sections`` (standard on embedded toolchains), unused stream functions
+       are automatically stripped. Set to ``0`` to guarantee exclusion.
+   * - TAMP_STREAM_FATFS
+     - 0
+     - Enable FatFs (ChaN's FAT filesystem) stream handlers. Requires FatFs headers.
+   * - TAMP_STREAM_LITTLEFS
+     - 0
+     - Enable LittleFS stream handlers. Requires LittleFS headers.
+   * - TAMP_STREAM_MEMORY
+     - 0
+     - Enable memory buffer stream handlers (``TampMemReader``, ``TampMemWriter``).
+       Useful for file-to-memory or memory-to-file operations.
+   * - TAMP_STREAM_STDIO
+     - 0
+     - Enable stdio (``FILE*``) stream handlers. Works with standard C library,
+       ESP-IDF VFS, and POSIX-compatible systems.
+   * - TAMP_STREAM_WORK_BUFFER_SIZE
+     - 32
+     - Stack-allocated work buffer size (bytes) for stream API. Split in half
+       for input/output. Larger values reduce I/O callback invocations,
+       improving decompression speed. 256+ bytes recommended when stack permits.
+   * - TAMP_USE_MEMSET
+     - 1
+     - Use libc ``memset``. Set to ``0`` for environments without libc
+       (e.g. MicroPython native modules). When disabled, uses a volatile byte loop
+       that avoids emitting a ``memset`` call at the cost of store coalescing.
 
 **Example: Minimal decompressor-only build**
 
 .. code-block:: bash
 
-   gcc -DTAMP_EXTENDED_COMPRESS=0 -DTAMP_STREAM=0 -c decompressor.c common.c
+   gcc -DTAMP_COMPRESSOR=0 -DTAMP_STREAM=0 -c decompressor.c common.c
 
 **Example: Full-featured build with LittleFS support**
 
 .. code-block:: bash
 
    gcc -DTAMP_LAZY_MATCHING=1 -DTAMP_STREAM_LITTLEFS=1 -DTAMP_STREAM_WORK_BUFFER_SIZE=256 \
-       -c compressor.c decompressor.c common.c
+       -Ipath/to/littlefs -c compressor.c decompressor.c common.c
 
 Overview
 ^^^^^^^^
@@ -91,26 +111,27 @@ To include the compressor functionality, include the compressor header:
 
 .. code-block:: c
 
-   # include "tamp/compressor.h"
+   #include "tamp/compressor.h"
 
 Initialization
 --------------
 All compression is performed using a ``TampCompressor`` object.
 The object must first be initialized with ``tamp_compressor_init``.
-The compressor object, a configuration, and a buffer is provided.
-Tamp performs no internal allocations, so a buffer must be provided.
+The compressor object, a configuration, and a buffer are provided.
+Tamp performs no internal memory allocations, so a buffer must be provided.
 Tamp is an LZ-based compression schema, and this buffer is commonly called a "window buffer" or "dictionary".
-The size of the provided buffer must be the same size as described by ``conf.window``.
+The provided buffer must be at least ``(1 << conf.window)`` bytes.
 
 
 .. code-block:: c
 
-   static unsigned char *window_buffer[1024];
+   static unsigned char window_buffer[1024];
 
    TampConf conf = {
-      /* Describes the size of the decompression buffer in bits.
+      /* Describes the size of the buffer in bits.
       A 10-bit window represents a 1024-byte buffer.
-      Must be in range [8, 15], representing [256, 32678] byte windows. */
+      Must be in range [8, 15], representing [256, 32768] byte windows.
+      10 is a good default, balancing compression ratio, memory, and speed. */
       .window = 10,
 
       /* Number of bits occupied in each plaintext symbol.
@@ -127,49 +148,43 @@ The size of the provided buffer must be the same size as described by ``conf.win
 
       /* Enable lazy matching to slightly improve compression (0.5-2.0%) ratios
       at the cost of 50-75% slower compression.
+      Not recommended for most embedded applications.
+      Only available when compiled with -DTAMP_LAZY_MATCHING=1. */
+      .lazy_matching = false,
 
-      Most embedded systems will **not** want to use this feature and disable it.
-
-      To use, `-DTAMP_LAZY_MATCHING=1` must be set during compilation to be able to use this feature.
-      */
-      .lazy_matching = false
+      /* Enable extended format (RLE and extended match encoding) for improved
+      compression ratios. Default is true in v2. The only downside is
+      slightly larger firmware; compression and decompression speed are
+      unaffected.
+      Only available when compiled with -DTAMP_EXTENDED_COMPRESS=1 (default). */
+      .extended = true,
    };
    TampCompressor compressor;
    tamp_compressor_init(&compressor, &conf, window_buffer);
 
-   // TODO: use the initialized compressor object
-
-
-Lazy Matching
--------------
-Lazy matching is a compression optimization that can slightly improve compression ratios at the cost of slower compression speed.
-To compile the library with lazy matching support, define the ``TAMP_LAZY_MATCHING`` macro to ``1`` during compilation:
-
-.. code-block:: c
-
-   #define TAMP_LAZY_MATCHING 1
-   #include "tamp/compressor.h"
-
-Alternatively, use the compiler flag ``-DTAMP_LAZY_MATCHING=1``.
-
-When compiled with ``TAMP_LAZY_MATCHING=1``, the ``TampConf.lazy_matching`` field becomes available and can be set to enable this feature for individual compressor instances.
 
 Compression
 -----------
 Once the ``TampCompressor`` object is initialized, compression of data can be performed.
-There's a low-level API to accomplish this, as well as a higher-level one.
+The compressor is most efficient when provided with larger input buffers, as more context allows better pattern matching.
+There are two API levels: a higher-level API for most use cases, and a low-level API for fine-grained control.
 
-The low-level workflow loop is as follows:
+The higher-level functions handle the internal sink/poll loop:
 
-1. ``tamp_compressor_sink`` - Sink enough bytes to fill the compressor's internal input buffer (up to 16 bytes).
+* ``tamp_compressor_compress`` - Compresses input until the input is exhausted or the output buffer is full.
+* ``tamp_compressor_compress_and_flush`` - Same as above, but also flushes internal buffers at the end (see `Flushing`_).
 
-2. ``tamp_compressor_poll`` - Perform a single compression cycle upon the input buffer, compressing **up to** 15 bytes from the input buffer.
-   Compression is most efficient when the input buffer is full. 0-3 bytes will be written to the output.
+For most use cases, ``tamp_compressor_compress_and_flush`` is the right choice.
 
-The sinking operation is computationally cheap, while the poll compression cycle is much more computationally intensive.
-Breaking the operation up into these two functions allows ``tamp_compressor_poll`` to be called at a more opportune time in your program.
+Low-Level API
+~~~~~~~~~~~~~
+The low-level API gives direct control over compression timing, which can be useful for real-time systems:
 
-To use these 2 functions effectively, loop over calling ``tamp_compressor_sink``, then ``tamp_compressor_poll``.
+1. ``tamp_compressor_sink`` - Copy bytes into the compressor's internal input buffer (up to 16 bytes). This is computationally cheap.
+
+2. ``tamp_compressor_poll`` - Perform a single compression cycle on the internal buffer, consuming up to 15 bytes (or all 16 with extended format). This is the computationally intensive step, writing 0-3 bytes to the output (up to 5 with extended format, requiring 6 bytes of output buffer space). Compression is most efficient when the internal input buffer is full.
+
+Breaking the operation into two functions allows ``tamp_compressor_poll`` to be called at a more opportune time in your program.
 
 .. code-block:: c
 
@@ -191,93 +206,86 @@ To use these 2 functions effectively, loop over calling ``tamp_compressor_sink``
         }
     }
 
-It is common to compress until an input buffer is exhausted, or an output buffer is full.
-Tamp provides a higher level function, ``tamp_compressor_compress`` that does exactly this.
-Note: you may actually want to use ``tamp_compressor_compress_flush``, described in the next section.
-
-Both ``tamp_compressor_compress`` and ``tamp_compressor_compress_flush`` have callback-variants: ``tamp_compressor_compress_cb`` and ``tamp_compressor_compress_flush_cb``, respectively. These are the same as their non-callback variants, but they take 2 additional arguments:
-
-    * ``callback``, a function with signature:
-
-      .. code-block:: c
-
-          int callback(void *user_data, size_t bytes_processed, size_t total_bytes);
-
-      Where ``bytes_processed`` are the number of input bytes consumed so far, and
-      ``total_bytes`` are the number of total bytes provided.
-
-    * ``void *user_data``, arbitrary data to be passed along to the callback.
-
-The callback can be useful for resetting a watchdog, updating a progress bar, etc.
-
 Flushing
 --------
-Inside the compressor, there may be up to 16 **bytes** of uncompressed data in the input buffer, and 31 **bits** in an output buffer.
+Inside the compressor, there may be up to 16 **bytes** of uncompressed data in the input buffer, and 31 **bits** in the output buffer.
 This means that the compressed output lags behind the input data stream.
 
 For example, if we compress the 44-long non-null-terminated string ``"The quick brown fox jumped over the lazy dog"``,
 the compressor will produce a 32-long data stream, that decompresses to ``"The quick brown fox jumped ov"``.
 The remaining ``"er the lazy dog"`` is still in the compressor's internal buffers.
 
-To flush the remaining data, use ``tamp_compressor_flush`` that performs the following actions:
-
-1. Repeatedly call ``tamp_compressor_poll`` until the 16-byte internal input buffer is empty.
-
-2. Flush the output buffer. If ``write_token=true``, then the special ``FLUSH`` token will be appended if padding was required.
+To flush the remaining data, use ``tamp_compressor_flush``, which drains the internal input buffer via repeated ``tamp_compressor_poll`` calls, then flushes the output bit buffer.
 
 .. code-block:: c
 
    tamp_res res;
-   output_buffer = bytes[100];
+   unsigned char output_buffer[100];
    size_t output_written;  // Stores the resulting number of bytes written to output_buffer.
 
    res = tamp_compressor_flush(&compressor, output_buffer, sizeof(output_buffer), &output_written, true);
    assert(res == TAMP_OK);
 
-The special ``FLUSH`` token allows for the compressor to continue being used, but adds 0~2 bytes of overhead.
+The ``write_token`` parameter controls whether a ``FLUSH`` token is appended when padding is required:
 
-1. If intending to continue using the compressor object, then ``write_token`` should be true.
+* Set to ``true`` if you intend to continue using the compressor. The ``FLUSH`` token adds 0~2 bytes of overhead.
+* Set to ``false`` when finalizing a stream, to save 0~2 bytes.
 
-2. If flushing the compressor to finalize a stream, then setting ``write_token`` to false will save 0~2 bytes.
-   Setting ``write_token`` to true will have no impact aside from the extra 0~2 byte overhead.
-
-``tamp_compressor_compress_and_flush`` is just like ``tamp_compressor_compress``, with the addition that the
-internal buffers are flushed at the end of the call.
-
-Minimizing Output Buffer Size
------------------------------
-For the low-level API call ``tamp_compressor_poll``, up to 3 bytes may be written to the output buffer per-call.
-``tamp_compressor_flush`` calls ``tamp_compressor_poll`` until the internal input buffer is exhausted.
-When the internal input buffer is exhausted, ``tamp_compressor_flush`` can:
-
-* write up to 4 bytes to the output if ``write_token=false``. This is preferable at the end of the compression stream (most common use-case).
-
-* write up to 5 bytes to the output if ``write_token=true``.
-
-If attempting to minimize the number of bytes required for the output buffer, a custom flush function can be written
-modeled after ``tamp_compressor_flush``:
+Lazy Matching
+-------------
+Lazy matching is a compression optimization that can slightly improve compression ratios at the cost of slower compression speed and increased firmware size.
+To compile the library with lazy matching support, define the ``TAMP_LAZY_MATCHING`` macro to ``1`` during compilation:
 
 .. code-block:: c
 
-    // custom flush that minimizes the output buffer size to 4 bytes (do not write FLUSH token).
-    unsigned char output[4];
-    size_t output_written_size;
+   #define TAMP_LAZY_MATCHING 1
+   #include "tamp/compressor.h"
 
-    while(compressor->input_size){
-        // Compress the remainder of the input buffer.
-        tamp_compressor_poll(compressor, output, sizeof(output), &output_written_size);
-        // TODO: do something here with output & output_written_size, such as writing it to a file/stream.
-        // You technically do **not** need to check the returned tamp_res here; it's impossible for
-        // tamp_compressor_poll to return a non TAMP_OK error-code in this scenario.
-    }
-    // There are **probably** some bits still in the compressor's output buffer that we still need to flush.
-    // Because the input buffer is exhausted, this will contain a maximum of 4 bytes with write_token=false.
-    tamp_compressor_flush(compressor, output, sizeof(output), &output_written_size, false);
-    // TODO: do something here with output & output_written_size, such as writing it to a file/stream.
-    // Again, no need to check the error code, it is impossible to error in this scenario.
+Alternatively, use the compiler flag ``-DTAMP_LAZY_MATCHING=1``.
 
+When compiled with ``TAMP_LAZY_MATCHING=1``, the ``TampConf.lazy_matching`` field becomes available and can be set to enable this feature for individual compressor instances.
 
-Without writing a custom flush routine, the maximum number of bytes (and thus, the suggested output buffer size) that can be flushed from a compressor with a full internal input buffer via ``tamp_compressor_flush`` can be calculated as:
+Minimizing Output Buffer Size
+-----------------------------
+
+The following table shows the minimum output buffer size required for each operation.
+``tamp_compressor_flush`` calls ``tamp_compressor_poll`` until the internal input buffer is exhausted; the flush rows reflect the final output after exhaustion.
+
++--------------------------------------+----------+----------+
+| Operation                            | Standard | Extended |
++======================================+==========+==========+
+| ``poll``                             | 3 bytes  | 6 bytes  |
++--------------------------------------+----------+----------+
+| ``flush`` (``write_token=false``)    | 4 bytes  | 6 bytes  |
++--------------------------------------+----------+----------+
+| ``flush`` (``write_token=true``)     | 5 bytes  | 7 bytes  |
++--------------------------------------+----------+----------+
+
+If output buffer sizing is a concern, consider using the `Stream API`_ instead.
+The stream API handles chunked I/O internally using a small stack-allocated work buffer, eliminating the need to size output buffers manually:
+
+.. code-block:: c
+
+    // Compile with: -DTAMP_STREAM_STDIO=1
+
+    FILE *in = fopen("input.txt", "rb");
+    FILE *out = fopen("output.tamp", "wb");
+    unsigned char window[1 << 10];
+
+    TampCompressor compressor;
+    tamp_compressor_init(&compressor, NULL, window);
+
+    tamp_compress_stream(
+        &compressor,
+        tamp_stream_stdio_read, in,
+        tamp_stream_stdio_write, out,
+        NULL, NULL, NULL, NULL
+    );
+
+    fclose(in);
+    fclose(out);
+
+For users of the buffer-based API, the maximum number of bytes (and thus, the suggested output buffer size) that can be flushed from a compressor with a full internal input buffer via ``tamp_compressor_flush`` can be calculated as:
 
 .. math::
 
@@ -312,7 +320,7 @@ Summary
 
 .. code-block:: c
 
-   unsigned char *window_buffer[1024];
+   unsigned char window_buffer[1024];
    const unsigned char input_string[44] = "The quick brown fox jumped over the lazy dog";
    unsigned char output_buffer[64];
 
@@ -329,8 +337,7 @@ Summary
    );
 
    // Compressed data is now in output_buffer
-   printf("Compressed size: %d\n", output_written_size);
-
+   printf("Compressed size: %zu\n", output_written_size);
 
 Decompressor
 ^^^^^^^^^^^^
@@ -339,7 +346,7 @@ To include the decompressor functionality, include the decompressor header:
 
 .. code-block:: c
 
-   # include "tamp/decompressor.h"
+   #include "tamp/decompressor.h"
 
 Initialization
 --------------
@@ -350,8 +357,8 @@ Use ``tamp_decompressor_read_header`` to read the header into a ``TampConf``:
 
 .. code-block:: c
 
-   const unsigned char compressed_data[64];  // Imagine this contains tamp-compressed data.
-   sizez_t compressed_data_size = 64;
+   const unsigned char *compressed_data = ...;  // Imagine this points to tamp-compressed data.
+   size_t compressed_data_size = 64;
    tamp_res res;
    TampConf conf;
    size_t compressed_consumed_size;
@@ -390,7 +397,7 @@ call from input header data.
 
 Decompression
 -------------
-Data decompression is straight forward:
+Data decompression is straightforward:
 
 .. code-block:: c
 
@@ -408,24 +415,26 @@ Data decompression is straight forward:
    // res could be:
    //    TAMP_INPUT_EXHAUSTED - All data in input buffer has been consumed.
    //    TAMP_OUTPUT_FULL - Output buffer is full.
-   // In all situations, output_written_size and input_consumed_size is updated.
+   // In all situations, output_written_size and input_consumed_size are updated.
 
-``tamp_decompressor_decompress`` has a callback-variant: ``tamp_decompressor_decompress_cb``.
-These are the same as their non-callback variants, but they take 2 additional arguments:
+Callbacks
+^^^^^^^^^
+``tamp_compressor_compress``, ``tamp_compressor_compress_and_flush``, and ``tamp_decompressor_decompress`` each have callback variants (``_cb`` suffix) that accept two additional arguments:
 
-    * ``callback``, a function with signature:
+* ``callback``, a function with signature:
 
-      .. code-block:: c
+  .. code-block:: c
 
-          int callback(void *user_data, size_t bytes_processed, size_t total_bytes);
+      int callback(void *user_data, size_t bytes_processed, size_t total_bytes);
 
-      Where ``bytes_processed`` are the number of input bytes consumed so far, and
-      ``total_bytes`` are the number of total input bytes provided.
+  Where ``bytes_processed`` is the number of input bytes consumed so far, and
+  ``total_bytes`` is the ``input_size`` passed to this call.
+  This allows computing a progress percentage as ``bytes_processed / total_bytes``.
+  Return 0 to continue, or non-zero to abort the operation.
 
-    * ``void *user_data``, arbitrary data to be passed along to the callback.
+* ``void *user_data``, arbitrary data passed along to the callback.
 
-The callback can be useful for resetting a watchdog, updating a progress bar, etc.
-Compared to compression, decompression is very fast; it is unlikely that the decompression callback feature provides significant value.
+Callbacks are useful for resetting a watchdog, updating a progress bar, etc.
 
 Stream API
 ^^^^^^^^^^
@@ -509,6 +518,8 @@ First initialize a ``TampCompressor`` with ``tamp_compressor_init``, then use ``
        void *user_data               // User data for callback
    );
 
+The stream progress callback receives ``(input_consumed, 0)`` — ``total_bytes`` is 0 because the total input size is not known ahead of time.
+
 Stream Decompression
 --------------------
 First initialize a ``TampDecompressor`` with ``tamp_decompressor_init``, then use ``tamp_decompress_stream``:
@@ -533,6 +544,8 @@ First initialize a ``TampDecompressor`` with ``tamp_decompressor_init``, then us
        tamp_callback_t callback,        // Progress callback (may be NULL)
        void *user_data                  // User data for callback
    );
+
+The stream progress callback receives ``(input_consumed, 0)``, same as compression streams.
 
 Built-in I/O Handlers
 ---------------------
@@ -617,7 +630,7 @@ Tamp provides a ``TampLfsFile`` struct to bundle these together into a single ha
 
 .. code-block:: c
 
-   // Compile with: -DTAMP_STREAM_LITTLEFS=1
+   // Compile with: -DTAMP_STREAM_LITTLEFS=1 -Ipath/to/littlefs
 
    lfs_t lfs;
    lfs_file_t in_file, out_file;
@@ -656,7 +669,7 @@ Unlike LittleFS, FatFs file handles (``FIL``) are self-contained and can be pass
 
 .. code-block:: c
 
-   // Compile with: -DTAMP_STREAM_FATFS=1
+   // Compile with: -DTAMP_STREAM_FATFS=1 -Ipath/to/fatfs
 
    FIL in_file, out_file;
    f_open(&in_file, "data.tamp", FA_READ);
