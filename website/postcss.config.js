@@ -1,8 +1,8 @@
 module.exports = {
   plugins: [
     require('postcss-preset-env')({
-      browsers: 'last 2 versions',
-      autoprefixer: { grid: true },
+      browsers: 'defaults, not ie 11',
+      autoprefixer: { grid: false },
     }),
   ],
 };
