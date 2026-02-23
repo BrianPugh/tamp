@@ -4727,4 +4727,4 @@ cli = ["cyclopts"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.9"
-content-hash = "9fc61afd394f2e47f39c5f710bbbe725e90750b3303ef1cae4e49d9a60b26fae"
+content-hash = "7b258fe2498f1f6936ca7ea79737d9a1884684ee30fa0720cf7911a7f6249cf7"
