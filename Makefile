@@ -141,11 +141,12 @@ endif
 # Datasets are stored in datasets/ to persist across `make clean`
 .PHONY: download-enwik8 download-silesia v1-compressed-datasets
 
-datasets/enwik8:
+datasets/enwik8.zip:
 	@mkdir -p datasets
 	curl -o datasets/enwik8.zip https://mattmahoney.net/dc/enwik8.zip
+
+datasets/enwik8: | datasets/enwik8.zip
 	cd datasets && unzip -q enwik8.zip
-	rm -f datasets/enwik8.zip
 
 download-enwik8: datasets/enwik8
 
