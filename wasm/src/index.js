@@ -30,6 +30,3 @@ export {
   createReadableStream,
   collectStream,
 } from './streams.js';
-
-// Version info
-export const version = '1.0.0';

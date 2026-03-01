@@ -166,14 +166,10 @@ class TestCompressorAndDecompressor(unittest.TestCase):
         for Compressor, Decompressor in walk_compressors_decompressors():
             # Random data
             data = bytearray(random.randint(0, 255) for _ in range(10_000))
-            with (
-                BytesIO() as f,
-                self.subTest(
-                    data="Random",
-                    Compressor=Compressor,
-                    Decompressor=Decompressor,
-                ),
-            ):
+            # fmt: off
+            with BytesIO() as f, \
+                 self.subTest(data="Random", Compressor=Compressor, Decompressor=Decompressor):
+                # fmt: on
                 c = Compressor(f, extended=True, lazy_matching=True)
                 c.write(data)
                 c.flush()
@@ -186,14 +182,10 @@ class TestCompressorAndDecompressor(unittest.TestCase):
 
             # Repetitive data (triggers both RLE and extended match)
             data = (b"The quick brown fox " * 10 + b"X" * 50) * 5
-            with (
-                BytesIO() as f,
-                self.subTest(
-                    data="Repetitive",
-                    Compressor=Compressor,
-                    Decompressor=Decompressor,
-                ),
-            ):
+            # fmt: off
+            with BytesIO() as f, \
+                 self.subTest(data="Repetitive", Compressor=Compressor, Decompressor=Decompressor):
+                # fmt: on
                 c = Compressor(f, extended=True, lazy_matching=True)
                 c.write(data)
                 c.flush()
@@ -209,14 +201,10 @@ class TestCompressorAndDecompressor(unittest.TestCase):
         data = tale_of_two_cities
         for window in (8, 9, 10):
             for Compressor, Decompressor in walk_compressors_decompressors():
-                with (
-                    BytesIO() as f,
-                    self.subTest(
-                        window=window,
-                        Compressor=Compressor,
-                        Decompressor=Decompressor,
-                    ),
-                ):
+                # fmt: off
+                with BytesIO() as f, \
+                     self.subTest(window=window, Compressor=Compressor, Decompressor=Decompressor):
+                    # fmt: on
                     c = Compressor(f, window=window, extended=True)
                     c.write(data)
                     c.flush()

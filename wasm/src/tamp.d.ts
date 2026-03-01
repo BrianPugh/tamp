@@ -309,8 +309,3 @@ export function createReadableStream(data: Uint8Array, chunkSize?: number): Read
  * @returns Promise resolving to collected data
  */
 export function collectStream(readable: ReadableStream<Uint8Array>): Promise<Uint8Array>;
-
-/**
- * Version information
- */
-export const version: string;
