@@ -124,6 +124,200 @@ class TestCompressorAndDecompressor(unittest.TestCase):
 
                 assert actual == tale_of_two_cities
 
+    def test_extended_explicit(self):
+        """Explicit extended=True round-trip with random data."""
+        self._autotest(10_000, 8, compressor_kwargs={"extended": True})
+
+    def test_extended_rle_heavy(self):
+        """Round-trip with input designed to trigger RLE encoding."""
+        # Long runs of the same byte
+        data = b"A" * 200 + b"B" * 100 + b"C" * 50 + b"D" * 30
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True)
+                c.write(data)
+                c.flush()
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data)
+
+    def test_extended_match_heavy(self):
+        """Round-trip with input designed to trigger extended match tokens."""
+        # Repeating 16-byte pattern should trigger extended matches (>13 bytes)
+        pattern = b"Hello, World!!! "  # 16 bytes
+        data = pattern * 20  # 320 bytes
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True)
+                c.write(data)
+                c.flush()
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data)
+
+    def test_extended_lazy_matching(self):
+        """Round-trip with both extended=True and lazy_matching=True."""
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            # Random data
+            data = bytearray(random.randint(0, 255) for _ in range(10_000))
+            with (
+                BytesIO() as f,
+                self.subTest(
+                    data="Random",
+                    Compressor=Compressor,
+                    Decompressor=Decompressor,
+                ),
+            ):
+                c = Compressor(f, extended=True, lazy_matching=True)
+                c.write(data)
+                c.flush()
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data)
+
+            # Repetitive data (triggers both RLE and extended match)
+            data = (b"The quick brown fox " * 10 + b"X" * 50) * 5
+            with (
+                BytesIO() as f,
+                self.subTest(
+                    data="Repetitive",
+                    Compressor=Compressor,
+                    Decompressor=Decompressor,
+                ),
+            ):
+                c = Compressor(f, extended=True, lazy_matching=True)
+                c.write(data)
+                c.flush()
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data)
+
+    def test_extended_various_windows(self):
+        """Round-trip with extended=True across various window sizes."""
+        data = tale_of_two_cities
+        for window in (8, 9, 10):
+            for Compressor, Decompressor in walk_compressors_decompressors():
+                with (
+                    BytesIO() as f,
+                    self.subTest(
+                        window=window,
+                        Compressor=Compressor,
+                        Decompressor=Decompressor,
+                    ),
+                ):
+                    c = Compressor(f, window=window, extended=True)
+                    c.write(data)
+                    c.flush()
+
+                    f.seek(0)
+                    d = Decompressor(f)
+                    actual = d.read()
+
+                    self.assertEqual(actual, data)
+
+    def test_extended_rle_compresses_better(self):
+        """Verify extended mode produces smaller output than non-extended for RLE data."""
+        data = b"A" * 200
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                # Compress with extended=True
+                with BytesIO() as f:
+                    c = Compressor(f, extended=True)
+                    c.write(data)
+                    c.flush()
+                    extended_size = f.tell()
+
+                # Compress with extended=False
+                with BytesIO() as f:
+                    c = Compressor(f, extended=False)
+                    c.write(data)
+                    c.flush()
+                    non_extended_size = f.tell()
+
+                self.assertLess(extended_size, non_extended_size)
+
+    def test_extended_match_compresses_better(self):
+        """Verify extended mode produces smaller output than non-extended for long match data."""
+        pattern = b"Hello, World!!! "  # 16 bytes
+        data = pattern * 20  # 320 bytes
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                # Compress with extended=True
+                with BytesIO() as f:
+                    c = Compressor(f, extended=True)
+                    c.write(data)
+                    c.flush()
+                    extended_size = f.tell()
+
+                # Compress with extended=False
+                with BytesIO() as f:
+                    c = Compressor(f, extended=False)
+                    c.write(data)
+                    c.flush()
+                    non_extended_size = f.tell()
+
+                self.assertLess(extended_size, non_extended_size)
+
+    def test_extended_rle_transition(self):
+        """Round-trip with data that transitions between RLE runs and non-RLE content."""
+        data = b"A" * 50 + b"The quick brown fox jumps!" + b"B" * 45
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True)
+                c.write(data)
+                c.flush()
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data)
+
+    def test_extended_rle_boundary(self):
+        """Round-trip with RLE counts at boundary values."""
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            # Minimum RLE (2 repeats)
+            data = b"Z" * 2
+            with BytesIO() as f, self.subTest(count=2, Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True)
+                c.write(data)
+                c.flush()
+                f.seek(0)
+                d = Decompressor(f)
+                self.assertEqual(d.read(), data)
+
+            # Maximum RLE (241 repeats)
+            data = b"Z" * 241
+            with BytesIO() as f, self.subTest(count=241, Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True)
+                c.write(data)
+                c.flush()
+                f.seek(0)
+                d = Decompressor(f)
+                self.assertEqual(d.read(), data)
+
+            # Just over max RLE (requires multiple tokens)
+            data = b"Z" * 500
+            with BytesIO() as f, self.subTest(count=500, Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True)
+                c.write(data)
+                c.flush()
+                f.seek(0)
+                d = Decompressor(f)
+                self.assertEqual(d.read(), data)
+
 
 if __name__ == "__main__":
     unittest.main()

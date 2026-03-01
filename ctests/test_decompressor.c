@@ -97,6 +97,76 @@ void test_decompressor_malicious_oob(void) {
     TEST_ASSERT_EQUAL(res, TAMP_OOB);
 }
 
+void test_decompressor_extended_rle(void) {
+    /*****
+     * Tests decompression of extended-format data with an RLE token.
+     * Compressed data encodes 20 bytes of 'A' (literal 'A' + RLE count=19).
+     */
+    const unsigned char compressed[] = {
+        0x5A,  // header: window=10, literal=8, extended=1
+        0xA0,  // literal 'A' + start of RLE token
+        0xAA,  // RLE huffman continued
+        0xB1,  // count encoding + padding
+    };
+
+    tamp_res res;
+    TampDecompressor d;
+    unsigned char window_buffer[1 << 10];
+
+    res = tamp_decompressor_init(&d, NULL, window_buffer, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    unsigned char output[32];
+    size_t output_written;
+
+    res =
+        tamp_decompressor_decompress(&d, output, sizeof(output), &output_written, compressed, sizeof(compressed), NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(20, output_written);
+
+    // Verify all bytes are 'A'
+    unsigned char expected[20];
+    memset(expected, 'A', sizeof(expected));
+    TEST_ASSERT_EQUAL_MEMORY(expected, output, 20);
+}
+
+void test_decompressor_extended_match(void) {
+    /*****
+     * Tests decompression of extended-format data with an extended match token.
+     * Compressed data: 14-byte match at index 0 using custom dictionary.
+     * conf=NULL so header is read from the compressed data.
+     */
+    const unsigned char compressed[] = {
+        0x1E,  // header: window=8, literal=8, custom=1, extended=1
+        0x4E,  // ext_match token + count encoding
+        0x00,  // position + padding
+        0x00,  // padding
+    };
+
+    // Pre-initialize the window buffer with the dictionary
+    unsigned char window[1 << 8];
+    memset(window, 0, sizeof(window));
+    const char *pattern = "abcdefghijklmn";
+    memcpy(window, pattern, 14);
+
+    tamp_res res;
+    TampDecompressor d;
+
+    // conf=NULL: header is read from compressed data during decompress.
+    // Since header has custom_dict=1, the window is preserved (not re-initialized).
+    res = tamp_decompressor_init(&d, NULL, window, 8);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    unsigned char output[32];
+    size_t output_written;
+
+    res =
+        tamp_decompressor_decompress(&d, output, sizeof(output), &output_written, compressed, sizeof(compressed), NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(14, output_written);
+    TEST_ASSERT_EQUAL_MEMORY(pattern, output, 14);
+}
+
 void test_decompress_cb_callback_receives_input_consumed(void) {
     // First, compress some data to get valid compressed input
     TampCompressor compressor;

@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "tamp/compressor.h"
+#include "tamp/decompressor.h"
 #include "unity.h"
 
 // Callback tracking for compress_cb tests
@@ -102,6 +103,301 @@ void test_compress_cb_callback_receives_input_consumed(void) {
     // Monotonicity and total_bytes consistency are checked in the callback itself.
     // Final callback should report 100% (bytes_processed == total_bytes == input_size)
     TEST_ASSERT_EQUAL(input_size, tracker.last_bytes_processed);
+}
+
+void test_compressor_extended_simple(void) {
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char window[1 << 10];
+    unsigned char output[256];
+    size_t output_written;
+    size_t input_consumed;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .use_custom_dictionary = false,
+        .extended = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    const char *input = "foo foo foo";
+    res = tamp_compressor_compress_and_flush(&compressor, output, sizeof(output), &output_written,
+                                             (unsigned char *)input, strlen(input), &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_GREATER_THAN(0, output_written);
+    // Verify the extended bit is set in the header
+    TEST_ASSERT_EQUAL(0x02, output[0] & 0x02);
+}
+
+void test_compressor_extended_rle_roundtrip(void) {
+    // Compress repeated bytes with extended=true, then decompress and verify
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 10];
+    unsigned char compressed[256];
+    size_t compressed_size;
+    size_t input_consumed;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .extended = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    // 200 bytes of 'A' - should trigger RLE encoding
+    unsigned char input[200];
+    memset(input, 'A', sizeof(input));
+
+    res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size, input,
+                                             sizeof(input), &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(sizeof(input), input_consumed);
+    // RLE should compress extremely well (200 x 'A' -> ~5 bytes)
+    TEST_ASSERT_LESS_THAN(10, compressed_size);
+
+    // Decompress and verify
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 10];
+    unsigned char output[256];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       compressed_size, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(sizeof(input), output_written);
+    TEST_ASSERT_EQUAL_MEMORY(input, output, sizeof(input));
+}
+
+void test_compressor_extended_match_roundtrip(void) {
+    // Compress data with repeating patterns that trigger extended match tokens
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 10];
+    unsigned char compressed[512];
+    size_t compressed_size;
+    size_t input_consumed;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .extended = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    // Repeating 16-byte pattern triggers extended match (> min_pattern_size + 11 = 13)
+    const char *pattern = "Hello, World!!! ";  // 16 bytes
+    unsigned char input[320];                  // 20 repetitions
+    for (size_t i = 0; i < sizeof(input); i++) {
+        input[i] = pattern[i % 16];
+    }
+
+    res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size, input,
+                                             sizeof(input), &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(sizeof(input), input_consumed);
+    // Extended match should compress 320 bytes of repeating 16-byte pattern well (~34 bytes)
+    TEST_ASSERT_LESS_THAN(50, compressed_size);
+
+    // Decompress and verify
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 10];
+    unsigned char output[512];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       compressed_size, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(sizeof(input), output_written);
+    TEST_ASSERT_EQUAL_MEMORY(input, output, sizeof(input));
+}
+
+#if TAMP_LAZY_MATCHING
+void test_compressor_extended_lazy_roundtrip(void) {
+    // Test extended + lazy_matching combined
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 10];
+    unsigned char compressed[512];
+    size_t compressed_size;
+    size_t input_consumed;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .extended = true,
+        .lazy_matching = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    const char *input =
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog.";
+    size_t input_size = strlen(input);
+
+    res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size,
+                                             (const unsigned char *)input, input_size, &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(input_size, input_consumed);
+
+    // Decompress and verify
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 10];
+    unsigned char output[512];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       compressed_size, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(input_size, output_written);
+    TEST_ASSERT_EQUAL_MEMORY(input, output, input_size);
+}
+#endif  // TAMP_LAZY_MATCHING
+
+void test_compressor_extended_rle_transition_roundtrip(void) {
+    // Test data that transitions between RLE runs and non-RLE content
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 10];
+    unsigned char compressed[256];
+    size_t compressed_size;
+    size_t input_consumed;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .extended = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    // RLE run + non-repeating + RLE run
+    unsigned char input[120];
+    memset(input, 'A', 50);                                // 50 x 'A'
+    memcpy(input + 50, "The quick brown fox jumps!", 25);  // 25 bytes mixed
+    memset(input + 75, 'B', 45);                           // 45 x 'B'
+
+    res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size, input,
+                                             sizeof(input), &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(sizeof(input), input_consumed);
+
+    // Decompress and verify
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 10];
+    unsigned char output[256];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       compressed_size, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(sizeof(input), output_written);
+    TEST_ASSERT_EQUAL_MEMORY(input, output, sizeof(input));
+}
+
+void test_compressor_extended_window8_roundtrip(void) {
+    // Test extended mode with window=8
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 8];
+    unsigned char compressed[512];
+    size_t compressed_size;
+    size_t input_consumed;
+    TampConf conf = {
+        .window = 8,
+        .literal = 8,
+        .extended = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    const char *input =
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog.";
+    size_t input_size = strlen(input);
+
+    res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size,
+                                             (const unsigned char *)input, input_size, &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(input_size, input_consumed);
+
+    // Decompress and verify
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 8];
+    unsigned char output[512];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 8);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       compressed_size, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(input_size, output_written);
+    TEST_ASSERT_EQUAL_MEMORY(input, output, input_size);
+}
+
+void test_compressor_extended_window9_roundtrip(void) {
+    // Test extended mode with window=9
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 9];
+    unsigned char compressed[256];
+    size_t compressed_size;
+    size_t input_consumed;
+    TampConf conf = {
+        .window = 9,
+        .literal = 8,
+        .extended = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    // RLE with smaller window
+    unsigned char input[200];
+    memset(input, 'Q', sizeof(input));
+
+    res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size, input,
+                                             sizeof(input), &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(sizeof(input), input_consumed);
+    TEST_ASSERT_LESS_THAN(10, compressed_size);
+
+    // Decompress and verify
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 9];
+    unsigned char output[256];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 9);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       compressed_size, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(sizeof(input), output_written);
+    TEST_ASSERT_EQUAL_MEMORY(input, output, sizeof(input));
 }
 
 void test_compress_cb_callback_abort(void) {

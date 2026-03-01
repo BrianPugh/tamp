@@ -87,3 +87,25 @@ class TestCli(unittest.TestCase):
             with patch("sys.stdin.buffer.read", return_value=compressed_foo_foo_foo):
                 app(["decompress", "-o", str(test_file)], **_app_kwargs)
             self.assertEqual(test_file.read_text(), "foo foo foo")
+
+    def test_compress_decompress_extended_roundtrip(self):
+        """Round-trip through CLI using default extended=True mode."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            input_file = tmp_dir / "input.bin"
+            compressed_file = tmp_dir / "compressed.tamp"
+            output_file = tmp_dir / "output.bin"
+
+            test_data = b"Hello World! " * 20 + b"A" * 50
+            input_file.write_bytes(test_data)
+
+            # Compress with default (extended=True)
+            app(["compress", str(input_file), "-o", str(compressed_file)], **_app_kwargs)
+
+            # Verify the extended bit is set in the compressed header
+            header = compressed_file.read_bytes()[0]
+            self.assertEqual(header & 0x02, 0x02)
+
+            # Decompress
+            app(["decompress", str(compressed_file), "-o", str(output_file)], **_app_kwargs)
+            self.assertEqual(output_file.read_bytes(), test_data)

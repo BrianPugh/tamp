@@ -190,6 +190,90 @@ class TestDecompressor(unittest.TestCase):
                 read1 = decompressor.read()
                 self.assertEqual(read0 + read1, expected)
 
+    def test_decompressor_extended_rle(self):
+        """Decompress extended-format data containing an RLE token."""
+        for Decompressor in Decompressors:
+            with self.subTest(Decompressor=Decompressor):
+                # 20 bytes of 'A': literal 'A' + RLE(count=19)
+                compressed = bytes(
+                    # fmt: off
+                    [
+                        0x5A,  # header: 010_11_0_1_0 (window=10, literal=8, extended=1)
+                        0xA0,  # literal 'A' bits + start token flag
+                        0xAA,  # RLE huffman sym12
+                        0xB1,  # count upper=sym1, lower=0001, pad
+                    ]
+                    # fmt: on
+                )
+                with BytesIO(compressed) as f:
+                    decompressor = Decompressor(f)
+                    actual = decompressor.read()
+                self.assertEqual(actual, b"A" * 20)
+
+    def test_decompressor_extended_rle_short(self):
+        """Decompress extended RLE with small count (count=4)."""
+        for Decompressor in Decompressors:
+            with self.subTest(Decompressor=Decompressor):
+                compressed = bytes(
+                    # fmt: off
+                    [
+                        0x5A,  # header: 010_11_0_1_0 (window=10, literal=8, extended=1)
+                        0xA1,  # literal 'B' bits + start token flag
+                        0x2A,  # ...0 from B, token flag, RLE huffman partial
+                        0x84,  # ...huffman end, count upper=sym0, lower=0010, pad
+                    ]
+                    # fmt: on
+                )
+                with BytesIO(compressed) as f:
+                    decompressor = Decompressor(f)
+                    actual = decompressor.read()
+                self.assertEqual(actual, b"B" * 5)
+
+    def test_decompressor_extended_match(self):
+        """Decompress extended-format data containing an extended match token."""
+        for Decompressor in Decompressors:
+            with self.subTest(Decompressor=Decompressor):
+                # 14-byte match at index 0 in custom dictionary
+                pattern = b"abcdefghijklmn"
+                dictionary = bytearray(1 << 8)
+                dictionary[: len(pattern)] = pattern
+
+                compressed = bytes(
+                    # fmt: off
+                    [
+                        0x1E,  # header: 000_11_1_1_0 (window=8, literal=8, custom=1, extended=1)
+                        0x4E,  # ext_match token + count upper=sym0
+                        0x00,  # count lower=000, position=0 partial
+                        0x00,  # position end, padding
+                    ]
+                    # fmt: on
+                )
+                with BytesIO(compressed) as f:
+                    decompressor = Decompressor(f, dictionary=dictionary)
+                    actual = decompressor.read()
+                self.assertEqual(actual, pattern)
+
+    def test_decompressor_extended_rle_restricted_read(self):
+        """Decompress RLE data with restricted read sizes to test partial output."""
+        for Decompressor in Decompressors:
+            with self.subTest(Decompressor=Decompressor):
+                compressed = bytes(
+                    # fmt: off
+                    [
+                        0x5A,  # header: 010_11_0_1_0 (window=10, literal=8, extended=1)
+                        0xA0,  # literal 'A' bits + start token flag
+                        0xAA,  # RLE huffman sym12
+                        0xB1,  # count upper=sym1, lower=0001, pad
+                    ]
+                    # fmt: on
+                )
+                with BytesIO(compressed) as f:
+                    decompressor = Decompressor(f)
+                    part1 = decompressor.read(5)
+                    part2 = decompressor.read(10)
+                    part3 = decompressor.read(-1)
+                self.assertEqual(part1 + part2 + part3, b"A" * 20)
+
     def test_decompressor_readinto(self):
         for Decompressor in Decompressors:
             with self.subTest(Decompressor=Decompressor):

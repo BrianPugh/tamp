@@ -182,6 +182,96 @@ void test_stdio_handlers_roundtrip(void) {
     fclose(temp_output);
 }
 
+void test_stream_extended_roundtrip(void) {
+    // Round-trip with extended=true through stream API
+    const char *original =
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog. "
+        "The quick brown fox jumps over the lazy dog.";
+    size_t original_len = strlen(original);
+
+    // Compress
+    TampMemReader compress_reader = {.data = (const unsigned char *)original, .size = original_len, .pos = 0};
+    unsigned char compressed[512];
+    TampMemWriter compress_writer = {.data = compressed, .capacity = sizeof(compressed), .pos = 0};
+
+    unsigned char window1[1 << 10];
+    TampConf conf = {.window = 10, .literal = 8, .extended = true};
+
+    TampCompressor compressor;
+    tamp_res res = tamp_compressor_init(&compressor, &conf, window1);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    size_t compress_in, compress_out;
+    res = tamp_compress_stream(&compressor, tamp_stream_mem_read, &compress_reader, tamp_stream_mem_write,
+                               &compress_writer, &compress_in, &compress_out, NULL, NULL);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(original_len, compress_in);
+    // Verify extended bit in header
+    TEST_ASSERT_EQUAL(0x02, compressed[0] & 0x02);
+
+    // Decompress
+    TampMemReader decompress_reader = {.data = compressed, .size = compress_out, .pos = 0};
+    unsigned char decompressed[512];
+    TampMemWriter decompress_writer = {.data = decompressed, .capacity = sizeof(decompressed), .pos = 0};
+
+    unsigned char window2[1 << 10];
+    TampDecompressor decompressor;
+    res = tamp_decompressor_init(&decompressor, NULL, window2, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    size_t decompress_in, decompress_out;
+    res = tamp_decompress_stream(&decompressor, tamp_stream_mem_read, &decompress_reader, tamp_stream_mem_write,
+                                 &decompress_writer, &decompress_in, &decompress_out, NULL, NULL);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(original_len, decompress_out);
+    TEST_ASSERT_EQUAL_MEMORY(original, decompressed, original_len);
+}
+
+void test_stream_extended_rle_roundtrip(void) {
+    // Round-trip RLE-heavy data through stream API with extended=true
+    unsigned char original[200];
+    memset(original, 'X', sizeof(original));
+    size_t original_len = sizeof(original);
+
+    // Compress
+    TampMemReader compress_reader = {.data = original, .size = original_len, .pos = 0};
+    unsigned char compressed[256];
+    TampMemWriter compress_writer = {.data = compressed, .capacity = sizeof(compressed), .pos = 0};
+
+    unsigned char window1[1 << 10];
+    TampConf conf = {.window = 10, .literal = 8, .extended = true};
+
+    TampCompressor compressor;
+    tamp_res res = tamp_compressor_init(&compressor, &conf, window1);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    size_t compress_in, compress_out;
+    res = tamp_compress_stream(&compressor, tamp_stream_mem_read, &compress_reader, tamp_stream_mem_write,
+                               &compress_writer, &compress_in, &compress_out, NULL, NULL);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(original_len, compress_in);
+    // RLE should compress extremely well (200 x 'X' -> ~5 bytes)
+    TEST_ASSERT_LESS_THAN(10, compress_out);
+
+    // Decompress
+    TampMemReader decompress_reader = {.data = compressed, .size = compress_out, .pos = 0};
+    unsigned char decompressed[256];
+    TampMemWriter decompress_writer = {.data = decompressed, .capacity = sizeof(decompressed), .pos = 0};
+
+    unsigned char window2[1 << 10];
+    TampDecompressor decompressor;
+    res = tamp_decompressor_init(&decompressor, NULL, window2, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    size_t decompress_in, decompress_out;
+    res = tamp_decompress_stream(&decompressor, tamp_stream_mem_read, &decompress_reader, tamp_stream_mem_write,
+                                 &decompress_writer, &decompress_in, &decompress_out, NULL, NULL);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(original_len, decompress_out);
+    TEST_ASSERT_EQUAL_MEMORY(original, decompressed, original_len);
+}
+
 void test_compress_stream_callback_receives_input_consumed(void) {
     const char *original =
         "The quick brown fox jumps over the lazy dog. "
