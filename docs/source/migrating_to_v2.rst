@@ -107,6 +107,13 @@ The ``TAMP_EXTENDED`` family of flags controls extended format support:
 No existing flags changed behavior. Setting ``-DTAMP_EXTENDED=0`` disables extended
 format entirely, producing a v1-only build.
 
+Dictionary Initialization
+-------------------------
+``tamp_initialize_dictionary`` now takes a ``literal`` parameter to select
+a seed character table appropriate for the configured literal bit width.
+For v1 backwards compatibility, callers should pass ``literal=8`` when
+``extended`` is not set. See :ref:`dictionary-initialization` for details.
+
 Installation
 ^^^^^^^^^^^^
 The CLI is now an optional extra.

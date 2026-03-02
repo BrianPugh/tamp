@@ -279,7 +279,8 @@ static TAMP_OPTIMIZE_SIZE tamp_res tamp_decompressor_populate_from_conf(TampDeco
     if (conf_window < 8 || conf_window > 15) return TAMP_INVALID_CONF;
     if (conf_literal < 5 || conf_literal > 8) return TAMP_INVALID_CONF;
     if (conf_window > decompressor->window_bits_max) return TAMP_INVALID_CONF;
-    if (!conf_use_custom_dictionary) tamp_initialize_dictionary(decompressor->window, (size_t)1 << conf_window);
+    if (!conf_use_custom_dictionary)
+        tamp_initialize_dictionary(decompressor->window, (size_t)1 << conf_window, conf_extended ? conf_literal : 8);
 
     decompressor->conf_window = conf_window;
     decompressor->conf_literal = conf_literal;

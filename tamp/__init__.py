@@ -21,7 +21,9 @@ def _xorshift32(seed):
         yield seed
 
 
-def initialize_dictionary(source, seed=None):
+def initialize_dictionary(source, seed=None, literal=8):
+    if not (5 <= literal <= 8):
+        raise ValueError("literal must be between 5 and 8")
     if seed is None:
         seed = 3758097560
     elif seed == 0:
@@ -30,7 +32,14 @@ def initialize_dictionary(source, seed=None):
     out = source if isinstance(source, bytearray) else bytearray(source)
     size = len(out)
 
-    chars = b" \x000ei>to<ans\nr/."  # 16 most common chars in dataset
+    # Common characters for dictionary seeding.
+    # ' etaoinshrdlcumw' downshifted to the appropriate bit width.
+    if literal <= 5:
+        chars = bytes([c & 0x1F for c in b" etaoinshrdlcumw"])
+    elif literal <= 6:
+        chars = bytes([c & 0x3F for c in b" etaoinshrdlcumw"])
+    else:
+        chars = b" \x000ei>to<ans\nr/."
 
     def _gen_stream(xorshift32):
         for _ in range(size >> 3):

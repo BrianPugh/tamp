@@ -360,10 +360,19 @@ int tamp_stream_fatfs_write(void *handle, const unsigned char *buffer, size_t si
 /**
  * @brief Pre-populate a window buffer with common characters.
  *
+ * Uses a per-literal-size seed table so the dictionary only contains bytes that
+ * are valid and useful for the given configuration:
+ *   - literal=7,8: common english text/markup characters (" \0 0 e i > t o < a n s \\n r / .")
+ *   - literal=5,6: common english letters (" etaoinshrdlcumw") downshifted to the target bit width
+ *
+ * For v1 backwards compatibility, callers should pass literal=8 when the
+ * extended header flag is not set, regardless of the configured literal value.
+ *
  * @param[out] buffer Populated output buffer.
  * @param[in] size Size of output buffer in bytes.
+ * @param[in] literal Number of literal bits (5-8). Selects the appropriate seed character table.
  */
-void tamp_initialize_dictionary(unsigned char *buffer, size_t size);
+void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint8_t literal);
 
 /**
  * @brief Compute the minimum viable pattern size given window and literal config parameters.

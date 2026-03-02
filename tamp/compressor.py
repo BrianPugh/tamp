@@ -129,7 +129,7 @@ class _RingBuffer:
         pos = self.pos - 1
         if pos < 0:
             pos = self.size - 1
-        return self.buffer[pos]  # TODO: unit-test this thoroughly on initial start!
+        return self.buffer[pos]
 
 
 class Compressor:
@@ -211,7 +211,7 @@ class Compressor:
         self.literal_flag = 1 << self.literal_bits
 
         self._window_buffer = _RingBuffer(
-            buffer=dictionary if dictionary else initialize_dictionary(1 << window),
+            buffer=dictionary if dictionary else initialize_dictionary(1 << window, literal=literal if extended else 8),
         )
 
         self._input_buffer = deque(maxlen=16)  # matching the C implementation

@@ -202,7 +202,8 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
     compressor->cached_match_index = -1;  // Initialize cache as invalid
 #endif
 
-    if (!conf->use_custom_dictionary) tamp_initialize_dictionary(window, (1 << conf->window));
+    if (!conf->use_custom_dictionary)
+        tamp_initialize_dictionary(window, (1 << conf->window), conf->extended ? conf->literal : 8);
 
     write_to_bit_buffer(compressor, header, 8);
 

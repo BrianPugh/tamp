@@ -7,7 +7,9 @@ Like other LZ-based compressors, Tamp builds a sliding window (AKA dictionary) o
 For short messages, this window is relatively uninitialized, leading to relatively poor compression for the first few hundred bytes of a stream.
 
 Tamp attempts to mitigate this by initializing this sliding window with a deterministic random combinations of letters (see :ref:`dictionary-initialization`).
-The first bits of the dictionary look like this (where ``\x00`` is NULL; ``\n`` is newline):
+The character table used for initialization depends on the ``literal`` bit width: for ``literal=7`` or ``8``, common english text and markup characters are used; for ``literal=5`` or ``6``, common english letters downshifted to the target bit width are used instead.
+
+For the default ``literal=8``, the first bytes of the dictionary look like this (where ``\x00`` is NULL; ``\n`` is newline):
 
 .. code-block:: text
 

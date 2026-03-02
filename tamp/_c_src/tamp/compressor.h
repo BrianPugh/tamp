@@ -50,8 +50,8 @@ typedef struct TampCompressor {
     uint8_t cached_match_size;
 #endif
 #if TAMP_EXTENDED_COMPRESS
-    uint8_t rle_count;             // Current RLE run length (max 225)
-    uint8_t extended_match_count;  // Current extended match size (max ~126)
+    uint8_t rle_count;             // Current RLE run length (max 241)
+    uint8_t extended_match_count;  // Current extended match size (max ~134)
 #endif
 } TampCompressor;
 

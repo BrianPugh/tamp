@@ -84,22 +84,34 @@ For short messages, having a better initial dictionary can help improve compress
 The amount of improvement would be dependent on the type of data being compressed.
 Given that the contents of raw-binary data could be anything, we chose to focus on improving
 typical english text. In order to save device space, a whole dictionary is not saved to disk.
-Instead, we take 16 common characters:
-
-.. code-block:: text
-
-     \x000ei>to<ans\nr/.
-    ^there is a "space" there.
-
-    (or as explicit hex values)
-    0X20 0X00 0X30 0X65 0X69 0X3E 0X74 0X6F 0X3C 0X61 0X6E 0X73 0X0A 0X72 0X2F 0X2E
-
-
-and pseudo-randomly fill up
-the dictionary with these characters. We use the XorShift32 pseudo-random number generator
+Instead, we select 16 common characters appropriate for the ``literal`` bit width and
+pseudo-randomly fill up the dictionary. We use the XorShift32 pseudo-random number generator
 due to it's good randomness characteristics, and simple implementation.
 
-The chosen seed, 3758097560, was discovered experimentally to give typically good results.
+The character table is chosen based on the ``literal`` parameter:
+
+* **literal=7 or 8**: 16 common english text and markup characters:
+
+  .. code-block:: text
+
+       \x000ei>to<ans\nr/.
+      ^there is a "space" there.
+
+      (or as explicit hex values)
+      0x20 0x00 0x30 0x65 0x69 0x3E 0x74 0x6F 0x3C 0x61 0x6E 0x73 0x0A 0x72 0x2F 0x2E
+
+* **literal=5 or 6**: The 16 most common english characters
+  (``" etaoinshrdlcumw"``) downshifted to the target bit width by masking
+  with ``(1 << literal) - 1``. Since ASCII encodes letter position in
+  the low bits, this preserves alphabetic identity.
+
+.. warning::
+
+   When the ``extended`` header flag is *not* set (v1 format), ``literal`` is
+   always treated as 8 for backwards compatibility, regardless of the configured
+   value.
+
+The chosen seed, 3758097560, was discovered experimentally to give typically good results for 7/8 bit data.
 
 All of this amounts to a few percent compression improvement for short messages.
 
@@ -113,8 +125,13 @@ All of this amounts to a few percent compression improvement for short messages.
            yield seed
 
 
-   def initialize_dictionary(size):
-       chars = b" \x000ei>to<ans\nr/."  # 16 most common chars in dataset
+   def initialize_dictionary(size, literal=8):
+       if literal <= 5:
+           chars = bytes([c & 0x1F for c in b" etaoinshrdlcumw"])
+       elif literal <= 6:
+           chars = bytes([c & 0x3F for c in b" etaoinshrdlcumw"])
+       else:
+           chars = b" \x000ei>to<ans\nr/."
 
        def _gen_stream(xorshift32):
            for _ in range(size >> 3):

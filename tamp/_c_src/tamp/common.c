@@ -12,8 +12,18 @@
 #include <stdio.h>
 #endif
 
-static const unsigned char common_characters[] = {0x20, 0x00, 0x30, 0x65, 0x69, 0x3e, 0x74, 0x6f,
-                                                  0x3c, 0x61, 0x6e, 0x73, 0xa,  0x72, 0x2f, 0x2e};
+/* Per-literal-size seed tables.  All 16 entries must be unique and fit within
+ * (1 << literal) - 1.  literal=7,8 share the original table (all < 0x80). */
+// clang-format off
+static const unsigned char common_characters_8[] = {' ', 0, '0', 'e', 'i', '>', 't', 'o',
+                                                    '<', 'a', 'n', 's', '\n', 'r', '/', '.'};
+/* Common English characters, downshifted to 6 bits */
+static const unsigned char common_characters_6[] = {' ' & 0x3F, 'e' & 0x3F, 't' & 0x3F, 'a' & 0x3F, 'o' & 0x3F, 'i' & 0x3F, 'n' & 0x3F, 's' & 0x3F,
+                                                    'h' & 0x3F, 'r' & 0x3F, 'd' & 0x3F, 'l' & 0x3F, 'c' & 0x3F, 'u' & 0x3F, 'm' & 0x3F, 'w' & 0x3F};
+/* Common English characters, downshifted to 5 bits */
+static const unsigned char common_characters_5[] = {' ' & 0x1F, 'e' & 0x1F, 't' & 0x1F, 'a' & 0x1F, 'o' & 0x1F, 'i' & 0x1F, 'n' & 0x1F, 's' & 0x1F,
+                                                    'h' & 0x1F, 'r' & 0x1F, 'd' & 0x1F, 'l' & 0x1F, 'c' & 0x1F, 'u' & 0x1F, 'm' & 0x1F, 'w' & 0x1F};
+// clang-format on
 
 static inline uint32_t xorshift32(uint32_t *state) {
     uint32_t x = *state;
@@ -24,12 +34,19 @@ static inline uint32_t xorshift32(uint32_t *state) {
     return x;
 }
 
-TAMP_OPTIMIZE_SIZE void tamp_initialize_dictionary(unsigned char *buffer, size_t size) {
+TAMP_OPTIMIZE_SIZE void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint8_t literal) {
     uint32_t seed = 3758097560;  // This was experimentally discovered with tools/find_seed.py
     uint32_t randbuf = 0;
+    const unsigned char *chars;
+    if (literal <= 5)
+        chars = common_characters_5;
+    else if (literal <= 6)
+        chars = common_characters_6;
+    else
+        chars = common_characters_8;
     for (size_t i = 0; i < size; i++) {
         if (TAMP_UNLIKELY((i & 0x7) == 0)) randbuf = xorshift32(&seed);
-        buffer[i] = common_characters[randbuf & 0x0F];
+        buffer[i] = chars[randbuf & 0x0F];
         randbuf >>= 4;
     }
 }

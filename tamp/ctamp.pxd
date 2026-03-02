@@ -24,7 +24,7 @@ cdef extern from "tamp/common.h":
         TAMP_INVALID_CONF = -3,  # Invalid configuration parameters.
         TAMP_OOB = -4,  # Out-of-bounds access detected in compressed data.
 
-    void initialize_dictionary(unsigned char *buffer, size_t size, uint32_t seed);
+    void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint8_t literal);
     int compute_min_pattern_size(uint8_t window, uint8_t literal);
 
 

@@ -139,7 +139,7 @@ class _RingBuffer:
         pos = self.pos - 1
         if pos < 0:
             pos = self.size - 1
-        return self.buffer[pos]  # TODO: unit-test this thoroughly on initial start!
+        return self.buffer[pos]
 
 
 class Decompressor:
@@ -189,7 +189,11 @@ class Decompressor:
             raise ValueError
 
         self._window_buffer = _RingBuffer(
-            buffer=(dictionary if dictionary else initialize_dictionary(1 << self.window_bits)),
+            buffer=(
+                dictionary
+                if dictionary
+                else initialize_dictionary(1 << self.window_bits, literal=self.literal_bits if self.extended else 8)
+            ),
         )
 
         self.min_pattern_size = compute_min_pattern_size(self.window_bits, self.literal_bits)

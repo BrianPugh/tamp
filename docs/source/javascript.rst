@@ -225,6 +225,7 @@ Create and manage custom dictionaries for improved compression:
 
    // Initialize a dictionary buffer with default values
    const dictionary = await initializeDictionary(1024); // Must be power of 2
+   const dict6bit = await initializeDictionary(1024, 6); // Tuned for 6-bit literals
 
    // Compute minimum pattern size for given parameters
    const minPatternSize = await computeMinPatternSize(12, 8); // window=12, literal=8
