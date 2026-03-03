@@ -150,6 +150,10 @@ enum {
     TAMP_IO_ERROR = -10,     // Generic I/O error from read/write callback
     TAMP_READ_ERROR = -11,   // Read callback returned error
     TAMP_WRITE_ERROR = -12,  // Write callback returned error
+
+    /* [100, 127] and [-128, -100] are reserved for user-defined callback codes.
+     * tamp_callback_t returns are truncated to int8_t; use these ranges to
+     * avoid collisions with library status codes. */
 };
 typedef int8_t tamp_res;
 
@@ -167,6 +171,9 @@ typedef struct TampConf {
 /**
  * User-provided callback to be invoked periodically by the higher-level API.
  *
+ * The callback fires once per compression/decompression cycle (i.e., once per
+ * encoded or decoded token). For the stream API, it fires once per read-chunk.
+ *
  * In all contexts, bytes_processed tracks input bytes consumed and total_bytes
  * is the total input size (or 0 if unknown). This allows computing a meaningful
  * progress percentage as bytes_processed / total_bytes.
@@ -183,9 +190,9 @@ typedef struct TampConf {
  * @param[in] bytes_processed Input bytes consumed so far.
  * @param[in] total_bytes Total input size, or 0 if unknown (stream API).
  *
- * @return Some error code. If non-zero, abort current operation and return the value.
- *         For clarity, it is recommended to avoid already-used tamp_res values.
- *         e.g. start custom error codes at 100.
+ * @return 0 to continue, or non-zero to abort. The return value is truncated
+ *         to tamp_res (int8_t) and propagated to the caller. Use values in
+ *         [100, 127] or [-128, -100] for custom codes to avoid collisions.
  */
 typedef int (*tamp_callback_t)(void *user_data, size_t bytes_processed, size_t total_bytes);
 

@@ -214,6 +214,7 @@ TAMP_ALWAYS_INLINE tamp_res tamp_compressor_compress(TampCompressor *compressor,
  * Callback-variant of tamp_compressor_compress_and_flush.
  *
  * @param[in] callback User-provided function to be called every compression-cycle.
+ *                     A final callback is issued after flushing to signal completion.
  * @param[in,out] user_data Passed along to callback.
  */
 tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor *compressor, unsigned char *output, size_t output_size,

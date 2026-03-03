@@ -431,10 +431,16 @@ Callbacks
   ``total_bytes`` is the ``input_size`` passed to this call.
   This allows computing a progress percentage as ``bytes_processed / total_bytes``.
   Return 0 to continue, or non-zero to abort the operation.
+  The return value is truncated to ``tamp_res`` (``int8_t``); use values in [100, 127] or [-128, -100] for custom codes.
 
 * ``void *user_data``, arbitrary data passed along to the callback.
 
 Callbacks are useful for resetting a watchdog, updating a progress bar, etc.
+
+The callback fires once per compression or decompression cycle (i.e., once per encoded or decoded token).
+Note that ``tamp_compressor_compress_cb`` only fires the callback when the internal input buffer is full, so trailing input bytes that don't fill the buffer won't trigger a callback.
+``tamp_compressor_compress_and_flush_cb`` addresses this with a final callback after flushing.
+The `Stream API`_ also accepts an optional progress callback; it fires once per read-chunk and can abort the stream in the same way (non-zero return).
 
 Stream API
 ^^^^^^^^^^
