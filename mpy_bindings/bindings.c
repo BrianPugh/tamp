@@ -21,7 +21,9 @@ static void TAMP_CHECK(tamp_res res) {
     }
 }
 
-static mp_obj_t initialize_dictionary(mp_obj_t obj) {
+static mp_obj_t initialize_dictionary(size_t n_args, const mp_obj_t *args) {
+    mp_obj_t obj = args[0];
+    uint8_t literal = (n_args >= 2) ? mp_obj_get_int(args[1]) : 8;
     mp_buffer_info_t buffer_info;
 #if MICROPY_VERSION_MAJOR == 1 && MICROPY_VERSION_MINOR <= 21
     // "mp_get_buffer" is not available in micropython <= v1.21
@@ -40,10 +42,10 @@ static mp_obj_t initialize_dictionary(mp_obj_t obj) {
         obj = mp_obj_new_bytearray_by_ref(buffer_info.len, buffer_info.buf);
     }
 #endif
-    tamp_initialize_dictionary(buffer_info.buf, buffer_info.len);
+    tamp_initialize_dictionary(buffer_info.buf, buffer_info.len, literal);
     return obj;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(initialize_dictionary_obj, initialize_dictionary);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(initialize_dictionary_obj, 1, 2, initialize_dictionary);
 
 /**************
  * COMPRESSOR *
