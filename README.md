@@ -327,11 +327,11 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 
 |                                  | Compression (bytes/s) | Decompression (bytes/s) |
 | -------------------------------- | --------------------- | ----------------------- |
-| Tamp (Micropython Native Module) | 31,949                | 1,086,957               |
+| Tamp (Micropython Native Module) | 31,328                | 990,099                 |
 | Tamp (C)                         | 36,127                | 1,400,600               |
 | Deflate (micropython builtin)    | 6,885                 | 294,985                 |
 
-Tamp resulted in a **51637** byte archive, while Micropython's builtin `deflate`
+Tamp resulted in a **50841** byte archive, while Micropython's builtin `deflate`
 resulted in a larger, **59442** byte archive.
 
 ## Binary Size
@@ -343,11 +343,11 @@ Numbers reported in bytes. Tamp sizes were measured using `arm-none-eabi-gcc`
 
 |                                  | Compressor | Decompressor | Compressor + Decompressor |
 | -------------------------------- | ---------- | ------------ | ------------------------- |
-| Tamp (MicroPython Native)        | 4596       | 4243         | 7912                      |
-| Tamp (C, no extended, no stream) | 1490       | 1312         | 2616                      |
-| Tamp (C, no extended)            | 1772       | 1550         | 3136                      |
-| Tamp (C, extended, no stream)    | 2582       | 2064         | 4460                      |
-| Tamp (C, extended)               | 2864       | 2302         | 4980                      |
+| Tamp (MicroPython Native)        | 4700       | 4347         | 8024                      |
+| Tamp (C, no extended, no stream) | 1568       | 1372         | 2702                      |
+| Tamp (C, no extended)            | 1850       | 1610         | 3222                      |
+| Tamp (C, extended, no stream)    | 2642       | 2124         | 4528                      |
+| Tamp (C, extended)               | 2924       | 2362         | 5048                      |
 | Heatshrink (C)                   | 2956       | 3876         | 6832                      |
 | uzlib (C)                        | 2355       | 3963         | 6318                      |
 
