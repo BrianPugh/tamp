@@ -27,7 +27,7 @@ typedef uint32_t u16;
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 #define MAX_PATTERN_SIZE (compressor->min_pattern_size + 13)
-#define WINDOW_SIZE (1 << compressor->conf_window)
+#define WINDOW_SIZE (1 << compressor->conf.window)
 
 static inline void write_to_bit_buffer(TampCompressor *compressor, uint32_t bits, u8 n_bits) {
     compressor->bit_buffer_pos += n_bits;

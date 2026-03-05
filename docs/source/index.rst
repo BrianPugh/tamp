@@ -17,3 +17,9 @@ Tamp
    c_library
    javascript
    rust
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Upgrading:
+
+   migrating_to_v2

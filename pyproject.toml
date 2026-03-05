@@ -35,7 +35,10 @@ tamp = "tamp.cli.main:run_app"
 [tool.poetry.dependencies]
 # Be as loose as possible if writing a library.
 python = "^3.9"
-cyclopts = ">=1.0.0"
+cyclopts = {version = ">=1.0.0", optional = true}
+
+[tool.poetry.extras]
+cli = ["cyclopts"]
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=4.5.0"
@@ -55,6 +58,7 @@ belay = ">=0.21.3"
 tqdm = ">=4.65.0"
 matplotlib = ">=3.7.4"
 ipdb = ">=0.13.13"
+packaging = ">=20.0"
 mpremote = ">=1.20.0"
 cython = ">=0.29.34"
 pytest-subtests = ">=0.10.0"
@@ -101,6 +105,9 @@ unittest = [
     "https://github.com/micropython/micropython-lib/blob/master/python-stdlib/unittest-discover/unittest/__main__.py"
 ]
 uprofiler = "https://github.com/BrianPugh/micropython-libs/blob/main/lib/uprofiler.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.coverage.run]
 branch = true

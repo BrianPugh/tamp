@@ -99,14 +99,46 @@ h1 {
     margin-bottom: 0.75rem;
 }
 
-.option-group.inline {
+.config-toolbar {
     display: flex;
-    gap: 2rem;
-    align-items: flex-start;
+    align-items: center;
+    gap: 1rem;
 }
 
-.option-group.inline > div {
+.config-select,
+.config-checks {
     flex: 1;
+}
+
+.config-select-label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+.config-divider {
+    width: 1px;
+    align-self: stretch;
+    background: #ddd;
+}
+
+.config-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.config-check {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.config-check .checkbox-label {
+    margin-bottom: 0;
 }
 
 .option-label {

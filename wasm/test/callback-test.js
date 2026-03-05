@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { TampCompressor, compress } from '../dist/index.mjs';
+import { TampCompressor, TampDecompressor, compress } from '../dist/index.mjs';
 
 describe('Tamp Callback Tests', () => {
   // Generate test data - need larger data to trigger multiple callbacks
@@ -250,5 +250,85 @@ describe('Tamp Callback Tests', () => {
 
     assert.ok(compressed instanceof Uint8Array, 'Compressed data should be Uint8Array');
     assert.ok(callbackCount > 0, 'Async callback should be called at least once');
+  });
+});
+
+describe('Tamp Decompression AbortSignal Tests', () => {
+  // Pre-compress test data so we have something to decompress
+  let compressedData;
+  let largeCompressedData;
+
+  // Generate and compress test data before all tests
+  const testData = new Uint8Array(1024 * 1024); // 1MB
+  for (let i = 0; i < testData.length; i++) {
+    testData[i] = i % 256;
+  }
+
+  test('setup - compress test data', async () => {
+    compressedData = await compress(testData);
+    assert.ok(compressedData.length > 0, 'Should have compressed data');
+
+    const largeTestData = new Uint8Array(8 * 1024 * 1024); // 8MB
+    for (let i = 0; i < largeTestData.length; i++) {
+      largeTestData[i] = i % 256;
+    }
+    largeCompressedData = await compress(largeTestData);
+    assert.ok(largeCompressedData.length > 0, 'Should have large compressed data');
+  });
+
+  test('AbortSignal cancellation - pre-aborted signal on decompressor', async () => {
+    const controller = new AbortController();
+    controller.abort('Test cancellation');
+
+    const decompressor = new TampDecompressor();
+    try {
+      await assert.rejects(
+        async () => {
+          await decompressor.decompress(compressedData, { signal: controller.signal });
+        },
+        error => {
+          return (
+            error.name === 'DecompressionError' &&
+            error.message === 'Decompression was aborted' &&
+            error.details.aborted === true &&
+            error.details.reason === 'Test cancellation'
+          );
+        },
+        'Should reject with DecompressionError when signal is pre-aborted'
+      );
+    } finally {
+      decompressor.destroy();
+    }
+  });
+
+  test('AbortSignal cancellation - abort during decompression', async () => {
+    const controller = new AbortController();
+
+    const decompressor = new TampDecompressor();
+    try {
+      // Feed small chunks to give us a chance to abort mid-stream
+      const headerChunk = largeCompressedData.slice(0, 1);
+      await decompressor.decompress(headerChunk);
+
+      // Abort after header is read
+      controller.abort('Aborted during decompression');
+
+      const payloadChunk = largeCompressedData.slice(1);
+      await assert.rejects(
+        async () => {
+          await decompressor.decompress(payloadChunk, { signal: controller.signal });
+        },
+        error => {
+          return (
+            error.name === 'DecompressionError' &&
+            error.message === 'Decompression was aborted' &&
+            error.details.aborted === true
+          );
+        },
+        'Should reject with DecompressionError when aborted during decompression'
+      );
+    } finally {
+      decompressor.destroy();
+    }
   });
 });

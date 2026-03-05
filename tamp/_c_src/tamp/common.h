@@ -39,15 +39,53 @@ extern "C" {
 #define TAMP_UNLIKELY(c) (c)
 #endif
 
+/* Per-function optimize attributes and #pragma GCC push/pop_options require
+ * GCC on a target that supports them. Xtensa GCC does not. */
+#if defined(__GNUC__) && !defined(__clang__) && !defined(__XTENSA__)
+#define TAMP_HAS_GCC_OPTIMIZE 1
+#else
+#define TAMP_HAS_GCC_OPTIMIZE 0
+#endif
+
 #if defined(_MSC_VER)
 #define TAMP_ALWAYS_INLINE __forceinline
 #define TAMP_NOINLINE __declspec(noinline)
-#elif defined(__GNUC__) || defined(__clang__)
+#define TAMP_OPTIMIZE_SIZE /* not supported */
+#elif defined(__GNUC__) && !defined(__clang__)
 #define TAMP_ALWAYS_INLINE inline __attribute__((always_inline))
 #define TAMP_NOINLINE __attribute__((noinline))
+#if TAMP_HAS_GCC_OPTIMIZE
+#define TAMP_OPTIMIZE_SIZE __attribute__((optimize("Os")))
+#else
+#define TAMP_OPTIMIZE_SIZE
+#endif
+#elif defined(__clang__)
+#define TAMP_ALWAYS_INLINE inline __attribute__((always_inline))
+#define TAMP_NOINLINE __attribute__((noinline))
+#define TAMP_OPTIMIZE_SIZE /* clang doesn't support per-function optimize */
 #else
 #define TAMP_ALWAYS_INLINE inline
 #define TAMP_NOINLINE
+#define TAMP_OPTIMIZE_SIZE
+#endif
+
+/* TAMP_USE_MEMSET: Use libc memset (default: 1).
+ * Set to 0 for environments without libc (e.g. MicroPython native modules).
+ * When disabled, uses a volatile loop that prevents GCC from emitting a
+ * memset call at the cost of inhibiting store coalescing. */
+#ifndef TAMP_USE_MEMSET
+#define TAMP_USE_MEMSET 1
+#endif
+
+#if TAMP_USE_MEMSET
+#include <string.h>
+#define TAMP_MEMSET(dst, val, n) memset((dst), (val), (n))
+#else
+#define TAMP_MEMSET(dst, val, n)                                                     \
+    do {                                                                             \
+        volatile unsigned char *_tamp_p = (volatile unsigned char *)(dst);           \
+        for (size_t _tamp_i = 0; _tamp_i < (n); _tamp_i++) _tamp_p[_tamp_i] = (val); \
+    } while (0)
 #endif
 
 /* Include stream API (tamp_compress_stream, tamp_decompress_stream).
@@ -68,6 +106,32 @@ extern "C" {
 #define TAMP_STREAM_WORK_BUFFER_SIZE 32
 #endif
 
+/* Extended format support (RLE, extended match).
+ * Enabled by default. Disable to save code size on minimal builds.
+ *
+ * TAMP_EXTENDED is the master switch (default: 1).
+ * TAMP_EXTENDED_COMPRESS and TAMP_EXTENDED_DECOMPRESS default to TAMP_EXTENDED,
+ * but can be individually overridden for compressor-only or decompressor-only builds.
+ */
+#ifndef TAMP_EXTENDED
+#define TAMP_EXTENDED 1
+#endif
+#ifndef TAMP_EXTENDED_DECOMPRESS
+#define TAMP_EXTENDED_DECOMPRESS TAMP_EXTENDED
+#endif
+#ifndef TAMP_EXTENDED_COMPRESS
+#define TAMP_EXTENDED_COMPRESS TAMP_EXTENDED
+#endif
+
+/* Extended encoding constants */
+#if TAMP_EXTENDED_DECOMPRESS || TAMP_EXTENDED_COMPRESS
+#define TAMP_RLE_SYMBOL 12
+#define TAMP_EXTENDED_MATCH_SYMBOL 13
+#define TAMP_LEADING_EXTENDED_MATCH_BITS 3
+#define TAMP_LEADING_RLE_BITS 4
+#define TAMP_RLE_MAX_WINDOW 8
+#endif
+
 enum {
     /* Normal/Recoverable status >= 0 */
     TAMP_OK = 0,
@@ -86,6 +150,10 @@ enum {
     TAMP_IO_ERROR = -10,     // Generic I/O error from read/write callback
     TAMP_READ_ERROR = -11,   // Read callback returned error
     TAMP_WRITE_ERROR = -12,  // Write callback returned error
+
+    /* [100, 127] and [-128, -100] are reserved for user-defined callback codes.
+     * tamp_callback_t returns are truncated to int8_t; use these ranges to
+     * avoid collisions with library status codes. */
 };
 typedef int8_t tamp_res;
 
@@ -93,6 +161,7 @@ typedef struct TampConf {
     uint16_t window : 4;                 // number of window bits
     uint16_t literal : 4;                // number of literal bits
     uint16_t use_custom_dictionary : 1;  // Use a custom initialized dictionary.
+    uint16_t extended : 1;               // Extended format (RLE, extended match). Read from header bit [1].
 #if TAMP_LAZY_MATCHING
     uint16_t lazy_matching : 1;  // use Lazy Matching (spend 50-75% more CPU for around 0.5-2.0% better compression.)
                                  // only effects compression operations.
@@ -100,14 +169,30 @@ typedef struct TampConf {
 } TampConf;
 
 /**
- * User-provied callback to be invoked after each compression cycle in the higher-level API.
- * @param[in,out] user_data Arbitrary user-provided data.
- * @param[in] bytes_processed Number of input bytes consumed so far.
- * @param[in] total_bytes Total number of input bytes.
+ * User-provided callback to be invoked periodically by the higher-level API.
  *
- * @return Some error code. If non-zero, abort current compression and return the value.
- *         For clarity, is is recommend to avoid already-used tamp_res values.
- *         e.g. start custom error codes at 100.
+ * The callback fires once per compression/decompression cycle (i.e., once per
+ * encoded or decoded token). For the stream API, it fires once per read-chunk.
+ *
+ * In all contexts, bytes_processed tracks input bytes consumed and total_bytes
+ * is the total input size (or 0 if unknown). This allows computing a meaningful
+ * progress percentage as bytes_processed / total_bytes.
+ *
+ * Non-stream API (total_bytes is known):
+ *   tamp_compressor_compress_cb:   (input_consumed, total_input_size)
+ *   tamp_decompressor_decompress_cb: (input_consumed, total_input_size)
+ *
+ * Stream API (total_bytes is 0; input size unknown):
+ *   tamp_compress_stream:   (input_consumed, 0)
+ *   tamp_decompress_stream: (input_consumed, 0)
+ *
+ * @param[in,out] user_data Arbitrary user-provided data.
+ * @param[in] bytes_processed Input bytes consumed so far.
+ * @param[in] total_bytes Total input size, or 0 if unknown (stream API).
+ *
+ * @return 0 to continue, or non-zero to abort. The return value is truncated
+ *         to tamp_res (int8_t) and propagated to the caller. Use values in
+ *         [100, 127] or [-128, -100] for custom codes to avoid collisions.
  */
 typedef int (*tamp_callback_t)(void *user_data, size_t bytes_processed, size_t total_bytes);
 
@@ -282,10 +367,19 @@ int tamp_stream_fatfs_write(void *handle, const unsigned char *buffer, size_t si
 /**
  * @brief Pre-populate a window buffer with common characters.
  *
+ * Uses a per-literal-size seed table so the dictionary only contains bytes that
+ * are valid and useful for the given configuration:
+ *   - literal=7,8: common english text/markup characters (" \0 0 e i > t o < a n s \\n r / .")
+ *   - literal=5,6: common english letters (" etaoinshrdlcumw") downshifted to the target bit width
+ *
+ * For v1 backwards compatibility, callers should pass literal=8 when the
+ * extended header flag is not set, regardless of the configured literal value.
+ *
  * @param[out] buffer Populated output buffer.
  * @param[in] size Size of output buffer in bytes.
+ * @param[in] literal Number of literal bits (5-8). Selects the appropriate seed character table.
  */
-void tamp_initialize_dictionary(unsigned char *buffer, size_t size);
+void tamp_initialize_dictionary(unsigned char *buffer, size_t size, uint8_t literal);
 
 /**
  * @brief Compute the minimum viable pattern size given window and literal config parameters.
@@ -296,6 +390,26 @@ void tamp_initialize_dictionary(unsigned char *buffer, size_t size);
  * @return The minimum pattern size in bytes. Either 2 or 3.
  */
 int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t literal);
+
+/**
+ * @brief Copy pattern from window to window, updating window_pos.
+ *
+ * Handles potential overlap between source and destination regions by
+ * copying backwards when the destination would "catch up" to the source.
+ *
+ * IMPORTANT: Caller must validate that (window_offset + match_size) does not
+ * exceed window bounds before calling this function. This function assumes
+ * window_offset and match_size are pre-validated and does not perform
+ * bounds checking on source reads.
+ *
+ * @param window Circular buffer (size must be power of 2)
+ * @param window_pos Current write position (updated by this function)
+ * @param window_offset Source position to copy from
+ * @param match_size Number of bytes to copy
+ * @param window_mask Bitmask for wrapping (window_size - 1)
+ */
+void tamp_window_copy(unsigned char *window, uint16_t *window_pos, uint16_t window_offset, uint8_t match_size,
+                      uint16_t window_mask);
 
 #ifdef __cplusplus
 }

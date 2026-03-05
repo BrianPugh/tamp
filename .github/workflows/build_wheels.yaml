@@ -116,8 +116,8 @@ jobs:
           CIBW_BUILD_FRONTEND: 'pip'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/tests
+          CIBW_TEST_REQUIRES: 'pytest cyclopts packaging'
+          CIBW_TEST_COMMAND: pytest {package}/tests --no-dataset
 
       - uses: actions/upload-artifact@v4
         with:
@@ -163,8 +163,8 @@ jobs:
           CIBW_BUILD_FRONTEND: 'pip'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/tests
+          CIBW_TEST_REQUIRES: 'pytest cyclopts packaging'
+          CIBW_TEST_COMMAND: pytest {package}/tests --no-dataset
 
       - uses: actions/upload-artifact@v4
         with:
@@ -211,8 +211,8 @@ jobs:
           CIBW_BUILD_FRONTEND: 'pip'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/tests
+          CIBW_TEST_REQUIRES: 'pytest cyclopts packaging'
+          CIBW_TEST_COMMAND: pytest {package}/tests --no-dataset
 
       - uses: actions/upload-artifact@v4
         with:
@@ -253,8 +253,8 @@ jobs:
           CIBW_BUILD_FRONTEND: 'pip'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/tests
+          CIBW_TEST_REQUIRES: 'pytest cyclopts packaging'
+          CIBW_TEST_COMMAND: pytest {package}/tests --no-dataset
 
       - uses: actions/upload-artifact@v4
         with:
@@ -301,8 +301,8 @@ jobs:
           CIBW_BUILD_FRONTEND: 'pip'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/tests
+          CIBW_TEST_REQUIRES: 'pytest cyclopts packaging'
+          CIBW_TEST_COMMAND: pytest {package}/tests --no-dataset
 
       - uses: actions/upload-artifact@v4
         with:
@@ -343,8 +343,8 @@ jobs:
           CIBW_BUILD_FRONTEND: 'pip'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/tests
+          CIBW_TEST_REQUIRES: 'pytest cyclopts packaging'
+          CIBW_TEST_COMMAND: pytest {package}/tests --no-dataset
 
       - uses: actions/upload-artifact@v4
         with:
@@ -384,8 +384,8 @@ jobs:
           CIBW_BUILD_FRONTEND: 'pip'
           CIBW_ARCHS: ${{ matrix.cibw_archs }}
           CIBW_BUILD: ${{ matrix.cibw_build }}
-          CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/tests
+          CIBW_TEST_REQUIRES: 'pytest cyclopts packaging'
+          CIBW_TEST_COMMAND: pytest {package}/tests --no-dataset
 
       - uses: actions/upload-artifact@v4
         with:

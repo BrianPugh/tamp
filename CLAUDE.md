@@ -26,9 +26,14 @@ different platforms:
 **Shared C Source:** All implementations use the same C source code in
 `tamp/_c_src/tamp/`:
 
-- `common.h/c` - Shared utilities and data structures
-- `compressor.h/c` - Compression implementation
+- `common.h/c` - Shared utilities, data structures, stream I/O callbacks, and
+  dictionary initialization
+- `compressor.h/c` - Compression implementation (sink/poll low-level API and
+  higher-level compress/flush API)
 - `decompressor.h/c` - Decompression implementation
+- `compressor_find_match_desktop.c` - Desktop-optimized match finding (included
+  by `compressor.c` on 64-bit targets: x86_64, aarch64, unless
+  `TAMP_USE_EMBEDDED_MATCH=1`)
 
 ## Development Commands
 
@@ -162,31 +167,76 @@ make website-clean         # Clean website build artifacts
 **WebAssembly Build Process:**
 
 1. `wasm/Makefile` compiles C source to WebAssembly using Emscripten
-2. `wasm/scripts/build.js` generates multiple JS/TS distribution formats
+2. `tsup` (via `npm run build:js`) bundles into multiple JS/TS distribution
+   formats (CJS, ESM, `.d.ts`)
 3. Exports specific C functions and runtime methods for JS interop
 
-**Configuration Flags:**
+**Configuration Flags (compile-time `-D` defines):**
 
-- `TAMP_LAZY_MATCHING=1` - Enable lazy matching optimization (default)
-- `TAMP_ESP32=1` - ESP32-specific optimizations
+- `TAMP_LAZY_MATCHING=1` - Enable lazy matching optimization (default in
+  build.py)
+- `TAMP_ESP32=1` - ESP32-specific optimizations (uses `uint32_t` instead of
+  narrower types for hot struct fields, avoiding costly narrow-type conversions)
 - `TAMP_COMPRESSOR`/`TAMP_DECOMPRESSOR` - Include/exclude components
+- `TAMP_EXTENDED=1` - Master switch for extended format: RLE and extended match
+  (default: 1). `TAMP_EXTENDED_COMPRESS` and `TAMP_EXTENDED_DECOMPRESS` can
+  individually override.
+- `TAMP_STREAM=1` - Include stream API (default: 1). Disable with
+  `-DTAMP_STREAM=0` to save ~2.8KB.
+- `TAMP_STREAM_WORK_BUFFER_SIZE=32` - Stack-allocated work buffer for stream API
+  (default: 32 bytes, 256+ recommended for performance)
+- `TAMP_STREAM_MEMORY` / `TAMP_STREAM_STDIO` / `TAMP_STREAM_LITTLEFS` /
+  `TAMP_STREAM_FATFS` - Enable built-in I/O handlers for specific backends
+- `TAMP_USE_EMBEDDED_MATCH=1` - Force embedded `find_best_match` implementation
+  on desktop (for testing)
+- `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
+  environments without libc (e.g. MicroPython native modules).
+
+**Build Environment Variables (Python):**
+
+- `TAMP_SANITIZE=1` - Enable AddressSanitizer + UBSan
+- `TAMP_PROFILE=1` - Enable profiling (line trace, debug info)
+- `TAMP_USE_EMBEDDED_MATCH=1` - Force embedded match finding
+- `TAMP_BUILD_C_EXTENSIONS=0` - Skip building C extensions entirely
+- `CIBUILDWHEEL=1` - CI wheel building mode (disables allowed_to_fail)
 
 ### Testing Strategy
 
 **Multi-layered Testing:**
 
-- **Python tests** (`tests/`) - Core algorithm testing using pytest
+- **Python tests** (`tests/`) - Core algorithm testing using pytest. Includes
+  bit reader/writer, compressor, decompressor, round-trip, CLI, dataset
+  regression, and file interface tests.
 - **WebAssembly tests** (`wasm/test/`) - JS/TS API testing with Node.js test
-  runner
+  runner (`node --test`)
 - **C tests** (`ctests/`) - Low-level C API testing using Unity framework
+  (submodule at `ctests/Unity/`). Includes stream API tests and filesystem
+  integration tests with LittleFS and FatFS RAM backends.
 - **Integration tests** - Cross-platform compatibility and performance
   benchmarks
 
 **Test Data Sources:**
 
-- Enwik8 dataset (100MB) for performance benchmarking
-- Silesia corpus for compression ratio evaluation
+- Enwik8 dataset (100MB) for performance benchmarking (`make download-enwik8`)
+- Silesia corpus for compression ratio evaluation (`make download-silesia`)
 - Custom test cases for edge conditions
+
+### Compressor Architecture
+
+The C compressor uses a two-phase low-level API:
+
+1. `tamp_compressor_sink()` - Copies input bytes into a 16-byte internal ring
+   buffer (cheap/fast)
+2. `tamp_compressor_poll()` - Runs one compression iteration on the internal
+   buffer (computationally intensive)
+
+Higher-level convenience functions (`tamp_compressor_compress`,
+`tamp_compressor_compress_and_flush`) wrap these. Callback variants (`_cb`
+suffix) accept a `tamp_callback_t` progress callback.
+
+The stream API (`tamp_compress_stream`, `tamp_decompress_stream`) provides a
+file-oriented interface using read/write callbacks, supporting multiple I/O
+backends (memory, stdio, LittleFS, FatFS).
 
 ### Memory Management Patterns
 
@@ -194,6 +244,7 @@ make website-clean         # Clean website build artifacts
 
 - Window size determines memory usage: `(1 << windowBits)` bytes
 - No dynamic allocation during compression/decompression operations
+- Stream API uses a stack-allocated work buffer (`TAMP_STREAM_WORK_BUFFER_SIZE`)
 - Streaming interfaces require explicit resource management (`destroy()` calls
   in JS/TS)
 
@@ -202,7 +253,9 @@ make website-clean         # Clean website build artifacts
 ### Making Changes to Core Algorithm
 
 1. **Modify C source** in `tamp/_c_src/tamp/`
-2. **Rebuild all implementations:**
+2. **Update pure Python reference** in `tamp/compressor.py` /
+   `tamp/decompressor.py` to match
+3. **Rebuild all implementations:**
 
    ```bash
    # Python
@@ -212,11 +265,12 @@ make website-clean         # Clean website build artifacts
    cd wasm && npm run build
    ```
 
-3. **Run comprehensive tests:**
+4. **Run comprehensive tests:**
    ```bash
-   make test              # Python + MicroPython
+   poetry run pytest      # Python tests
+   make c-test            # C unit tests with sanitizers
+   make c-test-embedded   # C tests with embedded match finding
    cd wasm && npm test    # WebAssembly
-   make c-test           # C unit tests
    ```
 
 ### Adding New Features
@@ -232,11 +286,13 @@ make website-clean         # Clean website build artifacts
 - **Use provided benchmarking tools:**
   ```bash
   make on-device-compression-benchmark     # MicroPython performance
-  npm run test:enwik8                     # WebAssembly performance
-  python tools/performance-benchmark.sh   # Python performance
+  cd wasm && npm run test:enwik8          # WebAssembly performance
+  bash tools/performance-benchmark.sh     # Python performance
+  make c-benchmark-stream                 # C stream API benchmark
+  make binary-size                        # ARM binary size table
   ```
-- **Profile with:** `tools/profiler.py` for Python, browser dev tools for
-  WebAssembly
+- **Profile with:** `tools/profiler.py` for Python (requires `TAMP_PROFILE=1`),
+  browser dev tools for WebAssembly
 
 ### Release Process
 
@@ -246,6 +302,29 @@ make website-clean         # Clean website build artifacts
    - MicroPython `.mpy` files for multiple architectures
    - WebAssembly npm package
 3. **CI/CD handles** cross-platform builds and testing
+
+### Python Import Fallback Chain
+
+`tamp/__init__.py` imports Compressor/Decompressor using this priority:
+
+1. Viper (MicroPython optimized) - only available on MicroPython
+2. Cython C extensions (`_c_compressor`/`_c_decompressor`) - primary on CPython
+3. Pure Python reference (`compressor.py`/`decompressor.py`) - fallback
+
+When modifying compression behavior, changes to the C source must be mirrored in
+the pure Python reference implementation to keep them in sync.
+
+### CI/CD
+
+GitHub Actions workflows (`.github/workflows/`):
+
+- `tests.yaml` - Lint (ruff, pre-commit) and test across Python 3.9/3.12/3.13
+  and multiple OS. Also runs `c-test` and `c-test-embedded`.
+- `build_wheels.yaml` - Cross-platform wheel builds via cibuildwheel
+- `javascript.yaml` - WebAssembly tests on Node 18/20
+- `mpy_native_module.yaml` - MicroPython native module builds for ARM
+  architectures
+- `esp_upload_component.yml` - ESP-IDF component registry upload
 
 ## Documentation Style
 

@@ -18,45 +18,27 @@ module.exports = (env, argv) => {
       clean: true,
     },
 
-    // Source maps for debugging
-    devtool: isProduction ? 'source-map' : 'eval-source-map',
+    devtool: isProduction ? false : 'eval-source-map',
 
     module: {
       rules: [
         {
-          test: /\.js$/,
-          exclude: /node_modules/,
-          use: {
-            loader: 'babel-loader',
-            options: {
-              presets: ['@babel/preset-env'],
-            },
-          },
-        },
-        {
           test: /\.css$/,
-          use: [
-            MiniCssExtractPlugin.loader,
-            'css-loader',
-            'postcss-loader', // Add PostCSS processing with autoprefixer
-          ],
+          use: [MiniCssExtractPlugin.loader, 'css-loader', 'postcss-loader'],
         },
         {
           test: /\.(png|jpg|jpeg|gif|svg|ico)$/,
           type: 'asset',
           parser: {
             dataUrlCondition: {
-              maxSize: 4 * 1024, // Inline assets under 4KB for faster loading
+              maxSize: 4 * 1024,
             },
           },
         },
         {
-          test: /\.(woff|woff2|eot|ttf|otf)$/,
-          type: 'asset/resource',
-        },
-        {
-          test: /\.wasm$/,
-          type: 'asset/resource',
+          // Prevent code-splitting from Emscripten's import("module") (Node.js-only path).
+          test: /tamp-module\.mjs$/,
+          parser: { dynamicImportMode: 'eager' },
         },
       ],
     },
@@ -65,8 +47,8 @@ module.exports = (env, argv) => {
       new HtmlWebpackPlugin({
         template: './index.html',
         filename: 'index.html',
-        inject: 'head', // Inject scripts in head for better loading
-        scriptLoading: 'defer', // Use defer for better performance
+        inject: 'head',
+        scriptLoading: 'defer',
         minify: isProduction
           ? {
               removeComments: true,
@@ -86,12 +68,7 @@ module.exports = (env, argv) => {
       new CopyWebpackPlugin({
         patterns: [
           {
-            from: '../wasm/dist/*.{mjs,wasm}',
-            to: 'wasm/dist/[name][ext]',
-            noErrorOnMissing: true, // Don't fail if wasm dist doesn't exist
-          },
-          {
-            from: '../assets/{icon-transparent-bg-32x32.png,logo-compressed.svg}',
+            from: '../assets/icon-transparent-bg-32x32.png',
             to: 'assets/[name][ext]',
             noErrorOnMissing: true,
           },
@@ -103,9 +80,18 @@ module.exports = (env, argv) => {
       }),
 
       new CompressionPlugin({
+        algorithm: 'gzip',
         test: /\.(js|css|html|wasm)$/,
-        threshold: 4096, // Only compress files larger than 4KB
+        threshold: 4096,
         minRatio: 0.8,
+      }),
+
+      new CompressionPlugin({
+        algorithm: 'brotliCompress',
+        test: /\.(js|css|html|wasm)$/,
+        threshold: 4096,
+        minRatio: 0.8,
+        filename: '[path][base].br',
       }),
     ],
 
@@ -122,10 +108,8 @@ module.exports = (env, argv) => {
         }),
         new CssMinimizerPlugin(),
       ],
-      // Enable tree shaking for dead code elimination
       usedExports: true,
       sideEffects: false,
-      // Disable code splitting - single bundle for small website
       splitChunks: false,
     },
 

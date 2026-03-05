@@ -122,6 +122,7 @@ export class TampCompressor {
       window: 10,
       literal: 8,
       dictionary: null,
+      extended: true,
       lazy_matching: false,
       ...options,
     };
@@ -173,7 +174,12 @@ export class TampCompressor {
     if (dictData) {
       this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
-      this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
+      this.module.ccall(
+        'tamp_initialize_dictionary',
+        null,
+        ['number', 'number', 'number'],
+        [this.windowPtr, windowSize, this.options.extended ? this.options.literal : 8]
+      );
     }
 
     // Create configuration struct (already allocated as part of single allocation)
@@ -183,7 +189,8 @@ export class TampCompressor {
         (this.options.window & 0xf) |
         ((this.options.literal & 0xf) << 4) |
         ((this.options.dictionary ? 1 : 0) << 8) |
-        ((this.options.lazy_matching ? 1 : 0) << 9);
+        ((this.options.extended ? 1 : 0) << 9) |
+        ((this.options.lazy_matching ? 1 : 0) << 10);
       this.module.setValue(confPtr, confValue, 'i32');
 
       // Initialize compressor
@@ -463,20 +470,9 @@ export class TampCompressor {
 export class TampDecompressor {
   constructor(options = {}) {
     this.options = {
-      window: 10,
-      literal: 8,
       dictionary: null,
-      lazy_matching: false,
       ...options,
     };
-
-    // Validate window and literal ranges (if provided, these are used for dictionary matching)
-    if (this.options.window < 8 || this.options.window > 15) {
-      throw new RangeError(`window must be between 8 and 15, got ${this.options.window}`);
-    }
-    if (this.options.literal < 5 || this.options.literal > 8) {
-      throw new RangeError(`literal must be between 5 and 8, got ${this.options.literal}`);
-    }
 
     this.decompressorPtr = null;
     this.windowPtr = null;
@@ -546,8 +542,9 @@ export class TampDecompressor {
     // Extract configuration values from the header
     const confValue = this.module.getValue(this.confPtr, 'i32');
     const headerWindow = confValue & 0xf;
-    // const headerLiteral = (confValue >> 4) & 0xf;  // Currently unused
+    const headerLiteral = (confValue >> 4) & 0xf;
     const headerUsesCustomDict = (confValue >> 8) & 1;
+    const headerExtended = (confValue >> 9) & 1;
 
     if (headerUsesCustomDict && !this.options.dictionary) {
       throw new TypeError('Compressed data requires custom dictionary but none provided');
@@ -580,7 +577,12 @@ export class TampDecompressor {
     if (dictData) {
       this.module.HEAPU8.set(dictData, this.windowPtr);
     } else {
-      this.module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [this.windowPtr, windowSize]);
+      this.module.ccall(
+        'tamp_initialize_dictionary',
+        null,
+        ['number', 'number', 'number'],
+        [this.windowPtr, windowSize, headerExtended ? headerLiteral : 8]
+      );
     }
 
     // Initialize decompressor with header-derived configuration
@@ -790,10 +792,12 @@ export async function compress(data, options = {}) {
   const callbackOptions = {};
 
   // Extract compression-specific options
-  const { window, literal, dictionary, lazy_matching, onPoll, signal, pollIntervalMs, pollIntervalBytes } = options;
+  const { window, literal, dictionary, extended, lazy_matching, onPoll, signal, pollIntervalMs, pollIntervalBytes } =
+    options;
   if (window !== undefined) compressionOptions.window = window;
   if (literal !== undefined) compressionOptions.literal = literal;
   if (dictionary !== undefined) compressionOptions.dictionary = dictionary;
+  if (extended !== undefined) compressionOptions.extended = extended;
   if (lazy_matching !== undefined) compressionOptions.lazy_matching = lazy_matching;
 
   // Extract callback options
@@ -842,13 +846,25 @@ export async function initialize() {
 }
 
 /**
- * Utility function to initialize a dictionary buffer with default values
+ * Utility function to initialize a dictionary buffer with default values.
+ *
+ * The seed character table depends on the literal bit width:
+ * - literal=7 or 8: common english text and markup characters
+ * - literal=5 or 6: common english letters downshifted to the target bit width
+ *
+ * For v1 backwards compatibility, pass literal=8 (the default) when the
+ * extended header flag is not set.
+ *
  * @param {number} size - Size of the dictionary buffer (must be power of 2)
+ * @param {number} [literal=8] - Number of literal bits (5-8)
  * @returns {Uint8Array} - Initialized dictionary buffer
  */
-export async function initializeDictionary(size) {
+export async function initializeDictionary(size, literal = 8) {
   if (!Number.isInteger(size) || size <= 0 || (size & (size - 1)) !== 0) {
     throw new RangeError('Dictionary size must be a positive power of 2');
+  }
+  if (!Number.isInteger(literal) || literal < 5 || literal > 8) {
+    throw new RangeError('literal must be between 5 and 8');
   }
 
   const module = await initializeWasm();
@@ -859,7 +875,7 @@ export async function initializeDictionary(size) {
 
   try {
     // Call the C function to initialize the dictionary
-    module.ccall('tamp_initialize_dictionary', null, ['number', 'number'], [bufferPtr, size]);
+    module.ccall('tamp_initialize_dictionary', null, ['number', 'number', 'number'], [bufferPtr, size, literal]);
 
     const dictionary = new Uint8Array(module.HEAPU8.buffer, bufferPtr, size).slice();
     return dictionary;

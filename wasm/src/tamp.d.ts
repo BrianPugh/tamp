@@ -43,6 +43,8 @@ export interface TampOptions {
   literal?: number;
   /** Custom dictionary data. If null, no custom dictionary is used. If Uint8Array, uses the provided dictionary. Default: null */
   dictionary?: Uint8Array | null;
+  /** Enable extended format (RLE, extended match) for better compression ratios. Default: true */
+  extended?: boolean;
   /** Enable lazy matching for better compression ratios. Default: false */
   lazy_matching?: boolean;
 }
@@ -68,6 +70,7 @@ export interface TampDefaults {
   readonly window: 10;
   readonly literal: 8;
   readonly dictionary: null;
+  readonly extended: true;
   readonly lazy_matching: false;
 }
 
@@ -129,9 +132,10 @@ export class TampCompressor {
 
   /**
    * Flush any remaining data and finalize compression
+   * @param write_token - Whether to write a flush token (default false)
    * @returns Promise resolving to final compressed output
    */
-  flush(): Promise<Uint8Array>;
+  flush(write_token?: boolean): Promise<Uint8Array>;
 
   /**
    * Clean up allocated memory. Should be called when done with the compressor.
@@ -234,11 +238,20 @@ export function decompress(data: Uint8Array, options?: TampOptions): Promise<Uin
 export function initialize(): Promise<void>;
 
 /**
- * Initialize a dictionary buffer with default values
+ * Initialize a dictionary buffer with default values.
+ *
+ * The character table used for seeding depends on the literal bit width:
+ * - literal=7 or 8: common english text and markup characters
+ * - literal=5 or 6: common english letters downshifted to the target bit width
+ *
+ * For v1 backwards compatibility, pass literal=8 (the default) when the
+ * extended header flag is not set.
+ *
  * @param size - Size of the dictionary buffer (must be power of 2)
+ * @param literal - Number of literal bits (5-8, default 8)
  * @returns Promise resolving to initialized dictionary buffer
  */
-export function initializeDictionary(size: number): Promise<Uint8Array>;
+export function initializeDictionary(size: number, literal?: number): Promise<Uint8Array>;
 
 /**
  * Compute the minimum pattern size for given window and literal parameters
@@ -306,8 +319,3 @@ export function createReadableStream(data: Uint8Array, chunkSize?: number): Read
  * @returns Promise resolving to collected data
  */
 export function collectStream(readable: ReadableStream<Uint8Array>): Promise<Uint8Array>;
-
-/**
- * Version information
- */
-export const version: string;

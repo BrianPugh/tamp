@@ -54,10 +54,22 @@ Python API
 
     Initialize Dictionary.
 
+    The character table used for seeding depends on the ``literal`` bit width:
+    for ``literal=7`` or ``8``, common english text and markup characters are used;
+    for ``literal=5`` or ``6``, common english letters (``" etaoinshrdlcumw"``)
+    downshifted to the target bit width are used instead.
+
+    For v1 backwards compatibility, pass ``literal=8`` (the default) when the
+    ``extended`` header flag is not set.
+
     :param size:
         If a :obj:`bytearray`, will populate it with initial data.
         If an :obj:`int`, will allocate and initialize a bytearray of indicated size.
     :type size: Union[int, bytearray]
+    :param literal:
+        Number of literal bits (5-8). Selects the appropriate seed character table.
+        Defaults to ``8``.
+    :type literal: int
 
     :return: Initialized window dictionary.
     :rtype: bytearray
