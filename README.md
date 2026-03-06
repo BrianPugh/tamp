@@ -49,6 +49,7 @@ of RAM and firmware storage.
   - Allows for submission of messages while continuing to compress subsequent
     data.
 - Customizable dictionary for greater compression of small messages.
+- Fuzz tested with libFuzzer + AddressSanitizer/UBSan.
 - Convenient CLI interface.
 
 # Installation
