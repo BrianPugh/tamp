@@ -453,3 +453,7 @@ tramp
 # Temporary files
 *.tmp
 *.temp
+
+# Fuzz testing corpora and crash artifacts
+fuzz/corpus_*/
+crash-*

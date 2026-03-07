@@ -19,6 +19,11 @@ help:
 	@echo "  make on-device-deflate-compression-benchmark   Run MicroPython deflate compression benchmark"
 	@echo "  make on-device-deflate-decompression-benchmark Run MicroPython deflate decompression benchmark"
 	@echo ""
+	@echo "Fuzzing (requires LLVM clang; on macOS: brew install llvm):"
+	@echo "  make fuzz-decompressor  Fuzz decompressor with random input"
+	@echo "  make fuzz-round-trip    Fuzz compress->decompress round-trip"
+	@echo "  make fuzz-clean         Clean fuzz artifacts and corpora"
+	@echo ""
 	@echo "Other targets:"
 	@echo "  make binary-size        Show binary sizes for README table"
 	@echo "  make v1-compressed-datasets  Compress all datasets/ files to datasets/v1-compressed/"
@@ -128,7 +133,7 @@ clean-cython:
 # Only define 'clean' when not building MicroPython (dynruntime.mk has its own)
 ifneq ($(MAKECMDGOALS),_mpy-build)
 .PHONY: clean
-clean: clean-cython clean-c-test website-clean
+clean: clean-cython clean-c-test fuzz-clean website-clean
 	@rm -rf build
 	@rm -rf dist
 	@rm -f tamp.mpy
@@ -435,6 +440,50 @@ build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OB
 
 c-test-embedded: build/test_runner_embedded
 	./build/test_runner_embedded
+
+
+############
+# Fuzzing
+############
+# Fuzz testing with libFuzzer (requires clang).
+# Usage:
+#   make fuzz-decompressor    # Fuzz the decompressor with random input
+#   make fuzz-round-trip      # Fuzz compress->decompress round-trip
+#   make fuzz-clean           # Remove fuzz build artifacts and corpora
+#
+# Stop with Ctrl-C. Crashes are saved to fuzz/corpus_*/crashes/.
+# Reproduce a crash: ./build/fuzz_decompressor fuzz/corpus_decompressor/crashes/<file>
+.PHONY: fuzz-decompressor fuzz-round-trip fuzz-clean
+
+# Apple Clang does not ship the fuzzer runtime; use Homebrew LLVM if available.
+# Override with: make fuzz-decompressor FUZZ_CC=/path/to/clang
+FUZZ_CC := $(shell \
+	if [ -x /opt/homebrew/opt/llvm/bin/clang ]; then echo /opt/homebrew/opt/llvm/bin/clang; \
+	elif [ -x /usr/local/opt/llvm/bin/clang ]; then echo /usr/local/opt/llvm/bin/clang; \
+	else echo clang; fi)
+FUZZ_CFLAGS = -g -O1 -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer \
+	-Itamp/_c_src
+FUZZ_LDFLAGS = -fsanitize=fuzzer,address,undefined
+
+build/fuzz_decompressor: fuzz/fuzz_decompressor.c tamp/_c_src/tamp/decompressor.c tamp/_c_src/tamp/common.c
+	@mkdir -p build
+	$(FUZZ_CC) $(FUZZ_CFLAGS) -o $@ $^ $(FUZZ_LDFLAGS)
+
+build/fuzz_round_trip: fuzz/fuzz_round_trip.c tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c tamp/_c_src/tamp/common.c
+	@mkdir -p build
+	$(FUZZ_CC) $(FUZZ_CFLAGS) -o $@ $^ $(FUZZ_LDFLAGS)
+
+fuzz-decompressor: build/fuzz_decompressor
+	@mkdir -p fuzz/corpus_decompressor
+	./build/fuzz_decompressor fuzz/corpus_decompressor
+
+fuzz-round-trip: build/fuzz_round_trip
+	@mkdir -p fuzz/corpus_round_trip
+	./build/fuzz_round_trip fuzz/corpus_round_trip
+
+fuzz-clean:
+	@rm -f build/fuzz_decompressor build/fuzz_round_trip
+	@rm -rf fuzz/corpus_decompressor fuzz/corpus_round_trip
 
 
 ###############
