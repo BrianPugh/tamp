@@ -648,14 +648,27 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_cb(TampCompressor* compress
 #pragma GCC push_options
 #pragma GCC optimize("-fno-tree-pre")
 #endif
-tamp_res tamp_compressor_flush(TampCompressor* compressor, unsigned char* output, size_t output_size,
-                               size_t* output_written_size, bool write_token) {
+/**
+ * @brief Internal flush implementation.
+ *
+ * Same as tamp_compressor_flush, but additionally reports whether a FLUSH
+ * token was written to the output stream. Used by reset_dictionary to
+ * determine the exact number of additional FLUSHes needed.
+ *
+ * @param[out] flush_token_written Set to true if a FLUSH token was written. May be NULL.
+ */
+static TAMP_NOINLINE tamp_res tamp_compressor_flush_impl(TampCompressor* compressor, unsigned char* output,
+                                                         size_t output_size, size_t* output_written_size,
+                                                         bool write_token, bool* flush_token_written) {
     tamp_res res;
     size_t chunk_output_written_size;
     size_t output_written_size_proxy;
+    bool flush_token_written_proxy;
 
     if (!output_written_size) output_written_size = &output_written_size_proxy;
+    if (!flush_token_written) flush_token_written = &flush_token_written_proxy;
     *output_written_size = 0;
+    *flush_token_written = false;
 
 flush_check:
     // Flush pending bits before checking for more work
@@ -706,6 +719,7 @@ flush_done:
         // end up accidentally writing multiple FLUSH tokens.
         if (TAMP_UNLIKELY(output_size < 2)) return TAMP_OUTPUT_FULL;
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
+        *flush_token_written = true;
     }
 
     // At this point, up to 16 bits may remain in the compressor->bit_buffer
@@ -722,6 +736,11 @@ flush_done:
     }
 
     return res;
+}
+
+tamp_res tamp_compressor_flush(TampCompressor* compressor, unsigned char* output, size_t output_size,
+                               size_t* output_written_size, bool write_token) {
+    return tamp_compressor_flush_impl(compressor, output, output_size, output_written_size, write_token, NULL);
 }
 #if TAMP_HAS_GCC_OPTIMIZE
 #pragma GCC pop_options
