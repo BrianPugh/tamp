@@ -217,6 +217,21 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
     return TAMP_OK;
 }
 
+tamp_res tamp_compressor_init_append(TampCompressor* compressor, const TampConf* conf, unsigned char* window) {
+    if (!conf || !conf->dictionary_reset || conf->use_custom_dictionary) return TAMP_INVALID_CONF;
+
+    tamp_res res = tamp_compressor_init(compressor, conf, window);
+    if (res != TAMP_OK) return res;
+
+    // Replace the header in the bit buffer with a FLUSH token.
+    // It will be flushed out naturally by the next compress/flush call.
+    compressor->bit_buffer = 0;
+    compressor->bit_buffer_pos = 0;
+    write_to_bit_buffer(compressor, FLUSH_CODE, 9);
+
+    return TAMP_OK;
+}
+
 #if TAMP_EXTENDED_COMPRESS
 /**
  * @brief Write extended huffman encoding (huffman + trailing bits).
@@ -718,7 +733,7 @@ flush_check:
 flush_done:
     // At this point, up to 7 bits may remain in the compressor->bit_buffer
     // The output buffer may have 0 bytes remaining.
-    if (write_token && compressor->bit_buffer_pos) {
+    if (write_token && (compressor->bit_buffer_pos || compressor->conf.dictionary_reset)) {
         // We don't want to write the FLUSH token to the bit_buffer unless
         // we are confident that it'll wind up in the output buffer
         // in THIS function call.

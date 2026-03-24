@@ -84,7 +84,12 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
         mp_raise_ValueError("");
     }
 
-    TAMP_CHECK(tamp_compressor_init(&o->c, &conf, dictionary_buffer_info.buf));
+    bool append = mp_obj_get_int(args_in[7]);
+    if (append) {
+        TAMP_CHECK(tamp_compressor_init_append(&o->c, &conf, dictionary_buffer_info.buf));
+    } else {
+        TAMP_CHECK(tamp_compressor_init(&o->c, &conf, dictionary_buffer_info.buf));
+    }
 
     return MP_OBJ_FROM_PTR(o);
 }

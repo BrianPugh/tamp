@@ -203,6 +203,29 @@ tamp_res tamp_compressor_reset_dictionary(TampCompressor *compressor, unsigned c
                                           size_t *output_written_size);
 
 /**
+ * @brief Initialize compressor for appending to an existing stream.
+ *
+ * Initializes the compressor identically to tamp_compressor_init, but writes
+ * a FLUSH token to the internal bit buffer instead of a header. When the
+ * original stream ended with a flush (which is guaranteed when dictionary_reset
+ * is enabled), the subsequent flush/compress call creates a double-FLUSH
+ * sequence that tells the decompressor to reset its dictionary.
+ *
+ * This enables resuming compression on an existing stream without persisting
+ * compressor state (e.g., across reboots).
+ *
+ * conf->dictionary_reset must be true and conf->use_custom_dictionary must be false.
+ *
+ * @param[out] compressor Object to initialize.
+ * @param[in] conf Compressor configuration. Must match the original stream's configuration.
+ * @param[in] window Pre-allocated window buffer.
+ *
+ * @return Tamp Status Code. Returns TAMP_INVALID_CONF if dictionary_reset is
+ *         not set or use_custom_dictionary is set.
+ */
+tamp_res tamp_compressor_init_append(TampCompressor *compressor, const TampConf *conf, unsigned char *window);
+
+/**
  * Callback-variant of tamp_compressor_compress.
  *
  * @param[in] callback User-provided function to be called every compression-cycle.

@@ -37,6 +37,7 @@ cdef class Compressor:
         bool lazy_matching=False,
         bool extended=True,
         bool dictionary_reset=False,
+        bool append=False,
     ):
         cdef ctamp.TampConf conf
 
@@ -63,7 +64,10 @@ cdef class Compressor:
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
-        res = ctamp.tamp_compressor_init(self._c_compressor, &conf, self._window_buffer_ptr)
+        if append:
+            res = ctamp.tamp_compressor_init_append(self._c_compressor, &conf, self._window_buffer_ptr)
+        else:
+            res = ctamp.tamp_compressor_init(self._c_compressor, &conf, self._window_buffer_ptr)
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
 

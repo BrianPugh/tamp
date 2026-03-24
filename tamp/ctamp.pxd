@@ -72,7 +72,13 @@ cdef extern from "tamp/compressor.h":
             unsigned char *output,
             size_t output_size,
             size_t *output_written_size
-            );
+            )
+
+    tamp_res tamp_compressor_init_append(
+            TampCompressor *compressor,
+            const TampConf *conf,
+            unsigned char *window,
+            )
 
 
 cdef extern from "tamp/decompressor.h":

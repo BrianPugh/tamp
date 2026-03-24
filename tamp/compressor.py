@@ -62,10 +62,10 @@ class _BitWriter:
                 bytes_written += 1
         return bytes_written
 
-    def flush(self, write_token=True):
+    def flush(self, write_token=True, force_token=False):
         bytes_written = 0
         self._flush_token_written = False
-        if self.bit_pos > 0 and write_token:
+        if write_token and (self.bit_pos > 0 or force_token):
             bytes_written += self.write(_FLUSH_CODE, 9)
             self._flush_token_written = True
 
@@ -147,6 +147,7 @@ class Compressor:
         lazy_matching: bool = False,
         extended: bool = True,
         dictionary_reset: bool = False,
+        append: bool = False,
     ):
         """
         Parameters
@@ -173,6 +174,11 @@ class Compressor:
             first be initialized with :func:`~tamp.initialize_dictionary`
         lazy_matching: bool
             Use roughly 50% more cpu to get 0~2% better compression.
+        append: bool
+            Initialize for appending to an existing stream instead of writing a
+            header. Writes a FLUSH token that, combined with the previous stream's
+            trailing FLUSH, triggers a dictionary reset in the decompressor.
+            Requires ``dictionary_reset=True``.
         """
         self.window_bits = window
         self.literal_bits = literal
@@ -219,15 +225,28 @@ class Compressor:
         # For debugging: how many uncompressed bytes have we consumed so far.
         self.input_index = 0
 
-        # Write header
-        self._bit_writer.write(window - 8, 3, flush=False)
-        self._bit_writer.write(literal - 5, 2, flush=False)
-        self._bit_writer.write(bool(dictionary), 1, flush=False)
-        self._bit_writer.write(self.extended, 1, flush=False)
-        self._bit_writer.write(1 if dictionary_reset else 0, 1, flush=False)  # more_headers (implies dictionary_reset)
-        if dictionary_reset:
-            # Header byte 2: all bits reserved for future use, currently all zero.
-            self._bit_writer.write(0, 8, flush=False)
+        if append:
+            if not dictionary_reset:
+                raise ValueError("append=True requires dictionary_reset=True")
+            if dictionary:
+                raise ValueError("append=True cannot use a custom dictionary")
+            # Write a FLUSH token to the bit buffer instead of a header.
+            # It will be flushed out naturally by the next compress/flush call.
+            # Combined with the previous stream's trailing FLUSH, this triggers
+            # a dictionary reset in the decompressor.
+            self._bit_writer.write(_FLUSH_CODE, 9, flush=False)
+        else:
+            # Write header
+            self._bit_writer.write(window - 8, 3, flush=False)
+            self._bit_writer.write(literal - 5, 2, flush=False)
+            self._bit_writer.write(bool(dictionary), 1, flush=False)
+            self._bit_writer.write(self.extended, 1, flush=False)
+            self._bit_writer.write(
+                1 if dictionary_reset else 0, 1, flush=False
+            )  # more_headers (implies dictionary_reset)
+            if dictionary_reset:
+                # Header byte 2: all bits reserved for future use, currently all zero.
+                self._bit_writer.write(0, 8, flush=False)
 
     def _reset_state(self, dictionary=None):
         """Reset mutable compression state and (re-)initialize the dictionary."""
@@ -546,7 +565,7 @@ class Compressor:
             self._cached_match_index = -1
             self._cached_match_size = 0
 
-        bytes_written_flush = self._bit_writer.flush(write_token=write_token)
+        bytes_written_flush = self._bit_writer.flush(write_token=write_token, force_token=self.dictionary_reset)
         bytes_written += bytes_written_flush
         return bytes_written
 

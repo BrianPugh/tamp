@@ -11,6 +11,7 @@ class Compressor:
         dictionary=None,
         extended=True,
         dictionary_reset=False,
+        append=False,
     ):
         self._cf = False  # shorter name to save binary space
         if not hasattr(f, "write"):  # It's probably a path-like object.
@@ -20,7 +21,7 @@ class Compressor:
         custom = dictionary is not None
         if not dictionary:
             dictionary = bytearray(1 << window)
-        self._c = _C(f, window, literal, dictionary, custom, extended, dictionary_reset)
+        self._c = _C(f, window, literal, dictionary, custom, extended, dictionary_reset, append)
 
         self.write = self._c.write
 
