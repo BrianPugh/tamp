@@ -35,6 +35,9 @@ int main(void) {
 #endif
     RUN_TEST(test_compress_cb_callback_receives_input_consumed);
     RUN_TEST(test_compress_cb_callback_abort);
+    RUN_TEST(test_reset_dictionary_roundtrip);
+    RUN_TEST(test_reset_dictionary_requires_conf_flag);
+    RUN_TEST(test_reset_dictionary_small_output_buffer);
 
     // Decompressor extended tests
     RUN_TEST(test_decompressor_extended_rle);

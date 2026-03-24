@@ -309,6 +309,204 @@ class TestCompressorAndDecompressor(unittest.TestCase):
                 d = Decompressor(f)
                 self.assertEqual(d.read(), data)
 
+    def test_reset_dictionary_basic(self):
+        """Compress data, flush, reset dictionary, compress more, decompress all."""
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, dictionary_reset=True)
+                c.write(tale_of_two_cities[:200])
+                c.flush(write_token=True)
+                c.reset_dictionary()
+                c.write(tale_of_two_cities[200:])
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, tale_of_two_cities)
+
+    def test_reset_dictionary_no_prior_flush(self):
+        """Reset dictionary directly without explicit flush first."""
+        data1 = b"Hello world! " * 20
+        data2 = b"Goodbye world! " * 20
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, dictionary_reset=True)
+                c.write(data1)
+                c.reset_dictionary()
+                c.write(data2)
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data1 + data2)
+
+    def test_reset_dictionary_multiple_resets(self):
+        """Multiple resets in a single stream."""
+        data1 = b"Alpha " * 30
+        data2 = b"Beta " * 30
+        data3 = b"Gamma " * 30
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, dictionary_reset=True)
+                c.write(data1)
+                c.reset_dictionary()
+                c.write(data2)
+                c.reset_dictionary()
+                c.write(data3)
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data1 + data2 + data3)
+
+    def test_reset_dictionary_immediate(self):
+        """Reset immediately after init (no data compressed yet)."""
+        data = tale_of_two_cities
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, dictionary_reset=True)
+                c.reset_dictionary()
+                c.write(data)
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data)
+
+    def test_reset_dictionary_extended(self):
+        """Reset with extended=True."""
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True, dictionary_reset=True)
+                c.write(tale_of_two_cities[:200])
+                c.flush(write_token=True)
+                c.reset_dictionary()
+                c.write(tale_of_two_cities[200:])
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, tale_of_two_cities)
+
+    def test_reset_dictionary_lazy_matching(self):
+        """Reset with extended=True and lazy_matching=True."""
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            if Compressor is NativeCompressor:
+                continue
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True, lazy_matching=True, dictionary_reset=True)
+                c.write(tale_of_two_cities[:200])
+                c.flush(write_token=True)
+                c.reset_dictionary()
+                c.write(tale_of_two_cities[200:])
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, tale_of_two_cities)
+
+    def test_reset_dictionary_small_window(self):
+        """Reset with smallest window size (window=8)."""
+        data1 = tale_of_two_cities[:100]
+        data2 = tale_of_two_cities[100:200]
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, window=8, dictionary_reset=True)
+                c.write(data1)
+                c.reset_dictionary()
+                c.write(data2)
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data1 + data2)
+
+    def test_reset_dictionary_different_literals(self):
+        """Reset with different literal values (5, 6, 7)."""
+        for literal in (5, 6, 7):
+            n_bits = literal
+            data1 = bytearray(random.randint(0, (1 << n_bits) - 1) for _ in range(200))
+            data2 = bytearray(random.randint(0, (1 << n_bits) - 1) for _ in range(200))
+            for Compressor, Decompressor in walk_compressors_decompressors():
+                with BytesIO() as f, self.subTest(literal=literal, Compressor=Compressor, Decompressor=Decompressor):
+                    c = Compressor(f, literal=literal, dictionary_reset=True)
+                    c.write(data1)
+                    c.reset_dictionary()
+                    c.write(data2)
+                    c.flush(write_token=False)
+
+                    f.seek(0)
+                    d = Decompressor(f)
+                    actual = d.read()
+
+                    self.assertEqual(actual, data1 + data2)
+
+    def test_reset_dictionary_rle_boundary(self):
+        """Reset after compressing RLE-heavy data."""
+        data1 = b"A" * 200
+        data2 = b"The quick brown fox jumps over the lazy dog. " * 5
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, extended=True, dictionary_reset=True)
+                c.write(data1)
+                c.reset_dictionary()
+                c.write(data2)
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+
+                self.assertEqual(actual, data1 + data2)
+
+    def test_reset_dictionary_cross_impl(self):
+        """Cross-implementation: compress with Py, decompress with C (and vice versa)."""
+        if PyCompressor is None or CCompressor is None or PyDecompressor is None or CDecompressor is None:
+            self.skipTest("Need both Py and C implementations")
+
+        data1 = tale_of_two_cities[:200]
+        data2 = tale_of_two_cities[200:]
+
+        # Py compress, C decompress
+        with BytesIO() as f, self.subTest(compress="Py", decompress="C"):
+            c = PyCompressor(f, dictionary_reset=True)
+            c.write(data1)
+            c.reset_dictionary()
+            c.write(data2)
+            c.flush(write_token=False)
+
+            f.seek(0)
+            d = CDecompressor(f)
+            actual = d.read()
+            self.assertEqual(actual, tale_of_two_cities)
+
+        # C compress, Py decompress
+        with BytesIO() as f, self.subTest(compress="C", decompress="Py"):
+            c = CCompressor(f, dictionary_reset=True)
+            c.write(data1)
+            c.reset_dictionary()
+            c.write(data2)
+            c.flush(write_token=False)
+
+            f.seek(0)
+            d = PyDecompressor(f)
+            actual = d.read()
+            self.assertEqual(actual, tale_of_two_cities)
+
 
 if __name__ == "__main__":
     unittest.main()
