@@ -129,7 +129,7 @@ cdef class Compressor:
 
     cpdef int reset_dictionary(self) except -1:
         cdef ctamp.tamp_res res
-        cdef bytearray buffer = bytearray(64)
+        cdef bytearray buffer = bytearray(32)  # Worst case: 23 (flush) + 4 (2x FLUSH) = 27 bytes
         cdef size_t output_written_size = 0
 
         res = ctamp.tamp_compressor_reset_dictionary(
