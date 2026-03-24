@@ -124,6 +124,7 @@ export class TampCompressor {
       dictionary: null,
       extended: true,
       lazy_matching: false,
+      dictionary_reset: false,
       ...options,
     };
 
@@ -190,7 +191,8 @@ export class TampCompressor {
         ((this.options.literal & 0xf) << 4) |
         ((this.options.dictionary ? 1 : 0) << 8) |
         ((this.options.extended ? 1 : 0) << 9) |
-        ((this.options.lazy_matching ? 1 : 0) << 10);
+        ((this.options.dictionary_reset ? 1 : 0) << 10) |
+        ((this.options.lazy_matching ? 1 : 0) << 11);
       this.module.setValue(confPtr, confValue, 'i32');
 
       // Initialize compressor
@@ -452,6 +454,48 @@ export class TampCompressor {
   }
 
   /**
+   * Reset the compressor dictionary and internal state.
+   * Writes a double-FLUSH token sequence to signal dictionary re-initialization.
+   * @returns {Promise<Uint8Array>} - Output bytes written during reset
+   */
+  async resetDictionary() {
+    await this.initialize();
+
+    if (!this.compressorPtr) {
+      throw new Error('Compressor has been destroyed');
+    }
+
+    // Single allocation for output buffer (32 bytes) + output size pointer (4 bytes)
+    // Worst case: 23 (flush) + 4 (2x FLUSH) = 27 bytes
+    const outputBufSize = 32;
+    const totalAllocSize = outputBufSize + 4;
+    const basePtr = this.module._malloc(totalAllocSize);
+    if (basePtr === 0) {
+      throw new RangeError(`Failed to allocate reset memory (${totalAllocSize} bytes)`);
+    }
+
+    const outputPtr = basePtr;
+    const outputSizePtr = basePtr + outputBufSize;
+
+    try {
+      const result = this.module.ccall(
+        'tamp_compressor_reset_dictionary',
+        'number',
+        ['number', 'number', 'number', 'number'],
+        [this.compressorPtr, outputPtr, outputBufSize, outputSizePtr]
+      );
+
+      throwOnError(result, 'Reset dictionary');
+
+      const outputSize = this.module.getValue(outputSizePtr, 'i32');
+      const resetOutput = new Uint8Array(this.module.HEAPU8.buffer, outputPtr, outputSize).slice();
+      return resetOutput;
+    } finally {
+      this.module._free(basePtr);
+    }
+  }
+
+  /**
    * Clean up allocated memory
    * @returns {void}
    */
@@ -500,8 +544,8 @@ export class TampDecompressor {
 
     const { conf: confStructSize } = wasmManager.structSizes;
 
-    // Allocate memory for header processing: conf + inputConsumed(4) + headerInput(1)
-    const initialSize = confStructSize + 4 + 1;
+    // Allocate memory for header processing: conf + inputConsumed(4) + headerInput(2)
+    const initialSize = confStructSize + 4 + 2;
     this.initialPtr = this.module._malloc(initialSize);
     if (this.initialPtr === 0) {
       throw new RangeError(`Failed to allocate initial memory (${initialSize} bytes)`);
@@ -526,18 +570,23 @@ export class TampDecompressor {
       return 0; // No data to process
     }
 
-    // Copy first byte for header reading
-    this.module.setValue(this.headerInputPtr, input[0], 'i8');
+    // Copy up to 2 bytes for header reading (second byte may be present)
+    const headerBytes = Math.min(input.length, 2);
+    for (let i = 0; i < headerBytes; i++) {
+      this.module.setValue(this.headerInputPtr + i, input[i], 'i8');
+    }
 
     // Read header to get configuration
     const headerResult = this.module.ccall(
       'tamp_decompressor_read_header',
       'number',
       ['number', 'number', 'number', 'number'],
-      [this.confPtr, this.headerInputPtr, 1, this.inputConsumedPtr]
+      [this.confPtr, this.headerInputPtr, headerBytes, this.inputConsumedPtr]
     );
 
     throwOnError(headerResult, 'Header reading');
+
+    const headerBytesConsumed = this.module.getValue(this.inputConsumedPtr, 'i32');
 
     // Extract configuration values from the header
     const confValue = this.module.getValue(this.confPtr, 'i32');
@@ -604,7 +653,7 @@ export class TampDecompressor {
     }
 
     this.headerRead = true;
-    return 1; // Header consumed 1 byte
+    return headerBytesConsumed;
   }
 
   /**
@@ -792,13 +841,24 @@ export async function compress(data, options = {}) {
   const callbackOptions = {};
 
   // Extract compression-specific options
-  const { window, literal, dictionary, extended, lazy_matching, onPoll, signal, pollIntervalMs, pollIntervalBytes } =
-    options;
+  const {
+    window,
+    literal,
+    dictionary,
+    extended,
+    lazy_matching,
+    dictionary_reset,
+    onPoll,
+    signal,
+    pollIntervalMs,
+    pollIntervalBytes,
+  } = options;
   if (window !== undefined) compressionOptions.window = window;
   if (literal !== undefined) compressionOptions.literal = literal;
   if (dictionary !== undefined) compressionOptions.dictionary = dictionary;
   if (extended !== undefined) compressionOptions.extended = extended;
   if (lazy_matching !== undefined) compressionOptions.lazy_matching = lazy_matching;
+  if (dictionary_reset !== undefined) compressionOptions.dictionary_reset = dictionary_reset;
 
   // Extract callback options
   callbackOptions.onPoll = onPoll;
