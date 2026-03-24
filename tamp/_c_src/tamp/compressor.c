@@ -189,10 +189,11 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
 
     TAMP_MEMSET(compressor, 0, sizeof(TampCompressor));
 
-    // Build header directly from conf (8 bits total)
+    // Build header byte 1 (8 bits)
     // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
+    bool has_second_header = conf->dictionary_reset;
     uint8_t header = ((conf->window - 8) << 5) | ((conf->literal - 5) << 3) | (conf->use_custom_dictionary << 2) |
-                     (conf->extended << 1);
+                     (conf->extended << 1) | has_second_header;
 
     compressor->conf = *conf;  // Single struct copy
     compressor->window = window;
@@ -206,6 +207,11 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
         tamp_initialize_dictionary(window, (1 << conf->window), conf->extended ? conf->literal : 8);
 
     write_to_bit_buffer(compressor, header, 8);
+
+    if (has_second_header) {
+        // Header byte 2: all bits reserved for future use, currently all zero.
+        write_to_bit_buffer(compressor, 0, 8);
+    }
 
     return TAMP_OK;
 }
@@ -776,6 +782,68 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_and_flush_cb(TampCompressor
     }
 
     return TAMP_OK;
+}
+
+TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_reset_dictionary(TampCompressor* compressor, unsigned char* output,
+                                                             size_t output_size, size_t* output_written_size) {
+    if (!compressor->conf.dictionary_reset) return TAMP_INVALID_CONF;
+
+    tamp_res res;
+    size_t output_written_size_proxy;
+
+    if (!output_written_size) output_written_size = &output_written_size_proxy;
+    *output_written_size = 0;
+
+    // Flush all pending data with write_token=true so the stream is byte-aligned.
+    // flush_token_written tells us if a FLUSH was emitted (only when bit_buffer_pos > 0).
+    // If the compressor is already idle (e.g. retry after TAMP_OUTPUT_FULL),
+    // flush_impl is a no-op and flush_token_written stays false.
+    uint8_t flushes_needed;
+    {
+        size_t flush_written_size;
+        bool flush_token_written;
+        res = tamp_compressor_flush_impl(compressor, output, output_size, &flush_written_size, true,
+                                         &flush_token_written);
+        *output_written_size += flush_written_size;
+        if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
+        output += flush_written_size;
+        output_size -= flush_written_size;
+
+        // We need exactly 2 consecutive FLUSHes in the stream (the reset signal).
+        // If flush_impl already wrote one, we need 1 more; otherwise 2.
+        // Each FLUSH is 9 bits → 2 bytes max after byte-alignment.
+        flushes_needed = flush_token_written ? 1 : 2;
+    }
+    // Each FLUSH is 9 bits; after byte-alignment padding, at most 2 bytes each.
+    if (TAMP_UNLIKELY(output_size < (size_t)flushes_needed * 2)) return TAMP_OUTPUT_FULL;
+
+    // Space is guaranteed; writes below cannot fail.
+    for (uint8_t i = 0; i < flushes_needed; i++) {
+        write_to_bit_buffer(compressor, FLUSH_CODE, 9);
+        // Pad to byte boundary (bit_buffer_pos is 9 here: partial_flush writes
+        // 1 byte leaving 1 bit, then we write the trailing partial byte).
+        partial_flush(compressor, &output, &output_size, output_written_size);
+        if (compressor->bit_buffer_pos) {
+            *output++ = compressor->bit_buffer >> 24;
+            output_size--;
+            (*output_written_size)++;
+            compressor->bit_buffer_pos = 0;
+            compressor->bit_buffer = 0;
+        }
+    }
+
+    // Re-initialize compressor, then discard the header it writes to the bit buffer.
+
+    // Copy conf because tamp_compressor_init zeroes the struct before reading it.
+    TampConf conf = compressor->conf;
+    // Clear use_custom_dictionary so init re-initializes the dictionary with the
+    // default, matching what the decompressor does on a double-FLUSH reset.
+    conf.use_custom_dictionary = false;
+    res = tamp_compressor_init(compressor, &conf, compressor->window);
+    compressor->bit_buffer = 0;
+    compressor->bit_buffer_pos = 0;
+
+    return res;
 }
 
 #if TAMP_STREAM
