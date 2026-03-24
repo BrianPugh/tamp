@@ -125,6 +125,7 @@ export class TampCompressor {
       extended: true,
       lazy_matching: false,
       dictionary_reset: false,
+      append: false,
       ...options,
     };
 
@@ -192,7 +193,8 @@ export class TampCompressor {
         ((this.options.dictionary ? 1 : 0) << 8) |
         ((this.options.extended ? 1 : 0) << 9) |
         ((this.options.dictionary_reset ? 1 : 0) << 10) |
-        ((this.options.lazy_matching ? 1 : 0) << 11);
+        ((this.options.append ? 1 : 0) << 11) |
+        ((this.options.lazy_matching ? 1 : 0) << 12);
       this.module.setValue(confPtr, confValue, 'i32');
 
       // Initialize compressor

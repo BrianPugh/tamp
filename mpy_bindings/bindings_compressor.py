@@ -21,12 +21,15 @@ class Compressor:
         custom = dictionary is not None
         if not dictionary:
             dictionary = bytearray(1 << window)
+        self._dr = dictionary_reset
         self._c = _C(f, window, literal, dictionary, custom, extended, dictionary_reset, append)
 
         self.write = self._c.write
 
     def close(self) -> int:
-        bytes_written = self.flush(False)
+        # When dictionary_reset is enabled, always end with a FLUSH token
+        # so that a future append-mode compressor can form a double-FLUSH.
+        bytes_written = self.flush(self._dr)
         if self._cf:
             self.f.close()
         return bytes_written

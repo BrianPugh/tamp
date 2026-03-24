@@ -18,6 +18,7 @@ cdef class Compressor:
     cdef unsigned char *_window_buffer_ptr
     cdef object f
     cdef bint _close_f_on_close
+    cdef bint _dictionary_reset
 
     def __cinit__(self):
         self._c_compressor = <ctamp.TampCompressor*>PyMem_Malloc(sizeof(ctamp.TampCompressor))
@@ -60,14 +61,13 @@ cdef class Compressor:
         conf.lazy_matching = lazy_matching
         conf.extended = extended
         conf.dictionary_reset = dictionary_reset
+        conf.append = append
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
-        if append:
-            res = ctamp.tamp_compressor_init_append(self._c_compressor, &conf, self._window_buffer_ptr)
-        else:
-            res = ctamp.tamp_compressor_init(self._c_compressor, &conf, self._window_buffer_ptr)
+        self._dictionary_reset = dictionary_reset
+        res = ctamp.tamp_compressor_init(self._c_compressor, &conf, self._window_buffer_ptr)
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
 
@@ -154,7 +154,9 @@ cdef class Compressor:
         return output_written_size
 
     def close(self) -> int:
-        bytes_written = self.flush(write_token=False)
+        # When dictionary_reset is enabled, always end with a FLUSH token
+        # so that a future append-mode compressor can form a double-FLUSH.
+        bytes_written = self.flush(write_token=self._dictionary_reset)
         if self._close_f_on_close:
             self.f.close()
         return bytes_written

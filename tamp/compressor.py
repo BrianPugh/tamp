@@ -623,7 +623,9 @@ class Compressor:
             Number of compressed bytes flushed to disk.
         """
         bytes_written = 0
-        bytes_written += self.flush(write_token=False)
+        # When dictionary_reset is enabled, always end with a FLUSH token
+        # so that a future append-mode compressor can form a double-FLUSH.
+        bytes_written += self.flush(write_token=self.dictionary_reset)
         self._bit_writer.close()
         return bytes_written
 

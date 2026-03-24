@@ -58,6 +58,11 @@ typedef struct TampCompressor {
 /**
  * @brief Initialize Tamp Compressor object.
  *
+ * When conf->append is true, writes a FLUSH token to the internal bit buffer
+ * instead of a header, enabling append-after-reboot on streams with
+ * dictionary_reset enabled. Requires dictionary_reset=true and
+ * use_custom_dictionary=false.
+ *
  * @param[out] compressor Object to initialize.
  * @param[in] conf Compressor configuration. Set to NULL for default (window=10, literal=8).
  * @param[in] window Pre-allocated window buffer. Size must agree with conf->window.
@@ -201,29 +206,6 @@ tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output
  */
 tamp_res tamp_compressor_reset_dictionary(TampCompressor *compressor, unsigned char *output, size_t output_size,
                                           size_t *output_written_size);
-
-/**
- * @brief Initialize compressor for appending to an existing stream.
- *
- * Initializes the compressor identically to tamp_compressor_init, but writes
- * a FLUSH token to the internal bit buffer instead of a header. When the
- * original stream ended with a flush (which is guaranteed when dictionary_reset
- * is enabled), the subsequent flush/compress call creates a double-FLUSH
- * sequence that tells the decompressor to reset its dictionary.
- *
- * This enables resuming compression on an existing stream without persisting
- * compressor state (e.g., across reboots).
- *
- * conf->dictionary_reset must be true and conf->use_custom_dictionary must be false.
- *
- * @param[out] compressor Object to initialize.
- * @param[in] conf Compressor configuration. Must match the original stream's configuration.
- * @param[in] window Pre-allocated window buffer.
- *
- * @return Tamp Status Code. Returns TAMP_INVALID_CONF if dictionary_reset is
- *         not set or use_custom_dictionary is set.
- */
-tamp_res tamp_compressor_init_append(TampCompressor *compressor, const TampConf *conf, unsigned char *window);
 
 /**
  * Callback-variant of tamp_compressor_compress.
