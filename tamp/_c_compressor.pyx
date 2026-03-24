@@ -36,6 +36,7 @@ cdef class Compressor:
         dictionary=None,
         bool lazy_matching=False,
         bool extended=True,
+        bool dictionary_reset=False,
     ):
         cdef ctamp.TampConf conf
 
@@ -57,6 +58,7 @@ cdef class Compressor:
         # The build system defines this macro, so the field should be available
         conf.lazy_matching = lazy_matching
         conf.extended = extended
+        conf.dictionary_reset = dictionary_reset
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
@@ -113,6 +115,28 @@ cdef class Compressor:
             len(buffer),
             &output_written_size,
             write_token,
+        )
+
+        if res < 0:
+            raise ERROR_LOOKUP.get(res, NotImplementedError)
+
+        if output_written_size:
+            self.f.write(buffer[:output_written_size])
+
+        self.f.flush()
+
+        return output_written_size
+
+    cpdef int reset_dictionary(self) except -1:
+        cdef ctamp.tamp_res res
+        cdef bytearray buffer = bytearray(64)
+        cdef size_t output_written_size = 0
+
+        res = ctamp.tamp_compressor_reset_dictionary(
+            self._c_compressor,
+            <unsigned char *> buffer,
+            len(buffer),
+            &output_written_size,
         )
 
         if res < 0:

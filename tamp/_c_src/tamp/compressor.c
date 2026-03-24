@@ -191,6 +191,7 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
 
     // Build header byte 1 (8 bits)
     // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
+    // TODO: OR in any future second-header-byte flags here.
     bool has_second_header = conf->dictionary_reset;
     uint8_t header = ((conf->window - 8) << 5) | ((conf->literal - 5) << 3) | (conf->use_custom_dictionary << 2) |
                      (conf->extended << 1) | has_second_header;

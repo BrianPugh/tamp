@@ -7,6 +7,7 @@ cdef extern from "tamp/common.h":
         int literal
         bool use_custom_dictionary
         bool extended  # Extended format (RLE, extended match). Read from header bit [1].
+        bool dictionary_reset  # Stream may contain double-FLUSH dictionary resets. Header byte 2 bit [7].
         # The lazy_matching field is conditionally compiled based on TAMP_LAZY_MATCHING
         # We declare it here, but accessing it when the macro is disabled will cause compile errors
         # This is handled in the Cython code by always setting it when the struct is initialized
@@ -64,6 +65,13 @@ cdef extern from "tamp/compressor.h":
             const unsigned char *input,
             size_t input_size,
             size_t *input_consumed_size
+            )
+
+    tamp_res tamp_compressor_reset_dictionary(
+            TampCompressor *compressor,
+            unsigned char *output,
+            size_t output_size,
+            size_t *output_written_size
             );
 
 
