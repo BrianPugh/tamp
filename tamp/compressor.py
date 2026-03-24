@@ -64,8 +64,10 @@ class _BitWriter:
 
     def flush(self, write_token=True):
         bytes_written = 0
+        self._flush_token_written = False
         if self.bit_pos > 0 and write_token:
             bytes_written += self.write(_FLUSH_CODE, 9)
+            self._flush_token_written = True
 
         while self.bit_pos > 0:
             byte = (self.buffer >> 24) & 0xFF
@@ -144,6 +146,7 @@ class Compressor:
         dictionary: Optional[bytearray] = None,
         lazy_matching: bool = False,
         extended: bool = True,
+        dictionary_reset: bool = False,
     ):
         """
         Parameters
@@ -175,18 +178,12 @@ class Compressor:
         self.literal_bits = literal
         self.min_pattern_size = compute_min_pattern_size(window, literal)
         self.extended: bool = extended
-
-        self._rle_count = 0
+        self.dictionary_reset: bool = dictionary_reset
 
         # "+1" Because a RLE of 1 is not valid.
         self._rle_max_size = (14 << _LEADING_RLE_HUFFMAN_BITS) + (1 << _LEADING_RLE_HUFFMAN_BITS) + 1
 
-        self._extended_match_count = 0
-        self._extended_match_position = 0
-
         self.lazy_matching = lazy_matching
-        self._cached_match_index = -1
-        self._cached_match_size = 0
 
         if not hasattr(f, "write"):  # It's probably a path-like object.
             f = open(str(f), "wb")
@@ -210,11 +207,7 @@ class Compressor:
 
         self.literal_flag = 1 << self.literal_bits
 
-        self._window_buffer = _RingBuffer(
-            buffer=dictionary if dictionary else initialize_dictionary(1 << window, literal=literal if extended else 8),
-        )
-
-        self._input_buffer = deque(maxlen=16)  # matching the C implementation
+        self._reset_state(dictionary)
 
         # Callbacks for debugging/metric collection; can be externally set.
         self.match_cb = None
@@ -231,7 +224,26 @@ class Compressor:
         self._bit_writer.write(literal - 5, 2, flush=False)
         self._bit_writer.write(bool(dictionary), 1, flush=False)
         self._bit_writer.write(self.extended, 1, flush=False)
-        self._bit_writer.write(0, 1, flush=False)  # No other header bytes
+        self._bit_writer.write(1 if dictionary_reset else 0, 1, flush=False)  # more_headers (implies dictionary_reset)
+        if dictionary_reset:
+            # Header byte 2: all bits reserved for future use, currently all zero.
+            self._bit_writer.write(0, 8, flush=False)
+
+    def _reset_state(self, dictionary=None):
+        """Reset mutable compression state and (re-)initialize the dictionary."""
+        self._window_buffer = _RingBuffer(
+            buffer=(
+                dictionary
+                if dictionary
+                else initialize_dictionary(1 << self.window_bits, literal=self.literal_bits if self.extended else 8)
+            ),
+        )
+        self._input_buffer = deque(maxlen=16)
+        self._rle_count = 0
+        self._extended_match_count = 0
+        self._extended_match_position = 0
+        self._cached_match_index = -1
+        self._cached_match_size = 0
 
     def _validate_no_match_overlap(self, write_pos, match_index, match_size):
         """Check if writing a single byte will overlap with a future match section."""
@@ -536,6 +548,51 @@ class Compressor:
 
         bytes_written_flush = self._bit_writer.flush(write_token=write_token)
         bytes_written += bytes_written_flush
+        return bytes_written
+
+    def reset_dictionary(self) -> int:
+        """Reset the dictionary and internal state, writing a double-FLUSH signal.
+
+        This allows the decompressor to re-initialize its dictionary at the
+        corresponding point in the stream. Useful for long streams where
+        the data characteristics change significantly.
+
+        Returns
+        -------
+        int
+            Number of compressed bytes written.
+
+        Raises
+        ------
+        ValueError
+            If the compressor was not initialized with ``dictionary_reset=True``.
+        """
+        if not self.dictionary_reset:
+            raise ValueError("Compressor was not initialized with dictionary_reset=True")
+
+        bytes_written = 0
+
+        # Flush all pending data with write_token=True.
+        bytes_written += self.flush(write_token=True)
+
+        # We need exactly 2 consecutive FLUSHes in the stream.
+        # If flush already wrote one, we need 1 more; otherwise 2.
+        flushes_needed = 1 if self._bit_writer._flush_token_written else 2
+        for _ in range(flushes_needed):
+            bytes_written += self._bit_writer.write(_FLUSH_CODE, 9)
+            # Pad to byte boundary
+            if self._bit_writer.bit_pos > 0:
+                byte = (self._bit_writer.buffer >> 24) & 0xFF
+                self._bit_writer.f.write(byte.to_bytes(1, "big"))
+                self._bit_writer.bit_pos = 0
+                self._bit_writer.buffer = 0
+                bytes_written += 1
+
+        # Re-initialize dictionary with default and reset all mutable state,
+        # matching what the decompressor does on a double-FLUSH reset
+        # (even if originally using a custom dictionary).
+        self._reset_state()
+
         return bytes_written
 
     def close(self) -> int:
