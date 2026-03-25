@@ -322,12 +322,13 @@ export class TampCompressor {
               [this.compressorPtr, outputPtr + chunkOutputWritten, CHUNK_SIZE - chunkOutputWritten, pollOutputSizePtr]
             );
 
-            if (pollResult !== TAMP_OK) {
-              throwOnError(pollResult, 'Compression poll');
-            }
-
             const pollOutputSize = this.module.getValue(pollOutputSizePtr, 'i32');
             chunkOutputWritten += pollOutputSize;
+
+            if (pollResult !== TAMP_OK) {
+              throwOnError(pollResult, 'Compression poll');
+              break; // TAMP_OUTPUT_FULL: flush this chunk, continue in outer loop
+            }
 
             // Call progress callback if provided (after successful compression)
             // Use throttling to reduce callback overhead
