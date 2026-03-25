@@ -66,14 +66,14 @@ cdef extern from "tamp/compressor.h":
             const unsigned char *input,
             size_t input_size,
             size_t *input_consumed_size
-            )
+            );
 
     tamp_res tamp_compressor_reset_dictionary(
             TampCompressor *compressor,
             unsigned char *output,
             size_t output_size,
             size_t *output_written_size
-            )
+            );
 
 
 

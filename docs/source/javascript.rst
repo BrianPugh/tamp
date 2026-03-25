@@ -99,7 +99,7 @@ Use streaming compression for processing large files or data that does not fit i
 
    // Dictionary reset mid-stream; useful if we need to append
    // data to a compression stream.
-   await using(new TampCompressor(options), async (compressor) => {
+   await using(new TampCompressor({ ...options, dictionary_reset: true }), async (compressor) => {
      // Compress first segment
      compressedChunks.push(await compressor.compress(segment1));
 

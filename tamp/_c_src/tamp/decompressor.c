@@ -393,6 +393,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
         res = tamp_decompressor_populate_from_conf(decompressor, conf.window, conf.literal, conf.use_custom_dictionary,
                                                    conf.extended, conf.dictionary_reset);
         if (res != TAMP_OK) return res;
+        decompressor->skip_bytes = 0;  // Clear stale stashed_header_byte (shares union storage)
     }
 
     // Cache bitfield values in local variables for faster access

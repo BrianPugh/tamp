@@ -591,8 +591,10 @@ export class TampDecompressor {
     throwOnError(headerResult, 'Header reading');
     if (headerResult !== TAMP_OK) {
       // TAMP_INPUT_EXHAUSTED: not enough bytes for header yet.
-      // Return 0 so caller retries with more data.
-      return 0;
+      // Stash the partial header bytes so the next decompress() call
+      // can combine them with fresh data and retry.
+      this.pendingInput = input.slice(0, headerBytes);
+      return input.length;
     }
 
     const headerBytesConsumed = this.module.getValue(this.inputConsumedPtr, 'i32');
@@ -705,9 +707,12 @@ export class TampDecompressor {
       const headerBytesConsumed = await this._readHeader(combinedInput);
       inputOffset += headerBytesConsumed;
 
-      // If we only have header data, store remaining for next call
-      if (inputOffset >= combinedInput.length) {
-        this.pendingInput = new Uint8Array(0);
+      // If header isn't complete yet or we only have header data, return early.
+      // When !headerRead, pendingInput was already set by _readHeader.
+      if (!this.headerRead || inputOffset >= combinedInput.length) {
+        if (this.headerRead) {
+          this.pendingInput = new Uint8Array(0);
+        }
         return new Uint8Array(0);
       }
     }
