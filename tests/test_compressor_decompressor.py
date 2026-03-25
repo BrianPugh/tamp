@@ -507,6 +507,28 @@ class TestCompressorAndDecompressor(unittest.TestCase):
             actual = d.read()
             self.assertEqual(actual, tale_of_two_cities)
 
+    def test_append_mode_roundtrip(self):
+        """Append mode: two compressor sessions, concatenated output, single decompress."""
+        data1 = b"Hello world! Hello world! Hello world! "
+        data2 = b"Goodbye world! Goodbye world! Goodbye world! "
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                # Session 1: compress with dictionary_reset, close (emits trailing FLUSH)
+                c1 = Compressor(f, dictionary_reset=True)
+                c1.write(data1)
+                c1.close()
+
+                # Session 2: append mode compressor
+                c2 = Compressor(f, dictionary_reset=True, append=True)
+                c2.write(data2)
+                c2.close()
+
+                # Decompress the full concatenated stream
+                f.seek(0)
+                d = Decompressor(f)
+                actual = d.read()
+                self.assertEqual(actual, data1 + data2)
+
 
 if __name__ == "__main__":
     unittest.main()

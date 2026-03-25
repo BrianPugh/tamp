@@ -41,6 +41,7 @@ class _BitWriter:
         self.f = f
         self.buffer = 0  # Basically a uint32
         self.bit_pos = 0
+        self._flush_token_written = False
 
     def write_huffman_and_literal_flag(self, pattern_size):
         # pattern_size in range [0, 14]
@@ -230,11 +231,12 @@ class Compressor:
                 raise ValueError("append=True requires dictionary_reset=True")
             if dictionary:
                 raise ValueError("append=True cannot use a custom dictionary")
-            # Write a FLUSH token to the bit buffer instead of a header.
-            # It will be flushed out naturally by the next compress/flush call.
-            # Combined with the previous stream's trailing FLUSH, this triggers
-            # a dictionary reset in the decompressor.
+            # Write a FLUSH token instead of a header. Pad to byte boundary
+            # so subsequent compressed data starts cleanly after the decompressor
+            # discards FLUSH padding bits. Combined with the previous stream's
+            # trailing FLUSH, this triggers a dictionary reset in the decompressor.
             self._bit_writer.write(_FLUSH_CODE, 9, flush=False)
+            self._bit_writer.bit_pos = 16  # Pad to 2 bytes (bits are already zero)
         else:
             # Write header
             self._bit_writer.write(window - 8, 3, flush=False)

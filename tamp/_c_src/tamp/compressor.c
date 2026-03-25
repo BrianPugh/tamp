@@ -204,8 +204,11 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
     if (conf->append) {
         // Write a FLUSH token instead of a header. Combined with the previous
         // stream's trailing FLUSH, this triggers a dictionary reset in the
-        // decompressor. Flushed out naturally by the next compress/flush call.
+        // decompressor. Pad to byte boundary so subsequent compressed data
+        // starts cleanly after the decompressor discards FLUSH padding bits.
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
+        // Pad the remaining 7 bits to fill 2 bytes (bits are already zero from memset).
+        compressor->bit_buffer_pos = 16;
     } else {
         // Build header byte 1 (8 bits)
         // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
