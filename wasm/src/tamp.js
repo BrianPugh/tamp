@@ -5,7 +5,8 @@
 
 import TampModule from './tamp-module.mjs';
 
-// Error codes from C library
+// Status codes from C library
+const TAMP_OK = 0;
 const TAMP_ERROR = -1;
 const TAMP_EXCESS_BITS = -2;
 const TAMP_INVALID_CONF = -3;
@@ -321,7 +322,7 @@ export class TampCompressor {
               [this.compressorPtr, outputPtr + chunkOutputWritten, CHUNK_SIZE - chunkOutputWritten, pollOutputSizePtr]
             );
 
-            if (pollResult !== 0) {
+            if (pollResult !== TAMP_OK) {
               throwOnError(pollResult, 'Compression poll');
             }
 
@@ -587,6 +588,11 @@ export class TampDecompressor {
     );
 
     throwOnError(headerResult, 'Header reading');
+    if (headerResult !== TAMP_OK) {
+      // TAMP_INPUT_EXHAUSTED: not enough bytes for header yet.
+      // Return 0 so caller retries with more data.
+      return 0;
+    }
 
     const headerBytesConsumed = this.module.getValue(this.inputConsumedPtr, 'i32');
 
@@ -850,6 +856,7 @@ export async function compress(data, options = {}) {
     extended,
     lazy_matching,
     dictionary_reset,
+    append,
     onPoll,
     signal,
     pollIntervalMs,
@@ -861,6 +868,7 @@ export async function compress(data, options = {}) {
   if (extended !== undefined) compressionOptions.extended = extended;
   if (lazy_matching !== undefined) compressionOptions.lazy_matching = lazy_matching;
   if (dictionary_reset !== undefined) compressionOptions.dictionary_reset = dictionary_reset;
+  if (append !== undefined) compressionOptions.append = append;
 
   // Extract callback options
   callbackOptions.onPoll = onPoll;
@@ -871,7 +879,9 @@ export async function compress(data, options = {}) {
   const compressor = new TampCompressor(compressionOptions);
   try {
     const compressed = await compressor.compress(data, callbackOptions);
-    const flushed = await compressor.flush();
+    // When dictionary_reset is enabled, emit a trailing FLUSH token so a
+    // future append-mode compressor can form a double-FLUSH.
+    const flushed = await compressor.flush(compressionOptions.dictionary_reset);
 
     // Concatenate compressed data and flush output
     const result = new Uint8Array(compressed.length + flushed.length);

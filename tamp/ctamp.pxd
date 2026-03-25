@@ -7,7 +7,7 @@ cdef extern from "tamp/common.h":
         int literal
         bool use_custom_dictionary
         bool extended  # Extended format (RLE, extended match). Read from header bit [1].
-        bool dictionary_reset  # Stream may contain double-FLUSH dictionary resets. Controlled via header byte 1 bit [0] (more_header); header byte 2 is reserved and must be 0.
+        bool dictionary_reset  # Stream may contain double-FLUSH dictionary resets. Implied by header byte 1 bit [0] (more_header).
         bool append  # Initialize for appending to an existing stream (FLUSH instead of header).
         # The lazy_matching field is conditionally compiled based on TAMP_LAZY_MATCHING
         # We declare it here, but accessing it when the macro is disabled will cause compile errors

@@ -162,8 +162,9 @@ typedef struct TampConf {
     uint16_t literal : 4;                // number of literal bits
     uint16_t use_custom_dictionary : 1;  // Use a custom initialized dictionary.
     uint16_t extended : 1;               // Extended format (RLE, extended match). Read from header bit [1].
-    uint16_t dictionary_reset : 1;       // Stream may contain double-FLUSH dictionary resets. Implied by header byte 1 bit 0 (`more_header`); header byte 2 is currently reserved/zero.
-    uint16_t append : 1;                 // Initialize for appending to an existing stream (FLUSH instead of header).
+    uint16_t dictionary_reset : 1;  // Stream may contain double-FLUSH dictionary resets. Implied by header byte 1 bit
+                                    // [0] (more_header).
+    uint16_t append : 1;            // Initialize for appending to an existing stream (FLUSH instead of header).
 #if TAMP_LAZY_MATCHING
     uint16_t lazy_matching : 1;  // use Lazy Matching (spend 50-75% more CPU for around 0.5-2.0% better compression.)
                                  // only effects compression operations.

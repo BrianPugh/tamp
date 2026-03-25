@@ -41,7 +41,8 @@ typedef struct {
     uint8_t conf_literal : 4;           // Literal bits from config
     uint8_t min_pattern_size : 2;       // Minimum pattern size, 2 or 3
     uint8_t conf_extended : 1;          // Extended format enabled (from header)
-    uint8_t conf_dictionary_reset : 1;  // Stream may contain double-FLUSH dictionary resets (signaled by header byte 1 bit 0 / more_header; header byte 2 is reserved/zero)
+    uint8_t conf_dictionary_reset : 1;  // Stream may contain double-FLUSH dictionary resets (from header byte 1 bit [0]
+                                        // / more_header)
 
     /* COLD: rarely accessed (init or edge cases).
      * Bitfields save space; add new cold fields here. */
