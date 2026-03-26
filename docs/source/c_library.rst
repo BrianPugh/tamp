@@ -158,6 +158,11 @@ The provided buffer must be at least ``(1 << conf.window)`` bytes.
       unaffected.
       Only available when compiled with -DTAMP_EXTENDED_COMPRESS=1 (default). */
       .extended = true,
+
+      /* Enable dictionary reset / append support (v2.1.0+).
+      Adds a second header byte; old decompressors reject the stream.
+      Required for reset_dictionary() and append mode. */
+      .dictionary_reset = false,
    };
    TampCompressor compressor;
    tamp_compressor_init(&compressor, &conf, window_buffer);
@@ -230,6 +235,80 @@ The ``write_token`` parameter controls whether a ``FLUSH`` token is appended whe
 
 * Set to ``true`` if you intend to continue using the compressor. The ``FLUSH`` token adds 0~2 bytes of overhead.
 * Set to ``false`` when finalizing a stream, to save 0~2 bytes.
+
+When ``dictionary_reset`` is enabled, ``write_token=true`` **always** emits a
+FLUSH token (even when byte-aligned), and closing the stream emits one
+automatically. This enables the append mode described below.
+
+Dictionary Reset
+----------------
+
+.. note::
+
+   New in v2.1.0. Requires v2.1.0+ compressor and decompressor.
+
+Dictionary reset allows appending new compressed data to an existing stream
+without retaining the previous compressor state. After a reset, both compressor
+and decompressor start fresh with a default dictionary, so no prior window
+buffer, input buffer, or bit buffer state needs to be persisted.
+
+``tamp_compressor_reset_dictionary`` writes a double-FLUSH signal, resets the
+dictionary and all internal state, then continues with the same configuration.
+The decompressor handles double-FLUSH resets automatically.
+
+Requires ``.dictionary_reset = true`` in ``TampConf``, which adds a second
+header byte. Older decompressors reject the stream at the header level.
+Returns ``TAMP_INVALID_CONF`` if not set.
+
+.. code-block:: c
+
+   TampConf conf = {.window = 10, .literal = 8, .dictionary_reset = true};
+   TampCompressor compressor;
+   tamp_compressor_init(&compressor, &conf, window_buffer);
+
+   // ... compress some data ...
+
+   unsigned char reset_buffer[32];  // Worst case: 27 bytes
+   size_t reset_written;
+   res = tamp_compressor_reset_dictionary(&compressor, reset_buffer,
+                                          sizeof(reset_buffer), &reset_written);
+   // Append reset_buffer[0..reset_written] to output, then continue compressing.
+
+Append Mode
+~~~~~~~~~~~
+Set ``.append = true`` to resume compression on an existing stream without
+persisting compressor state. Requires:
+
+1. The previous compression stream to have had ``dictionary_reset = true``.
+
+2. The new compressor to have the same configuration as the previous compressor (same ``window_bits``, ``literal``, etc).
+
+Writes a byte-aligned
+FLUSH token to the internal bit buffer instead of a header. Combined with the
+previous stream's trailing FLUSH, this forms a double-FLUSH that resets the
+decompressor's dictionary.
+
+Requires ``dictionary_reset = true`` and ``use_custom_dictionary = false``.
+
+.. code-block:: c
+
+   // Session 1
+   TampConf conf = {.window = 10, .literal = 8, .dictionary_reset = true};
+   TampCompressor compressor;
+   tamp_compressor_init(&compressor, &conf, window_buffer);
+   tamp_compressor_compress_and_flush(&compressor, output, output_size,
+                                      &output_written, input, input_size,
+                                      &input_consumed, true);
+   // Save output to storage (stream ends with FLUSH token).
+
+   // Session 2
+   conf.append = true;
+   TampCompressor compressor2;
+   tamp_compressor_init(&compressor2, &conf, window_buffer);
+   tamp_compressor_compress_and_flush(&compressor2, output, output_size,
+                                      &output_written, new_input, new_input_size,
+                                      &input_consumed, true);
+   // Append output to storage.
 
 Lazy Matching
 -------------

@@ -61,7 +61,7 @@ typedef struct {
 } mp_obj_compressor_t;
 
 mp_obj_full_type_t mp_type_compressor;          // This is type(Compressor)
-mp_map_elem_t compressor_locals_dict_table[2];  // Number of Compressor methods/attributes
+mp_map_elem_t compressor_locals_dict_table[3];  // Number of Compressor methods/attributes
 static MP_DEFINE_CONST_DICT(compressor_locals_dict, compressor_locals_dict_table);
 
 // Essentially Compressor.__new__ (but also kind of __init__).
@@ -71,6 +71,7 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
         .literal = mp_obj_get_int(args_in[2]),
         .use_custom_dictionary = mp_obj_get_int(args_in[4]),
         .extended = mp_obj_get_int(args_in[5]),
+        .dictionary_reset = mp_obj_get_int(args_in[6]),
     };
 
     mp_obj_compressor_t *o = mp_obj_malloc(mp_obj_compressor_t, type);
@@ -83,6 +84,7 @@ static mp_obj_t compressor_make_new(const mp_obj_type_t *type, size_t n_args, si
         mp_raise_ValueError("");
     }
 
+    conf.append = mp_obj_get_int(args_in[7]);
     TAMP_CHECK(tamp_compressor_init(&o->c, &conf, dictionary_buffer_info.buf));
 
     return MP_OBJ_FROM_PTR(o);
@@ -130,6 +132,22 @@ static mp_obj_t compressor_flush(mp_obj_t self_in, mp_obj_t write_token_in) {
     return mp_obj_new_int(output_written_size);
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(compressor_flush_obj, compressor_flush);
+
+static mp_obj_t compressor_reset_dictionary(mp_obj_t self_in) {
+    mp_obj_compressor_t *self = MP_OBJ_TO_PTR(self_in);
+    uint8_t output_buffer[32];  // Worst case: 23 (flush) + 4 (2x FLUSH) = 27 bytes
+    size_t output_written_size;
+
+    TAMP_CHECK(tamp_compressor_reset_dictionary(&self->c, output_buffer, sizeof(output_buffer), &output_written_size));
+    if (output_written_size) {
+        mp_obj_t bytes_obj = mp_obj_new_bytes(output_buffer, output_written_size);
+        mp_obj_t write_method = mp_load_attr(self->f, MP_QSTR_write);
+        mp_call_function_n_kw(write_method, 1, 0, &bytes_obj);
+    }
+
+    return mp_obj_new_int(output_written_size);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(compressor_reset_dictionary_obj, compressor_reset_dictionary);
 #endif
 
 /****************
@@ -265,6 +283,8 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
         (mp_map_elem_t){MP_OBJ_NEW_QSTR(MP_QSTR_write), MP_OBJ_FROM_PTR(&compressor_write_obj)};
     compressor_locals_dict_table[1] =
         (mp_map_elem_t){MP_OBJ_NEW_QSTR(MP_QSTR_flush), MP_OBJ_FROM_PTR(&compressor_flush_obj)};
+    compressor_locals_dict_table[2] =
+        (mp_map_elem_t){MP_OBJ_NEW_QSTR(MP_QSTR_reset_dictionary), MP_OBJ_FROM_PTR(&compressor_reset_dictionary_obj)};
 
     // Make the _Compressor type available on the module.
     mp_store_global(MP_QSTR__C, MP_OBJ_FROM_PTR(&mp_type_compressor));

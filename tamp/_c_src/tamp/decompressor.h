@@ -37,16 +37,23 @@ typedef struct {
 #endif
 
     /* WARM: read once at start of decompress, cached in locals */
-    uint8_t conf_window : 4;       // Window bits from config
-    uint8_t conf_literal : 4;      // Literal bits from config
-    uint8_t min_pattern_size : 2;  // Minimum pattern size, 2 or 3
-    uint8_t conf_extended : 1;     // Extended format enabled (from header)
+    uint8_t conf_window : 4;            // Window bits from config
+    uint8_t conf_literal : 4;           // Literal bits from config
+    uint8_t min_pattern_size : 2;       // Minimum pattern size, 2 or 3
+    uint8_t conf_extended : 1;          // Extended format enabled (from header)
+    uint8_t conf_dictionary_reset : 1;  // Stream may contain double-FLUSH dictionary resets (from header byte 1 bit [0]
+                                        // / more_header)
 
     /* COLD: rarely accessed (init or edge cases).
      * Bitfields save space; add new cold fields here. */
-    uint8_t skip_bytes;           // For output-buffer-limited resumption (v2 needs >4 bits)
-    uint8_t window_bits_max : 4;  // Max window bits buffer can hold
-    uint8_t configured : 1;       // Whether config has been set
+    union {
+        uint8_t skip_bytes;           // After configured: output-buffer-limited resumption (v2 needs >4 bits)
+        uint8_t stashed_header_byte;  // Before configured: first header byte when waiting for second
+    };
+    uint8_t window_bits_max : 4;    // Max window bits buffer can hold
+    uint8_t configured : 1;         // Whether config has been set (authoritative "header complete" flag)
+    uint8_t header_bytes_read : 2;  // Before configured: header bytes consumed so far
+    uint8_t last_was_flush : 1;     // Previous token was FLUSH (for double-FLUSH dictionary reset detection)
 } TampDecompressor;
 
 /**

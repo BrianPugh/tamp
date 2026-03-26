@@ -256,13 +256,21 @@ tamp_res tamp_decompressor_read_header(TampConf* conf, const unsigned char* inpu
                                        size_t* input_consumed_size) {
     if (input_consumed_size) (*input_consumed_size) = 0;
     if (input_size == 0) return TAMP_INPUT_EXHAUSTED;
-    if (input[0] & 0x1) return TAMP_INVALID_CONF;  // Currently only a single header byte is supported.
-    if (input_consumed_size) (*input_consumed_size)++;
+
+    // Validate all header bytes before mutating conf.
+    size_t header_size = 1 + (input[0] & 0x1);
+    if (input_size < header_size) return TAMP_INPUT_EXHAUSTED;
+    // All bits in byte 2 are reserved for future use; reject if any are set.
+    if (header_size >= 2 && input[1]) return TAMP_INVALID_CONF;
 
     conf->window = ((input[0] >> 5) & 0x7) + 8;
     conf->literal = ((input[0] >> 3) & 0x3) + 5;
     conf->use_custom_dictionary = ((input[0] >> 2) & 0x1);
     conf->extended = ((input[0] >> 1) & 0x1);
+    // more_header (byte 1 bit 0) implies dictionary_reset.
+    conf->dictionary_reset = input[0] & 0x1;
+
+    if (input_consumed_size) (*input_consumed_size) += header_size;
 
     return TAMP_OK;
 }
@@ -275,7 +283,8 @@ tamp_res tamp_decompressor_read_header(TampConf* conf, const unsigned char* inpu
 static TAMP_OPTIMIZE_SIZE tamp_res tamp_decompressor_populate_from_conf(TampDecompressor* decompressor,
                                                                         uint8_t conf_window, uint8_t conf_literal,
                                                                         uint8_t conf_use_custom_dictionary,
-                                                                        uint8_t conf_extended) {
+                                                                        uint8_t conf_extended,
+                                                                        uint8_t conf_dictionary_reset) {
     if (conf_window < 8 || conf_window > 15) return TAMP_INVALID_CONF;
     if (conf_literal < 5 || conf_literal > 8) return TAMP_INVALID_CONF;
     if (conf_window > decompressor->window_bits_max) return TAMP_INVALID_CONF;
@@ -287,6 +296,7 @@ static TAMP_OPTIMIZE_SIZE tamp_res tamp_decompressor_populate_from_conf(TampDeco
     decompressor->min_pattern_size = tamp_compute_min_pattern_size(conf_window, conf_literal);
     decompressor->configured = true;
     decompressor->conf_extended = conf_extended;
+    decompressor->conf_dictionary_reset = conf_dictionary_reset;
 #if !TAMP_EXTENDED_DECOMPRESS
     if (conf_extended) return TAMP_INVALID_CONF;  // Extended stream but extended support not compiled in
 #endif
@@ -306,7 +316,7 @@ tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* 
     decompressor->window_bits_max = window_bits;
     if (conf) {
         res = tamp_decompressor_populate_from_conf(decompressor, conf->window, conf->literal,
-                                                   conf->use_custom_dictionary, conf->extended);
+                                                   conf->use_custom_dictionary, conf->extended, conf->dictionary_reset);
     }
 
     return res;
@@ -349,19 +359,41 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
     *input_consumed_size = 0;
     *output_written_size = 0;
 
-    if (!decompressor->configured) {
-        // Read in header
-        size_t header_consumed_size;
+    if (TAMP_UNLIKELY(!decompressor->configured)) {
+        // Implicit header read: assemble available header bytes into a
+        // stack buffer, then delegate to tamp_decompressor_read_header.
+        unsigned char header_buf[2];
+        uint8_t n = decompressor->header_bytes_read;
+
+        // Prepend any previously stashed byte.
+        if (n) header_buf[0] = decompressor->stashed_header_byte;
+
+        // Append new bytes from input.
+        while (n < sizeof(header_buf) && input != input_end) {
+            header_buf[n++] = *input++;
+            (*input_consumed_size)++;
+        }
+
+        size_t header_consumed;
         TampConf conf;
-        res = tamp_decompressor_read_header(&conf, input, input_end - input, &header_consumed_size);
+        res = tamp_decompressor_read_header(&conf, header_buf, n, &header_consumed);
+        if (res == TAMP_INPUT_EXHAUSTED) {
+            // Stash what we have so far for the next call.
+            if (n) decompressor->stashed_header_byte = header_buf[0];
+            decompressor->header_bytes_read = n;
+            return TAMP_INPUT_EXHAUSTED;
+        }
         if (res != TAMP_OK) return res;
+
+        // Return any bytes read_header didn't consume back to the input stream.
+        size_t excess = n - header_consumed;
+        input -= excess;
+        (*input_consumed_size) -= excess;
 
         res = tamp_decompressor_populate_from_conf(decompressor, conf.window, conf.literal, conf.use_custom_dictionary,
-                                                   conf.extended);
+                                                   conf.extended, conf.dictionary_reset);
         if (res != TAMP_OK) return res;
-
-        input += header_consumed_size;
-        (*input_consumed_size) += header_consumed_size;
+        decompressor->skip_bytes = 0;  // Clear stale stashed_header_byte (shares union storage)
     }
 
     // Cache bitfield values in local variables for faster access
@@ -409,6 +441,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
         // Hint that patterns are more likely than literals
         if (TAMP_UNLIKELY(decompressor->bit_buffer >> 31)) {
             // is literal
+            if (TAMP_UNLIKELY(decompressor->last_was_flush)) decompressor->last_was_flush = 0;
             if (TAMP_UNLIKELY(decompressor->bit_buffer_pos < (1 + conf_literal))) return TAMP_INPUT_EXHAUSTED;
             decompressor->bit_buffer <<= 1;  // shift out the is_literal flag
 
@@ -446,8 +479,17 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                 decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);
                 decompressor->bit_buffer_pos =
                     bit_buffer_pos & ~7;  // Round bit_buffer_pos down to nearest multiple of 8.
+                if (decompressor->conf_dictionary_reset && decompressor->last_was_flush) {
+                    // Double-FLUSH: reset dictionary.
+                    decompressor->window_pos = 0;
+                    tamp_initialize_dictionary(decompressor->window, (size_t)1 << conf_window,
+                                               decompressor->conf_extended ? conf_literal : 8);
+                }
+                decompressor->last_was_flush = 1;
                 continue;
             }
+
+            if (TAMP_UNLIKELY(decompressor->last_was_flush)) decompressor->last_was_flush = 0;
 
 #if TAMP_EXTENDED_DECOMPRESS
             /* Check for extended symbols (RLE=12, extended match=13).

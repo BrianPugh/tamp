@@ -49,11 +49,19 @@ cdef class Decompressor:
         self.input_size = 0
         self.input_consumed = 0
 
-        compressed_data = f.read(1)
+        # Read header incrementally (1 byte at a time) so we don't require seek support.
+        cdef bytearray header_buf = bytearray()
+        while True:
+            b = f.read(1)
+            if not b:
+                raise ERROR_LOOKUP.get(ctamp.TAMP_INPUT_EXHAUSTED, NotImplementedError)
+            header_buf += b
+            res = ctamp.tamp_decompressor_read_header(&conf, header_buf, len(header_buf), &input_consumed_size)
+            if res == ctamp.TAMP_OK:
+                break
+            if res != ctamp.TAMP_INPUT_EXHAUSTED:
+                raise ERROR_LOOKUP.get(res, NotImplementedError)
 
-        res = ctamp.tamp_decompressor_read_header(&conf, compressed_data, len(compressed_data), &input_consumed_size);
-        if res != ctamp.TAMP_OK:
-            raise ERROR_LOOKUP.get(res, NotImplementedError)
         if conf.use_custom_dictionary and dictionary is None:
             raise ValueError
 

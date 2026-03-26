@@ -58,6 +58,11 @@ typedef struct TampCompressor {
 /**
  * @brief Initialize Tamp Compressor object.
  *
+ * When conf->append is true, writes a FLUSH token to the internal bit buffer
+ * instead of a header, enabling append-after-reboot on streams with
+ * dictionary_reset enabled. Requires dictionary_reset=true and
+ * use_custom_dictionary=false.
+ *
  * @param[out] compressor Object to initialize.
  * @param[in] conf Compressor configuration. Set to NULL for default (window=10, literal=8).
  * @param[in] window Pre-allocated window buffer. Size must agree with conf->window.
@@ -177,6 +182,30 @@ bool tamp_compressor_full(const TampCompressor *compressor);
  */
 tamp_res tamp_compressor_flush(TampCompressor *compressor, unsigned char *output, size_t output_size,
                                size_t *output_written_size, bool write_token);
+
+/**
+ * @brief Reset the compressor dictionary and internal state.
+ *
+ * Writes a double-FLUSH token sequence to signal dictionary re-initialization
+ * to the decompressor, then resets the window and all internal compression state.
+ *
+ * The compressor continues to use the same configuration (window, literal, etc.)
+ * but starts fresh with a re-initialized dictionary.
+ *
+ * The compressor must have been initialized with conf->dictionary_reset set.
+ * This causes the header to include the more_header flag, which old decompressors
+ * will reject rather than silently producing corrupt output.
+ *
+ * @param[in,out] compressor TampCompressor object to reset.
+ * @param[out] output Pointer to a pre-allocated buffer to hold output data.
+ * @param[in] output_size Size of the pre-allocated output buffer.
+ * @param[out] output_written_size Number of bytes written to output. May be NULL.
+ *
+ * @return Tamp Status Code. Can return TAMP_OK, TAMP_OUTPUT_FULL, or
+ *         TAMP_INVALID_CONF if dictionary_reset was not set at init.
+ */
+tamp_res tamp_compressor_reset_dictionary(TampCompressor *compressor, unsigned char *output, size_t output_size,
+                                          size_t *output_written_size);
 
 /**
  * Callback-variant of tamp_compressor_compress.

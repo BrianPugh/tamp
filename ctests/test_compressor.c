@@ -400,6 +400,150 @@ void test_compressor_extended_window9_roundtrip(void) {
     TEST_ASSERT_EQUAL_MEMORY(input, output, sizeof(input));
 }
 
+void test_reset_dictionary_roundtrip(void) {
+    // Basic reset dictionary roundtrip: compress, reset, compress more, decompress all.
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 10];
+    unsigned char compressed[512];
+    size_t total_written = 0;
+    size_t chunk_written, input_consumed;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .extended = true,
+        .dictionary_reset = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    // Compress first chunk
+    const char *data1 = "Hello world! Hello world! Hello world! ";
+    res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &chunk_written,
+                                             (const unsigned char *)data1, strlen(data1), &input_consumed, true);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    // Reset dictionary
+    res = tamp_compressor_reset_dictionary(&compressor, compressed + total_written, sizeof(compressed) - total_written,
+                                           &chunk_written);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    // Compress second chunk
+    const char *data2 = "Goodbye world! Goodbye world! Goodbye world! ";
+    res = tamp_compressor_compress_and_flush(&compressor, compressed + total_written,
+                                             sizeof(compressed) - total_written, &chunk_written,
+                                             (const unsigned char *)data2, strlen(data2), &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    // Decompress and verify
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 10];
+    unsigned char output[512];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       total_written, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    size_t expected_size = strlen(data1) + strlen(data2);
+    TEST_ASSERT_EQUAL(expected_size, output_written);
+    TEST_ASSERT_EQUAL_MEMORY(data1, output, strlen(data1));
+    TEST_ASSERT_EQUAL_MEMORY(data2, output + strlen(data1), strlen(data2));
+}
+
+void test_reset_dictionary_requires_conf_flag(void) {
+    // reset_dictionary must fail if dictionary_reset was not set at init.
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char window[1 << 10];
+    unsigned char output[64];
+    size_t output_written;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .dictionary_reset = false,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_compressor_reset_dictionary(&compressor, output, sizeof(output), &output_written);
+    TEST_ASSERT_EQUAL(TAMP_INVALID_CONF, res);
+}
+
+void test_reset_dictionary_small_output_buffer(void) {
+    // If reset_dictionary gets TAMP_OUTPUT_FULL, retrying should still produce
+    // a valid stream. The retry may emit an extra FLUSH (3 total), which
+    // triggers a harmless redundant reset.
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 10];
+    unsigned char compressed[512];
+    size_t total_written = 0;
+    size_t chunk_written, input_consumed;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .extended = true,
+        .dictionary_reset = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    // Compress some data so there's pending state to flush.
+    const char *data1 = "The quick brown fox jumps over the lazy dog. ";
+    res = tamp_compressor_compress(&compressor, compressed, sizeof(compressed), &chunk_written,
+                                   (const unsigned char *)data1, strlen(data1), &input_consumed);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    // Try reset with a tiny buffer — should fail with TAMP_OUTPUT_FULL.
+    res = tamp_compressor_reset_dictionary(&compressor, compressed + total_written, 1, &chunk_written);
+    TEST_ASSERT_EQUAL(TAMP_OUTPUT_FULL, res);
+    // Note: some flush output may have been written even on failure.
+    total_written += chunk_written;
+
+    // Retry with enough space — should succeed.
+    res = tamp_compressor_reset_dictionary(&compressor, compressed + total_written, sizeof(compressed) - total_written,
+                                           &chunk_written);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    // Compress more data after reset.
+    const char *data2 = "New data after reset! New data after reset! ";
+    res = tamp_compressor_compress_and_flush(&compressor, compressed + total_written,
+                                             sizeof(compressed) - total_written, &chunk_written,
+                                             (const unsigned char *)data2, strlen(data2), &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    // Decompress and verify the full stream is valid.
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 10];
+    unsigned char output[512];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       total_written, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+
+    // The output should contain data1 + data2 (the extra reset is harmless).
+    size_t expected_size = strlen(data1) + strlen(data2);
+    TEST_ASSERT_EQUAL(expected_size, output_written);
+    TEST_ASSERT_EQUAL_MEMORY(data1, output, strlen(data1));
+    TEST_ASSERT_EQUAL_MEMORY(data2, output + strlen(data1), strlen(data2));
+}
+
 void test_compress_cb_callback_abort(void) {
     TampCompressor compressor;
     unsigned char window[1 << 10];

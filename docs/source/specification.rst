@@ -29,9 +29,18 @@ The bit-location 0 is equivalent to typical MSb position 7 of the first byte.
 | [1]     | extended          | Enables extended format features (RLE, extended match encoding).    |
 |         |                   | Generally improves compression, introduced in tamp v2.0.0.          |
 +---------+-------------------+---------------------------------------------------------------------+
-| [0]     | more_header       | If ``True``, then the next byte in the stream is more header data.  |
-|         |                   | Currently always ``False``, but allows for future expandability.    |
+| [0]     | more_header       | Next byte is header byte 2 (see `Header Byte 2`_). Implies         |
+|         |                   | ``dictionary_reset``: stream may contain double-FLUSH resets.       |
+|         |                   | Old decompressors reject the stream at the header.                  |
 +---------+-------------------+---------------------------------------------------------------------+
+
+.. _header-byte-2:
+
+Header Byte 2
+~~~~~~~~~~~~~
+Present only when ``more_header`` (bit 0 of byte 1) is set.
+All 8 bits are reserved for future use and must be ``0``.
+Decompressors must reject non-zero values with ``TAMP_INVALID_CONF``.
 
 Stream Encoding/Decoding
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -276,19 +285,41 @@ Since the output bit stream must be byte-aligned for writing, there may be up to
 pending bits that have not yet formed a complete byte.
 Invoking the ``flush`` method can have one of two results:
 
-1. If the output is already byte-aligned, no action is performed.
+1. If the output is already byte-aligned and ``more_header`` is not set,
+   no action is performed.
 
-2. If there are pending bits, the FLUSH Huffman code is written.
+2. If there are pending bits, or if ``more_header`` is set, the FLUSH Huffman
+   code is written.
    No ``offset`` bits are written following the FLUSH code.
    The remaining bits are zero-padded to the next byte boundary.
 
 On reading, if a FLUSH is read, the reader discards the remaining bits up to the
 next byte boundary.
-In the best case (already byte-aligned), no FLUSH symbol is emitted.
+When ``more_header`` is set, a FLUSH is **always** emitted (even when byte-aligned)
+to support append mode (see `Dictionary Reset (Double-FLUSH)`_).
 In the worst case (1 pending bit), a FLUSH symbol (9 bits) and 6 padding bits are
 written, adding 15 bits of overhead to the output stream.
 
-At the very end of a stream, the FLUSH symbol is unnecessary and **may be omitted** to save an additional one or two bytes.
+
+Dictionary Reset (Double-FLUSH)
+-------------------------------
+Dictionary reset allows appending new compressed data to an existing stream
+without retaining the previous compressor state. After a reset, both sides
+start fresh with a default dictionary.
+
+When the ``more_header`` (header byte 1, bit 0) is set, two consecutive FLUSH tokens signal a dictionary reset.
+Without ``more_header``, double-FLUSHes are treated as two ordinary flushes.
+Old decompressors (<2.1.0) reject ``more_header`` streams at the header, preventing silent corruption.
+
+On the compressor side, ``reset_dictionary`` flushes pending data, writes
+exactly two consecutive FLUSHes, then re-initializes the window and all
+internal state.
+
+On the decompressor side:
+1. Re-initializes the window (see `Dictionary Initialization`_). Custom dictionaries cannot be supplied at this time.
+2. Resets window position to zero.
+3. Continues decompressing with a fresh dictionary.
+
 
 Miscellaneous
 ^^^^^^^^^^^^^
