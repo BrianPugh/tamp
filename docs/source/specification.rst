@@ -285,15 +285,16 @@ Since the output bit stream must be byte-aligned for writing, there may be up to
 pending bits that have not yet formed a complete byte.
 Invoking the ``flush`` method can have one of two results:
 
-1. If the output is already byte-aligned, no action is performed.
+1. If the output is already byte-aligned and ``more_header`` is not set,
+   no action is performed.
 
-2. If there are pending bits, the FLUSH Huffman code is written.
+2. If there are pending bits, or if ``more_header`` is set, the FLUSH Huffman
+   code is written.
    No ``offset`` bits are written following the FLUSH code.
    The remaining bits are zero-padded to the next byte boundary.
 
 On reading, if a FLUSH is read, the reader discards the remaining bits up to the
 next byte boundary.
-In the best case (already byte-aligned), no FLUSH symbol is emitted.
 When ``more_header`` is set, a FLUSH is **always** emitted (even when byte-aligned)
 to support append mode (see `Dictionary Reset (Double-FLUSH)`_).
 In the worst case (1 pending bit), a FLUSH symbol (9 bits) and 6 padding bits are

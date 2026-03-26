@@ -188,7 +188,7 @@ class Decompressor:
             # Header byte 2: all bits reserved for future use.
             reserved = self._bit_reader.read(8)
             if reserved:
-                raise NotImplementedError
+                raise ValueError("Reserved bits in header byte 2 must be zero.")
 
         if uses_custom_dictionary and dictionary is None:
             raise ValueError

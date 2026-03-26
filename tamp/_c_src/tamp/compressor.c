@@ -806,7 +806,7 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_reset_dictionary(TampCompressor* com
     *output_written_size = 0;
 
     // Flush all pending data with write_token=true so the stream is byte-aligned.
-    // flush_token_written tells us if a FLUSH was emitted (only when bit_buffer_pos > 0).
+    // flush_token_written tells us if a FLUSH was emitted (when bit_buffer_pos > 0 or dictionary_reset is set).
     // If the compressor is already idle (e.g. retry after TAMP_OUTPUT_FULL),
     // flush_impl is a no-op and flush_token_written stays false.
     uint8_t flushes_needed;
