@@ -202,26 +202,17 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
         tamp_initialize_dictionary(window, (1 << conf->window), conf->extended ? conf->literal : 8);
 
     if (conf->append) {
-        // Write a FLUSH token instead of a header. Combined with the previous
-        // stream's trailing FLUSH, this triggers a dictionary reset in the
-        // decompressor. Pad to byte boundary so subsequent compressed data
-        // starts cleanly after the decompressor discards FLUSH padding bits.
+        // Write a FLUSH token (9 bits) padded to 16 bits. Combined with the
+        // previous stream's trailing FLUSH, this triggers a dictionary reset.
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
-        // Pad the remaining 7 bits to fill 2 bytes (bits are already zero from memset).
         compressor->bit_buffer_pos = 16;
     } else {
-        // Build header byte 1 (8 bits)
-        // Layout: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
-        // TODO: OR in any future second-header-byte flags here.
-        bool has_second_header = conf->dictionary_reset;
+        // Header byte 1: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
         uint8_t header = ((conf->window - 8) << 5) | ((conf->literal - 5) << 3) | (conf->use_custom_dictionary << 2) |
-                         (conf->extended << 1) | has_second_header;
+                         (conf->extended << 1) | conf->dictionary_reset;
         write_to_bit_buffer(compressor, header, 8);
-
-        if (has_second_header) {
-            // Header byte 2: all bits reserved for future use, currently all zero.
-            write_to_bit_buffer(compressor, 0, 8);
-        }
+        // Header byte 2 (if present): reserved bits, all zero from memset.
+        compressor->bit_buffer_pos += conf->dictionary_reset ? 8 : 0;
     }
 
     return TAMP_OK;
