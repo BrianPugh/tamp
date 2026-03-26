@@ -665,27 +665,14 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_compress_cb(TampCompressor* compress
 #pragma GCC push_options
 #pragma GCC optimize("-fno-tree-pre")
 #endif
-/**
- * @brief Internal flush implementation.
- *
- * Same as tamp_compressor_flush, but additionally reports whether a FLUSH
- * token was written to the output stream. Used by reset_dictionary to
- * determine the exact number of additional FLUSHes needed.
- *
- * @param[out] flush_token_written Set to true if a FLUSH token was written. May be NULL.
- */
-static TAMP_NOINLINE tamp_res tamp_compressor_flush_impl(TampCompressor* compressor, unsigned char* output,
-                                                         size_t output_size, size_t* output_written_size,
-                                                         bool write_token, bool* flush_token_written) {
+tamp_res tamp_compressor_flush(TampCompressor* compressor, unsigned char* output, size_t output_size,
+                               size_t* output_written_size, bool write_token) {
     tamp_res res;
     size_t chunk_output_written_size;
     size_t output_written_size_proxy;
-    bool flush_token_written_proxy;
 
     if (!output_written_size) output_written_size = &output_written_size_proxy;
-    if (!flush_token_written) flush_token_written = &flush_token_written_proxy;
     *output_written_size = 0;
-    *flush_token_written = false;
 
 flush_check:
     // Flush pending bits before checking for more work
@@ -736,7 +723,6 @@ flush_done:
         // end up accidentally writing multiple FLUSH tokens.
         if (TAMP_UNLIKELY(output_size < 2)) return TAMP_OUTPUT_FULL;
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
-        *flush_token_written = true;
     }
 
     // At this point, up to 16 bits may remain in the compressor->bit_buffer
@@ -753,11 +739,6 @@ flush_done:
     }
 
     return res;
-}
-
-tamp_res tamp_compressor_flush(TampCompressor* compressor, unsigned char* output, size_t output_size,
-                               size_t* output_written_size, bool write_token) {
-    return tamp_compressor_flush_impl(compressor, output, output_size, output_written_size, write_token, NULL);
 }
 #if TAMP_HAS_GCC_OPTIMIZE
 #pragma GCC pop_options
@@ -805,50 +786,21 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_reset_dictionary(TampCompressor* com
     if (!output_written_size) output_written_size = &output_written_size_proxy;
     *output_written_size = 0;
 
-    // Flush all pending data with write_token=true so the stream is byte-aligned.
-    // flush_token_written tells us if a FLUSH was emitted (when bit_buffer_pos > 0 or dictionary_reset is set).
-    // If the compressor is already idle (e.g. retry after TAMP_OUTPUT_FULL),
-    // flush_impl is a no-op and flush_token_written stays false.
-    uint8_t flushes_needed;
-    {
+    // Write 2 FLUSH tokens for the double-FLUSH reset signal. The first drains
+    // any pending data. dictionary_reset being set guarantees flush() writes a
+    // FLUSH token even when bit_buffer_pos is 0.
+    for (uint8_t i = 0; i < 2; i++) {
         size_t flush_written_size;
-        bool flush_token_written;
-        res = tamp_compressor_flush_impl(compressor, output, output_size, &flush_written_size, true,
-                                         &flush_token_written);
+        res = tamp_compressor_flush(compressor, output, output_size, &flush_written_size, true);
         *output_written_size += flush_written_size;
         if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
         output += flush_written_size;
         output_size -= flush_written_size;
-
-        // We need exactly 2 consecutive FLUSHes in the stream (the reset signal).
-        // If flush_impl already wrote one, we need 1 more; otherwise 2.
-        // Each FLUSH is 9 bits → 2 bytes max after byte-alignment.
-        flushes_needed = flush_token_written ? 1 : 2;
-    }
-    // Each FLUSH is 9 bits; after byte-alignment padding, at most 2 bytes each.
-    if (TAMP_UNLIKELY(output_size < (size_t)flushes_needed * 2)) return TAMP_OUTPUT_FULL;
-
-    // Space is guaranteed; writes below cannot fail.
-    for (uint8_t i = 0; i < flushes_needed; i++) {
-        write_to_bit_buffer(compressor, FLUSH_CODE, 9);
-        // Pad to byte boundary (bit_buffer_pos is 9 here: partial_flush writes
-        // 1 byte leaving 1 bit, then we write the trailing partial byte).
-        partial_flush(compressor, &output, &output_size, output_written_size);
-        if (compressor->bit_buffer_pos) {
-            *output++ = compressor->bit_buffer >> 24;
-            output_size--;
-            (*output_written_size)++;
-            compressor->bit_buffer_pos = 0;
-            compressor->bit_buffer = 0;
-        }
     }
 
     // Re-initialize compressor, then discard the header it writes to the bit buffer.
-
     // Copy conf because tamp_compressor_init zeroes the struct before reading it.
     TampConf conf = compressor->conf;
-    // Clear use_custom_dictionary so init re-initializes the dictionary with the
-    // default, matching what the decompressor does on a double-FLUSH reset.
     conf.use_custom_dictionary = false;
     res = tamp_compressor_init(compressor, &conf, compressor->window);
     compressor->bit_buffer = 0;
