@@ -360,35 +360,35 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
     *output_written_size = 0;
 
     if (TAMP_UNLIKELY(!decompressor->configured)) {
-        // Implicit header read: assemble available header bytes into a
-        // stack buffer, then delegate to tamp_decompressor_read_header.
-        unsigned char header_buf[2];
-        uint8_t n = decompressor->header_bytes_read;
-
-        // Prepend any previously stashed byte.
-        if (n) header_buf[0] = decompressor->stashed_header_byte;
-
-        // Append new bytes from input.
-        while (n < sizeof(header_buf) && input != input_end) {
-            header_buf[n++] = *input++;
-            (*input_consumed_size)++;
-        }
-
+        // Try reading header directly from input. read_header handles
+        // variable-length headers (1-2 bytes based on more_headers bit).
+        // If the first byte indicates a 2-byte header but only 1 byte is
+        // available, stash it and return INPUT_EXHAUSTED.
         size_t header_consumed;
         TampConf conf;
-        res = tamp_decompressor_read_header(&conf, header_buf, n, &header_consumed);
-        if (res == TAMP_INPUT_EXHAUSTED) {
-            // Stash what we have so far for the next call.
-            if (n) decompressor->stashed_header_byte = header_buf[0];
-            decompressor->header_bytes_read = n;
-            return TAMP_INPUT_EXHAUSTED;
+        if (TAMP_UNLIKELY(decompressor->header_bytes_read)) {
+            // Second call: prepend stashed first byte.
+            unsigned char header_buf[2] = {decompressor->stashed_header_byte, 0};
+            if (input != input_end) header_buf[1] = *input;
+            res = tamp_decompressor_read_header(&conf, header_buf, 1 + (input != input_end), &header_consumed);
+            if (res != TAMP_OK) return res;
+            // First byte was already consumed in prior call; only count new bytes.
+            size_t new_consumed = header_consumed - 1;
+            input += new_consumed;
+            (*input_consumed_size) += new_consumed;
+        } else {
+            res = tamp_decompressor_read_header(&conf, input, input_end - input, &header_consumed);
+            if (res == TAMP_INPUT_EXHAUSTED && input != input_end) {
+                // Have first byte but need second; stash and retry next call.
+                decompressor->stashed_header_byte = *input;
+                decompressor->header_bytes_read = 1;
+                (*input_consumed_size)++;
+                return TAMP_INPUT_EXHAUSTED;
+            }
+            if (res != TAMP_OK) return res;
+            input += header_consumed;
+            (*input_consumed_size) += header_consumed;
         }
-        if (res != TAMP_OK) return res;
-
-        // Return any bytes read_header didn't consume back to the input stream.
-        size_t excess = n - header_consumed;
-        input -= excess;
-        (*input_consumed_size) -= excess;
 
         res = tamp_decompressor_populate_from_conf(decompressor, conf.window, conf.literal, conf.use_custom_dictionary,
                                                    conf.extended, conf.dictionary_reset);
