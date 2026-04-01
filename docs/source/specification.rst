@@ -29,7 +29,7 @@ The bit-location 0 is equivalent to typical MSb position 7 of the first byte.
 | [1]     | extended          | Enables extended format features (RLE, extended match encoding).    |
 |         |                   | Generally improves compression, introduced in tamp v2.0.0.          |
 +---------+-------------------+---------------------------------------------------------------------+
-| [0]     | more_header       | Next byte is header byte 2 (see `Header Byte 2`_). Implies         |
+| [0]     | more_header       | Next byte is header byte 2 (see `Header Byte 2`_). Implies          |
 |         |                   | ``dictionary_reset``: stream may contain double-FLUSH resets.       |
 |         |                   | Old decompressors reject the stream at the header.                  |
 +---------+-------------------+---------------------------------------------------------------------+
