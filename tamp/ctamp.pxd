@@ -56,7 +56,7 @@ cdef extern from "tamp/compressor.h":
                     size_t output_size,
                     size_t *output_written_size,
                     bool write_token
-                    );
+                    ) nogil;
 
     tamp_res tamp_compressor_compress(
             TampCompressor *compressor,
@@ -66,7 +66,7 @@ cdef extern from "tamp/compressor.h":
             const unsigned char *input,
             size_t input_size,
             size_t *input_consumed_size
-            );
+            ) nogil;
 
     tamp_res tamp_compressor_reset_dictionary(
             TampCompressor *compressor,
@@ -103,4 +103,4 @@ cdef extern from "tamp/decompressor.h":
             const unsigned char *input,
             size_t input_size,
             size_t *input_consumed_size
-    );
+    ) nogil;

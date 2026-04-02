@@ -133,6 +133,13 @@ def build_cython_extensions():
             **extension_kwargs,
         ),
         Extension(
+            "tamp._c_build_dictionary",
+            [
+                "tamp/_c_build_dictionary.pyx",
+            ],
+            **extension_kwargs,
+        ),
+        Extension(
             "tamp._c_common",
             [
                 "tamp/_c_common.pyx",

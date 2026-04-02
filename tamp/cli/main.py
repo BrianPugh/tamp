@@ -5,6 +5,7 @@ from typing import Annotated, Literal, Optional
 from cyclopts import App, Parameter, validators
 
 import tamp
+from tamp.cli.build_dictionary import build_dictionary_cli
 
 app = App(help="Compress/Decompress data in Tamp format.")
 
@@ -92,6 +93,24 @@ def read(input_: Optional[Path]) -> bytes:
     return data
 
 
+def load_dictionary(path: Path, window: int, literal: int, extended: bool) -> bytearray:
+    """Load a dictionary file, expanding to window size if needed.
+
+    If the file is smaller than the window, it is treated as raw effective
+    bytes: initialize_dictionary fills the buffer first, then the file
+    contents are copied to the end.
+    """
+    raw = path.read_bytes()
+    window_size = 1 << window
+    if len(raw) == window_size:
+        return bytearray(raw)
+    if len(raw) > window_size:
+        raise ValueError(f"Dictionary file ({len(raw)} bytes) is larger than window size ({window_size} bytes).")
+    dictionary = tamp.initialize_dictionary(window_size, literal=literal if extended else 8)
+    dictionary[-len(raw) :] = raw
+    return dictionary
+
+
 def write(output: Optional[Path], data: bytes):
     if output is None:
         sys.stdout.buffer.write(data)
@@ -118,6 +137,7 @@ def compress(
             validator=validators.Number(gte=5, lte=8),
         ),
     ] = 8,
+    dictionary: Annotated[Optional[Path], Parameter(name=["--dictionary", "-d"])] = None,
     lazy_matching: bool = False,
     extended: bool = True,
     implementation: ImplementationType = None,
@@ -134,6 +154,8 @@ def compress(
         Number of bits used to represent the dictionary window.
     literal: int
         Number of bits used to represent a literal.
+    dictionary: Optional[Path]
+        Path to a custom initialization dictionary binary file.
     lazy_matching: bool
         Use roughly 50% more cpu to get 0~2% better compression.
     extended: bool
@@ -143,13 +165,17 @@ def compress(
     """
     input_bytes = read(input_)
     compress_fn = get_compress_implementation(implementation)
-    output_bytes = compress_fn(
-        input_bytes,
-        window=window,
-        literal=literal,
-        lazy_matching=lazy_matching,
-        extended=extended,
-    )
+
+    kwargs = {
+        "window": window,
+        "literal": literal,
+        "lazy_matching": lazy_matching,
+        "extended": extended,
+    }
+    if dictionary is not None:
+        kwargs["dictionary"] = load_dictionary(dictionary, window, literal, extended)
+
+    output_bytes = compress_fn(input_bytes, **kwargs)
     write(output, output_bytes)
 
 
@@ -158,6 +184,22 @@ def decompress(
     input_: Annotated[Optional[Path], Parameter(name=["--input", "-i"])] = None,
     output: Annotated[Optional[Path], Parameter(name=["--output", "-o"])] = None,
     *,
+    dictionary: Annotated[Optional[Path], Parameter(name=["--dictionary", "-d"])] = None,
+    window: Annotated[
+        int,
+        Parameter(
+            name=["--window", "-w"],
+            validator=validators.Number(gte=8, lte=15),
+        ),
+    ] = 10,
+    literal: Annotated[
+        int,
+        Parameter(
+            name=["--literal", "-l"],
+            validator=validators.Number(gte=5, lte=8),
+        ),
+    ] = 8,
+    extended: bool = True,
     implementation: ImplementationType = None,
 ):
     """Decompress an input file or stream.
@@ -168,13 +210,34 @@ def decompress(
         Input file to decompress. Defaults to stdin.
     output: Optional[Path]
         Output decompressed file. Defaults to stdout.
+    dictionary: Optional[Path]
+        Path to a custom initialization dictionary binary file.
+        If smaller than the window size, it is treated as raw effective
+        bytes and expanded with initialize_dictionary.
+    window: int
+        Number of bits used to represent the dictionary window.
+        Only needed when using a raw (undersized) dictionary file.
+    literal: int
+        Number of bits used to represent a literal.
+        Only needed when using a raw (undersized) dictionary file.
+    extended: bool
+        Extended compression format flag.
+        Only needed when using a raw (undersized) dictionary file.
     implementation: Optional[Literal["c", "python"]]
         Explicitly specify which implementation to use (c or python). Defaults to auto-detection.
     """
     input_bytes = read(input_)
     decompress_fn = get_decompress_implementation(implementation)
-    output_bytes = decompress_fn(input_bytes)
+
+    kwargs = {}
+    if dictionary is not None:
+        kwargs["dictionary"] = load_dictionary(dictionary, window, literal, extended)
+
+    output_bytes = decompress_fn(input_bytes, **kwargs)
     write(output, output_bytes)
+
+
+app.command(build_dictionary_cli, name="build-dictionary")
 
 
 def run_app():

@@ -223,7 +223,7 @@
                     <div class="help-tooltip">
                         <span class="help-icon">?</span>
                         <div class="tooltip-content">
-                            Optional text dictionary to initialize the compression window. Placing common phrases here will bootstrap the compression process, improving initial compression and significantly improve compression of short messages. The dictionary will be left-padded using Tamp's window initialization algorithm to reach the window size. Dictionary must not exceed the window size. Dictionary must be externally transferred/supplied for decompression.
+                            Optional text to initialize the compression window. Common phrases here bootstrap compression, significantly improving short message ratios. The text is placed at the end of the window; remaining space is filled by Tamp's default initialization. Must not exceed the window size. The same dictionary must be provided for decompression. Use <code>tamp build-dictionary</code> to generate an optimal dictionary from a corpus of sample messages.
                         </div>
                     </div>
                 </div>

@@ -88,6 +88,60 @@ class TestCli(unittest.TestCase):
                 app(["decompress", "-o", str(test_file)], **_app_kwargs)
             self.assertEqual(test_file.read_text(), "foo foo foo")
 
+    def test_compress_with_custom_dictionary(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            input_file = tmp_dir / "input.bin"
+            compressed_file = tmp_dir / "compressed.tamp"
+            dict_file = tmp_dir / "dict.bin"
+
+            test_data = b"hello world hello world"
+            input_file.write_bytes(test_data)
+
+            # Create a custom dictionary (1024 bytes for window=10)
+            import tamp
+
+            dictionary = tamp.initialize_dictionary(1024)
+            # Overwrite the end with useful content
+            dictionary[-len(b"hello world") :] = b"hello world"
+            dict_file.write_bytes(dictionary)
+
+            app(
+                ["compress", str(input_file), "-o", str(compressed_file), "-d", str(dict_file)],
+                **_app_kwargs,
+            )
+
+            # Verify use_custom_dictionary bit is set in header byte 0, bit 4
+            header = compressed_file.read_bytes()[0]
+            self.assertTrue(header & 0x10)
+
+    def test_compress_decompress_with_custom_dictionary(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            input_file = tmp_dir / "input.bin"
+            compressed_file = tmp_dir / "compressed.tamp"
+            output_file = tmp_dir / "output.bin"
+            dict_file = tmp_dir / "dict.bin"
+
+            test_data = b"hello world hello world"
+            input_file.write_bytes(test_data)
+
+            import tamp
+
+            dictionary = tamp.initialize_dictionary(1024)
+            dictionary[-len(b"hello world") :] = b"hello world"
+            dict_file.write_bytes(dictionary)
+
+            app(
+                ["compress", str(input_file), "-o", str(compressed_file), "-d", str(dict_file)],
+                **_app_kwargs,
+            )
+            app(
+                ["decompress", str(compressed_file), "-o", str(output_file), "-d", str(dict_file)],
+                **_app_kwargs,
+            )
+            self.assertEqual(output_file.read_bytes(), test_data)
+
     def test_compress_decompress_extended_roundtrip(self):
         """Round-trip through CLI using default extended=True mode."""
         with tempfile.TemporaryDirectory() as tmp_dir:
