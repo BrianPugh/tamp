@@ -6,6 +6,7 @@ from tamp.cli.build_dictionary import (
     _compute_positions,
     _split_fragments,
     build_dictionary,
+    find_best_trim_threshold,
     pack_dictionary,
     score_substrings,
 )
@@ -267,6 +268,50 @@ class TestBuildDictionary(unittest.TestCase):
         # With only 5 identical short messages, effective should be much less than 1024
         self.assertGreater(effective, 0)
         self.assertLess(effective, 1024)
+
+
+class TestFindBestTrimThreshold(unittest.TestCase):
+    def test_returns_one_of_candidates(self):
+        """Returned trim_threshold is one of the candidate values."""
+        corpus = [b"the quick brown fox jumps over the lazy dog"] * 10
+        _, _, tt = find_best_trim_threshold(
+            corpus, window_bits=10, literal_bits=8, extended=True, candidates=(6, 8, 10, 12)
+        )
+        self.assertIn(tt, (6, 8, 10, 12))
+
+    def test_dictionary_is_window_sized(self):
+        """The returned dictionary matches window size."""
+        corpus = [b"hello world hello"] * 5
+        dictionary, _, _ = find_best_trim_threshold(corpus, window_bits=10, literal_bits=8)
+        self.assertEqual(len(dictionary), 1024)
+
+    def test_empty_corpus(self):
+        """Empty corpus is handled gracefully."""
+        dictionary, effective_size, tt = find_best_trim_threshold([], window_bits=10, literal_bits=8)
+        self.assertEqual(len(dictionary), 1024)
+        self.assertEqual(effective_size, 0)
+        self.assertIsInstance(tt, int)
+
+    def test_empty_candidates_raises(self):
+        """Empty candidates tuple raises."""
+        with self.assertRaises(ValueError):
+            find_best_trim_threshold([b"hello"], window_bits=10, literal_bits=8, candidates=())
+
+    def test_auto_tune_improves_or_matches_default(self):
+        """Auto-tuning beats or matches a fixed trim_threshold=8 baseline."""
+        import tamp
+
+        corpus = [f"sensor_id={i % 5},temp=23.{i % 10},humidity=65.{i % 10}".encode() for i in range(100)]
+
+        baseline_dict, _ = build_dictionary(list(corpus), window_bits=10, literal_bits=8, trim_threshold=8)
+        baseline_total = sum(
+            len(tamp.compress(s, window=10, literal=8, dictionary=bytearray(baseline_dict))) for s in corpus
+        )
+
+        auto_dict, _, _ = find_best_trim_threshold(corpus, window_bits=10, literal_bits=8)
+        auto_total = sum(len(tamp.compress(s, window=10, literal=8, dictionary=bytearray(auto_dict))) for s in corpus)
+
+        self.assertLessEqual(auto_total, baseline_total)
 
 
 class TestBuildDictionaryCli(unittest.TestCase):
