@@ -179,10 +179,11 @@ def build_dictionary(
     fragments = list(corpus_list)
 
     # Cap: only top candidates matter for a ~1KB dictionary.
+    # Total-ordering key (score desc, length desc, bytes asc) ensures
+    # reproducibility across runs regardless of Python hash randomization.
     candidates = sorted(
         ((sub, sc) for sub, sc in scores.items() if len(sub) >= trim_threshold),
-        key=lambda x: x[1],
-        reverse=True,
+        key=lambda x: (-x[1], -len(x[0]), x[0]),
     )[:50000]
 
     entries = select_candidates(candidates, multi_frag_content, budget, min_length + 1)
@@ -207,7 +208,7 @@ def build_dictionary(
             bits_saved_table,
             min_length,
         )
-        ranked = sorted(frag_scores.items(), key=lambda x: x[1], reverse=True)
+        ranked = sorted(frag_scores.items(), key=lambda x: (-x[1], -len(x[0]), x[0]))
         entry_set = set(entries)
         for substring, _score in ranked:
             if substring not in frag_multi:
@@ -280,7 +281,7 @@ def build_dictionary(
     deduplicated_set = set(deduplicated)
     deduplicated_bytes = sum(len(e) for e in deduplicated)
     if deduplicated_bytes < budget:
-        backfill_ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        backfill_ranked = sorted(scores.items(), key=lambda x: (-x[1], -len(x[0]), x[0]))
         for substring, sc in backfill_ranked:
             if sc <= 0:
                 continue
@@ -371,19 +372,7 @@ def find_best_trim_threshold(
             for s in corpus_list
         )
 
-    # Evaluate the first candidate to seed the best-so-far values.
-    best_dictionary, best_effective_size = build_dictionary(
-        corpus_list,
-        window_bits=window_bits,
-        literal_bits=literal_bits,
-        extended=extended,
-        trim_threshold=candidates[0],
-        target_fill=target_fill,
-    )
-    best_total = _compressed_total(best_dictionary)
-    best_trim_threshold = candidates[0]
-
-    for tt in candidates[1:]:
+    def _build(tt: int) -> tuple[bytearray, int, int]:
         dictionary, effective_size = build_dictionary(
             corpus_list,
             window_bits=window_bits,
@@ -392,11 +381,16 @@ def find_best_trim_threshold(
             trim_threshold=tt,
             target_fill=target_fill,
         )
-        total = _compressed_total(dictionary)
+        return dictionary, effective_size, _compressed_total(dictionary)
+
+    best_dictionary, best_effective_size, best_total = _build(candidates[0])
+    best_trim_threshold = candidates[0]
+    for tt in candidates[1:]:
+        dictionary, effective_size, total = _build(tt)
         if total < best_total:
-            best_total = total
             best_dictionary = dictionary
             best_effective_size = effective_size
+            best_total = total
             best_trim_threshold = tt
 
     return best_dictionary, best_effective_size, best_trim_threshold
@@ -552,9 +546,10 @@ def pack_dictionary(
     """
     dictionary_size = 1 << window_bits
 
-    def sort_key(item: tuple[bytes, float, float]) -> tuple[float, float]:
+    def sort_key(item: tuple[bytes, float, float]) -> tuple[float, float, bytes]:
         entry, score, pos = item
-        return (pos, score / len(entry))
+        # Bytes tiebreaker ensures placement is reproducible across runs.
+        return (pos, score / len(entry), entry)
 
     # Sort ascending: leftmost = early-appearing/low-density,
     # rightmost = late-appearing/high-density.

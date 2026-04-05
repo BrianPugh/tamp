@@ -1,6 +1,8 @@
 # cython: language_level=3, boundscheck=False, wraparound=False
 """Cython-accelerated inner loops for dictionary generation."""
 
+from cpython.exc cimport PyErr_CheckSignals
+
 
 def score_substrings(
     list corpus,
@@ -22,6 +24,7 @@ def score_substrings(
     cdef int capped_max
 
     for sample in corpus:
+        PyErr_CheckSignals()
         if len(sample) > window_size:
             sample = sample[:window_size]
         sample_len = len(sample)
@@ -109,6 +112,7 @@ def score_and_multi_frag(
     # Track per-sample counts (not total occurrences) for scoring.
     sample_counts = {}
     for sample in samples:
+        PyErr_CheckSignals()
         sample_len = len(sample)
         sample_subs = set()
         for start in range(sample_len - min_length + 1):
@@ -141,6 +145,7 @@ def score_and_multi_frag(
 
         sample_counts = {}
         for sample in samples:
+            PyErr_CheckSignals()
             sample_len = len(sample)
             if sample_len < length:
                 continue
@@ -211,6 +216,7 @@ def select_candidates(
     n = len(filtered)
 
     while n > 0 and used < budget_remaining:
+        PyErr_CheckSignals()
         # Find the first candidate that doesn't overlap with accepted entries.
         accepted = None
         for i in range(n):
