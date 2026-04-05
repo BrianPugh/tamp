@@ -7,6 +7,7 @@ from tamp.cli.build_dictionary import (
     _split_fragments,
     build_dictionary,
     find_best_trim_threshold,
+    find_knee,
     pack_dictionary,
     score_substrings,
 )
@@ -268,6 +269,76 @@ class TestBuildDictionary(unittest.TestCase):
         # With only 5 identical short messages, effective should be much less than 1024
         self.assertGreater(effective, 0)
         self.assertLess(effective, 1024)
+
+
+class TestFindKnee(unittest.TestCase):
+    def test_linear_curve_returns_full(self):
+        """A perfectly linear curve has no knee — return full size."""
+        # Every byte saves exactly 10 compressed bytes.
+        results = [(size, 1000 - size * 10) for size in range(10, 110, 10)]
+        self.assertEqual(find_knee(results), results[-1][0])
+
+    def test_sharp_knee_detected_early(self):
+        """A sharp L-shaped curve returns the corner, not full size."""
+        # Big savings for the first 30 bytes, almost nothing after.
+        results = [
+            (10, 900),
+            (20, 600),
+            (30, 300),
+            (40, 295),
+            (50, 291),
+            (60, 288),
+            (70, 286),
+            (80, 285),
+            (90, 284),
+            (100, 283),
+        ]
+        knee = find_knee(results)
+        self.assertLess(knee, 60, f"expected sharp-knee detection below 60, got {knee}")
+        self.assertGreaterEqual(knee, 30)
+
+    def test_gradual_curve_respects_min_benefit_floor(self):
+        """A smoothly concave curve should honor the 90% benefit floor.
+
+        Reproduces the SMS-style pathology where Kneedle picks a point
+        around the inflection of the concavity (~50% of total benefit)
+        even though the curve keeps improving steadily all the way to
+        full size.
+        """
+        # Smoothly concave, total improvement = 100.
+        # Benefit at each point = size/100 (linear in size after
+        # normalization), but the curve is concave in (size, compressed).
+        sizes = list(range(100, 1100, 100))
+        # Designed so benefit grows ~linearly with size — small min_benefit
+        # floors should return early, large floors should return later.
+        ys = [1000, 930, 870, 820, 780, 750, 730, 715, 705, 700]
+        results = list(zip(sizes, ys))
+
+        knee_default = find_knee(results)  # min_benefit=0.90
+        # 90% of total improvement (300 bytes) = 270 bytes saved; need y <= 730
+        # which first happens at size=700.
+        self.assertEqual(knee_default, 700)
+
+        # With the old 0.75 default, Kneedle would stop much earlier.
+        knee_old = find_knee(results, min_benefit=0.75)
+        self.assertLess(knee_old, knee_default)
+
+    def test_default_min_benefit_is_90_percent(self):
+        """Default min_benefit is 0.90 — capture at least 90% of improvement."""
+        import inspect
+
+        sig = inspect.signature(find_knee)
+        self.assertEqual(sig.parameters["min_benefit"].default, 0.90)
+
+    def test_short_results_returns_last(self):
+        """Fewer than 3 points — nothing to analyze, return the last."""
+        self.assertEqual(find_knee([(10, 100)]), 10)
+        self.assertEqual(find_knee([(10, 100), (20, 90)]), 20)
+
+    def test_empty_results_degenerate_handled(self):
+        """Flat curve (all same y) returns full size."""
+        results = [(10, 100), (20, 100), (30, 100)]
+        self.assertEqual(find_knee(results), 30)
 
 
 class TestBuildDictionaryDeterminism(unittest.TestCase):

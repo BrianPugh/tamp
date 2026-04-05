@@ -528,21 +528,30 @@ def evaluate_dictionary_tradeoff(
 
 def find_knee(
     results: list[tuple[int, int]],
-    min_benefit: float = 0.75,
+    min_benefit: float = 0.90,
     linearity_threshold: float = 0.10,
 ) -> int:
     """Find the knee of the compression-vs-size curve.
 
     Uses the Kneedle method: in normalized space, find the point with
     maximum perpendicular distance from the line connecting the first
-    and last points.
+    and last points. The ``min_benefit`` floor then guarantees the knee
+    captures at least that fraction of the total compression improvement,
+    walking forward from the Kneedle point if necessary.
 
     Handles three curve shapes:
-    - Sharp knee (e.g., green-eggs): Kneedle point is used directly.
-    - Gradual curve (e.g., tweets): Kneedle point may be too early;
-      bumped up to the first point reaching ``min_benefit``.
-    - Nearly linear (e.g., SMS): no meaningful knee exists; every byte
-      of dictionary provides roughly equal value. Returns full size.
+
+    - Sharp knee (e.g., green-eggs, tweets): Kneedle point is used as
+      the starting candidate; the ``min_benefit`` floor rarely moves it
+      because the knee already captures >= 90% of the improvement.
+    - Gradual curve (e.g., sms): Kneedle picks a point too early —
+      around the inflection of the concavity — which on a smoothly
+      concave curve lands near the middle. The ``min_benefit`` floor
+      then walks forward to the first point that captures >= 90% of
+      the total improvement, giving a more useful knee.
+    - Nearly linear: Kneedle's maximum perpendicular distance falls
+      below ``linearity_threshold`` and we return the full effective
+      size — every byte has roughly equal value.
 
     Returns the dict_effective_bytes value at the knee.
     """
