@@ -107,84 +107,94 @@ def _split_fragments(fragments: list[bytes], pattern: bytes, min_length: int) ->
     return [part for fragment in fragments for part in fragment.split(pattern) if len(part) >= min_length]
 
 
-def build_dictionary(
+def _prepare_corpus_scoring(
     corpus: Iterable[bytes],
-    window_bits: int = 10,
-    literal_bits: int = 8,
-    extended: bool = True,
-    trim_threshold: int = 8,
-    target_fill: float = 1.0,
-) -> tuple[bytearray, int]:
-    """Build an optimal custom dictionary from a corpus of samples.
+    window_bits: int,
+    literal_bits: int,
+    extended: bool,
+    multi_frag_min_length: int,
+) -> tuple[list[bytes], dict, set, list[tuple], list[float], int, int]:
+    """Run the expensive corpus-wide scoring pass once.
 
-    Iteratively extracts the most common long substring from the corpus,
-    adds it to the dictionary, and splits the corpus on that substring.
-    Repeats on the remaining fragments until the budget is reached.
+    Returns ``(corpus_list, scores, multi_frag, sorted_scores, bits_saved_table,
+    min_length, max_length)``. ``sorted_scores`` is a decorated list
+    ``[(-score, -len, sub), ...]`` sorted ascending — equivalent to sorting
+    ``scores.items()`` by ``(score desc, len desc, bytes asc)`` but using
+    C-level tuple comparison instead of a Python key function.
 
-    Parameters
-    ----------
-    corpus
-        Iterable of byte samples (e.g., one per file/message).
-        Consumed in a single pass; does not need to fit in memory at once.
-    window_bits
-        Window size in bits [8-15]. Dictionary = 2^window_bits bytes.
-    literal_bits
-        Literal bits [5-8].
-    extended
-        If True, optimize for extended format (longer max match ~225 bytes).
-        If False, use non-extended max match (min_pattern_size + 13).
-    trim_threshold
-        Minimum length for common substring extraction.
-    target_fill
-        Maximum fraction of dictionary to fill with corpus-derived
-        content (0.0-1.0). Actual fill may be less if the corpus lacks
-        sufficient common patterns.
-
-    Returns
-    -------
-    tuple of (dictionary bytearray, effective_size).
-    dictionary is exactly 2^window_bits bytes.
-    effective_size is how many bytes contain useful corpus-derived content.
+    The returned ``scores``, ``multi_frag``, and ``sorted_scores`` are
+    shareable across multiple ``_build_from_scores`` calls with different
+    ``trim_threshold`` values as long as ``multi_frag_min_length`` was set
+    to the lowest such value.
     """
     dictionary_size = 1 << window_bits
-    budget = int(dictionary_size * max(0.0, min(1.0, target_fill)))
     min_length = tamp.compute_min_pattern_size(window_bits, literal_bits)
     # Cap max_length at the longest efficiently-scorable match.
     # Extended matches (17+) score high in absolute terms but use too
     # much dictionary space per bit saved — basic matches (2-16) are
     # more efficient per byte.
     max_length = min(min_length + len(_huffman_bits) - 1, dictionary_size)
-
     bits_saved_table = _build_bits_saved_table(min_length, max_length, window_bits, literal_bits, extended)
 
     # Materialize corpus, truncating to window size. Only the first
     # window_size bytes of each message benefit from the dictionary.
     corpus_list = [s[:dictionary_size] for s in corpus if s]
     if not corpus_list:
-        return tamp.initialize_dictionary(dictionary_size, literal=literal_bits), 0
+        return corpus_list, {}, set(), [], bits_saved_table, min_length, max_length
 
-    # Score substrings and identify multi-fragment substrings in one pass.
-    scores, multi_frag_content = score_and_multi_frag(
+    scores, multi_frag = score_and_multi_frag(
         corpus_list,
         min_length,
         max_length,
         dictionary_size,
         bits_saved_table,
-        trim_threshold,
+        multi_frag_min_length,
     )
-    if not scores:
+    # Pre-sort decorated scores once. Downstream phases can slice by length
+    # threshold without re-sorting. Total-ordering on (-score, -len, bytes)
+    # is reproducible across runs regardless of hash randomization.
+    sorted_scores = [(-sc, -len(sub), sub) for sub, sc in scores.items()]
+    sorted_scores.sort()
+    return corpus_list, scores, multi_frag, sorted_scores, bits_saved_table, min_length, max_length
+
+
+def _build_from_scores(
+    corpus_list: list[bytes],
+    scores: dict,
+    multi_frag_content: set,
+    sorted_scores: list[tuple],
+    bits_saved_table: list[float],
+    window_bits: int,
+    literal_bits: int,
+    min_length: int,
+    max_length: int,
+    trim_threshold: int,
+    target_fill: float,
+) -> tuple[bytearray, int]:
+    """Run the entry-selection pipeline on pre-computed scoring data.
+
+    Separated from ``build_dictionary`` so that the expensive corpus-wide
+    ``score_and_multi_frag`` pass can be shared across a ``trim_threshold``
+    sweep (see ``find_best_trim_threshold``).
+    """
+    dictionary_size = 1 << window_bits
+    budget = int(dictionary_size * max(0.0, min(1.0, target_fill)))
+
+    if not corpus_list or not scores:
         return tamp.initialize_dictionary(dictionary_size, literal=literal_bits), 0
 
     # Phase 1: Extract common long substrings using pre-computed scores.
     fragments = list(corpus_list)
 
-    # Cap: only top candidates matter for a ~1KB dictionary.
-    # Total-ordering key (score desc, length desc, bytes asc) ensures
-    # reproducibility across runs regardless of Python hash randomization.
-    candidates = sorted(
-        ((sub, sc) for sub, sc in scores.items() if len(sub) >= trim_threshold),
-        key=lambda x: (-x[1], -len(x[0]), x[0]),
-    )[:50000]
+    # Walk the pre-sorted decorated scores, taking the top 50000 whose
+    # length meets trim_threshold. Cap: only top candidates matter for a
+    # ~1KB dictionary.
+    candidates: list[tuple] = []
+    for neg_score, neg_len, sub in sorted_scores:
+        if -neg_len >= trim_threshold:
+            candidates.append((sub, -neg_score))
+            if len(candidates) >= 50000:
+                break
 
     entries = select_candidates(candidates, multi_frag_content, budget, min_length + 1)
     total_entry_bytes = sum(len(e) for e in entries)
@@ -281,9 +291,10 @@ def build_dictionary(
     deduplicated_set = set(deduplicated)
     deduplicated_bytes = sum(len(e) for e in deduplicated)
     if deduplicated_bytes < budget:
-        backfill_ranked = sorted(scores.items(), key=lambda x: (-x[1], -len(x[0]), x[0]))
-        for substring, sc in backfill_ranked:
-            if sc <= 0:
+        # Walk the pre-sorted scores directly — same ordering as a fresh
+        # sorted(scores.items(), key=...) but without the resort cost.
+        for neg_score, _neg_len, substring in sorted_scores:
+            if neg_score >= 0:  # score <= 0
                 continue
             if substring in deduplicated_set:
                 continue
@@ -308,6 +319,63 @@ def build_dictionary(
 
     scored_entries = [(entry, scores.get(entry, 0.0), positions.get(entry, 0.5)) for entry in deduplicated]
     return pack_dictionary(scored_entries, window_bits, literal_bits)
+
+
+def build_dictionary(
+    corpus: Iterable[bytes],
+    window_bits: int = 10,
+    literal_bits: int = 8,
+    extended: bool = True,
+    trim_threshold: int = 8,
+    target_fill: float = 1.0,
+) -> tuple[bytearray, int]:
+    """Build an optimal custom dictionary from a corpus of samples.
+
+    Iteratively extracts the most common long substring from the corpus,
+    adds it to the dictionary, and splits the corpus on that substring.
+    Repeats on the remaining fragments until the budget is reached.
+
+    Parameters
+    ----------
+    corpus
+        Iterable of byte samples (e.g., one per file/message).
+        Consumed in a single pass; does not need to fit in memory at once.
+    window_bits
+        Window size in bits [8-15]. Dictionary = 2^window_bits bytes.
+    literal_bits
+        Literal bits [5-8].
+    extended
+        If True, optimize for extended format (longer max match ~225 bytes).
+        If False, use non-extended max match (min_pattern_size + 13).
+    trim_threshold
+        Minimum length for common substring extraction.
+    target_fill
+        Maximum fraction of dictionary to fill with corpus-derived
+        content (0.0-1.0). Actual fill may be less if the corpus lacks
+        sufficient common patterns.
+
+    Returns
+    -------
+    tuple of (dictionary bytearray, effective_size).
+    dictionary is exactly 2^window_bits bytes.
+    effective_size is how many bytes contain useful corpus-derived content.
+    """
+    corpus_list, scores, multi_frag, sorted_scores, bits_saved_table, min_length, max_length = _prepare_corpus_scoring(
+        corpus, window_bits, literal_bits, extended, multi_frag_min_length=trim_threshold
+    )
+    return _build_from_scores(
+        corpus_list,
+        scores,
+        multi_frag,
+        sorted_scores,
+        bits_saved_table,
+        window_bits,
+        literal_bits,
+        min_length,
+        max_length,
+        trim_threshold,
+        target_fill,
+    )
 
 
 # Default trim_threshold candidates for the auto-tuning sweep. Covers
@@ -347,19 +415,39 @@ def find_best_trim_threshold(
     if not candidates:
         raise ValueError("candidates must be non-empty")
 
-    corpus_list = [s for s in corpus if s]
+    # Run the expensive corpus-wide scoring pass once and share the result
+    # across all candidate trim_thresholds. ``multi_frag`` at the minimum
+    # candidate threshold is a superset of ``multi_frag`` at higher
+    # thresholds, and candidates are length-filtered at selection time
+    # anyway — so the shared result is correct for every sweep point.
+    (
+        corpus_list,
+        scores,
+        multi_frag,
+        sorted_scores,
+        bits_saved_table,
+        min_length,
+        max_length,
+    ) = _prepare_corpus_scoring(corpus, window_bits, literal_bits, extended, multi_frag_min_length=min(candidates))
     if not corpus_list:
-        dictionary, effective_size = build_dictionary(
-            [],
-            window_bits=window_bits,
-            literal_bits=literal_bits,
-            extended=extended,
-            target_fill=target_fill,
-        )
-        return dictionary, effective_size, candidates[0]
+        dictionary_size = 1 << window_bits
+        return tamp.initialize_dictionary(dictionary_size, literal=literal_bits), 0, candidates[0]
 
-    def _compressed_total(dictionary: bytearray) -> int:
-        return sum(
+    def _build(tt: int) -> tuple[bytearray, int, int]:
+        dictionary, effective_size = _build_from_scores(
+            corpus_list,
+            scores,
+            multi_frag,
+            sorted_scores,
+            bits_saved_table,
+            window_bits,
+            literal_bits,
+            min_length,
+            max_length,
+            tt,
+            target_fill,
+        )
+        total = sum(
             len(
                 tamp.compress(
                     s,
@@ -371,17 +459,7 @@ def find_best_trim_threshold(
             )
             for s in corpus_list
         )
-
-    def _build(tt: int) -> tuple[bytearray, int, int]:
-        dictionary, effective_size = build_dictionary(
-            corpus_list,
-            window_bits=window_bits,
-            literal_bits=literal_bits,
-            extended=extended,
-            trim_threshold=tt,
-            target_fill=target_fill,
-        )
-        return dictionary, effective_size, _compressed_total(dictionary)
+        return dictionary, effective_size, total
 
     best_dictionary, best_effective_size, best_total = _build(candidates[0])
     best_trim_threshold = candidates[0]
@@ -403,7 +481,7 @@ def evaluate_dictionary_tradeoff(
     window_bits: int,
     literal_bits: int = 8,
     extended: bool = True,
-    n_points: int = 20,
+    n_points: int = 12,
 ) -> list[tuple[int, int]]:
     """Evaluate compression at various dictionary sizes.
 
