@@ -189,6 +189,7 @@ def _build_from_scores(
     literal_bits: int,
     trim_threshold: int,
     target_fill: float,
+    extended: bool = True,
 ) -> tuple[bytearray, int]:
     """Run the entry-selection pipeline on pre-computed scoring data.
 
@@ -200,7 +201,7 @@ def _build_from_scores(
     budget = int(dictionary_size * max(0.0, min(1.0, target_fill)))
 
     if not ctx.corpus_list or not ctx.scores:
-        return tamp.initialize_dictionary(dictionary_size, literal=literal_bits), 0
+        return tamp.initialize_dictionary(dictionary_size, literal=literal_bits if extended else 8), 0
 
     # Phase 1: Extract common long substrings using pre-computed scores.
     min_length = ctx.min_length
@@ -345,7 +346,7 @@ def _build_from_scores(
     positions = _compute_positions(deduplicated, ctx.corpus_list, window_bits)
 
     scored_entries = [(entry, ctx.scores.get(entry, 0.0), positions.get(entry, 0.5)) for entry in deduplicated]
-    return pack_dictionary(scored_entries, window_bits, literal_bits)
+    return pack_dictionary(scored_entries, window_bits, literal_bits, extended)
 
 
 def build_dictionary(
@@ -388,7 +389,7 @@ def build_dictionary(
     effective_size is how many bytes contain useful corpus-derived content.
     """
     ctx = _prepare_corpus_scoring(corpus, window_bits, literal_bits, extended, multi_frag_min_length=trim_threshold)
-    return _build_from_scores(ctx, window_bits, literal_bits, trim_threshold, target_fill)
+    return _build_from_scores(ctx, window_bits, literal_bits, trim_threshold, target_fill, extended)
 
 
 # Default trim_threshold candidates for the auto-tuning sweep. Covers
@@ -436,10 +437,10 @@ def find_best_trim_threshold(
     ctx = _prepare_corpus_scoring(corpus, window_bits, literal_bits, extended, multi_frag_min_length=min(candidates))
     if not ctx.corpus_list:
         dictionary_size = 1 << window_bits
-        return tamp.initialize_dictionary(dictionary_size, literal=literal_bits), 0, candidates[0]
+        return tamp.initialize_dictionary(dictionary_size, literal=literal_bits if extended else 8), 0, candidates[0]
 
     def _build(tt: int) -> tuple[bytearray, int, int]:
-        dictionary, effective_size = _build_from_scores(ctx, window_bits, literal_bits, tt, target_fill)
+        dictionary, effective_size = _build_from_scores(ctx, window_bits, literal_bits, tt, target_fill, extended)
         total = sum(
             len(
                 tamp.compress(
@@ -489,7 +490,7 @@ def evaluate_dictionary_tradeoff(
     Always includes effective_size.
     """
     dictionary_size = 1 << window_bits
-    default_dict = tamp.initialize_dictionary(dictionary_size, literal=literal_bits)
+    default_dict = tamp.initialize_dictionary(dictionary_size, literal=literal_bits if extended else 8)
 
     def _compress_total(d: bytearray) -> int:
         # Subtract 1-byte header per sample to measure payload size only.
@@ -595,6 +596,7 @@ def pack_dictionary(
     scored_entries: list[tuple[bytes, float, float]],
     window_bits: int,
     literal_bits: int,
+    extended: bool = True,
 ) -> tuple[bytearray, int]:
     """Pack entries into a dictionary buffer, right-to-left by position and density.
 
@@ -640,7 +642,7 @@ def pack_dictionary(
         packed_entries.append(entry)
         used += len(entry)
 
-    result = tamp.initialize_dictionary(dictionary_size, literal=literal_bits)
+    result = tamp.initialize_dictionary(dictionary_size, literal=literal_bits if extended else 8)
     pos = dictionary_size
     for entry in packed_entries:
         pos -= len(entry)
