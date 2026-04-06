@@ -111,9 +111,9 @@ class TestCli(unittest.TestCase):
                 **_app_kwargs,
             )
 
-            # Verify use_custom_dictionary bit is set in header byte 0, bit 4
+            # Verify use_custom_dictionary bit is set in header byte 0, bit 2
             header = compressed_file.read_bytes()[0]
-            self.assertTrue(header & 0x10)
+            self.assertTrue(header & 0x04)
 
     def test_compress_decompress_with_custom_dictionary(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
