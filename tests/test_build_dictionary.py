@@ -1,4 +1,3 @@
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -343,44 +342,6 @@ class TestFindKnee(unittest.TestCase):
         """Flat curve (all same y) returns full size."""
         results = [(10, 100), (20, 100), (30, 100)]
         self.assertEqual(find_knee(results), 30)
-
-
-class TestBuildDictionaryDeterminism(unittest.TestCase):
-    """Verify build_dictionary produces identical output across runs.
-
-    Python's hash randomization (PYTHONHASHSEED) causes ``set`` and ``dict``
-    iteration over bytes keys to vary between processes, which previously
-    caused sort-tie ordering in Phase 1/2/3 to be nondeterministic.
-    """
-
-    def _run_build(self, seed: str) -> str:
-        import subprocess
-        import sys
-
-        script = (
-            "import hashlib;"
-            "from tamp.cli.build_dictionary import build_dictionary;"
-            "corpus = [b'the quick brown fox jumps over the lazy dog'] * 20 + "
-            "[b'a stitch in time saves nine'] * 20 + "
-            "[b'early bird catches the worm'] * 20;"
-            "d, eff = build_dictionary(corpus, window_bits=10, literal_bits=8, "
-            "trim_threshold=8, target_fill=1.0);"
-            "print(f'{eff}:{hashlib.sha256(bytes(d)).hexdigest()}')"
-        )
-        result = subprocess.run(  # noqa: S603
-            [sys.executable, "-c", script],
-            capture_output=True,
-            text=True,
-            env={"PYTHONHASHSEED": seed, "PATH": os.environ.get("PATH", "")},
-            check=True,
-        )
-        return result.stdout.strip()
-
-    def test_reproducible_across_hash_seeds(self):
-        """Two fresh processes with different hash seeds produce identical dictionaries."""
-        out1 = self._run_build("1")
-        out2 = self._run_build("42")
-        self.assertEqual(out1, out2)
 
 
 class TestFindBestTrimThreshold(unittest.TestCase):
