@@ -1,5 +1,6 @@
 from collections import Counter
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -107,25 +108,36 @@ def _split_fragments(fragments: list[bytes], pattern: bytes, min_length: int) ->
     return [part for fragment in fragments for part in fragment.split(pattern) if len(part) >= min_length]
 
 
+@dataclass
+class ScoringContext:
+    """Pre-computed corpus scoring data, shareable across trim_threshold sweeps."""
+
+    corpus_list: list[bytes]
+    scores: dict = field(default_factory=dict)
+    multi_frag: set = field(default_factory=set)
+    sorted_scores: list[tuple] = field(default_factory=list)
+    bits_saved_table: list[float] = field(default_factory=list)
+    min_length: int = 0
+    max_length: int = 0
+
+
 def _prepare_corpus_scoring(
     corpus: Iterable[bytes],
     window_bits: int,
     literal_bits: int,
     extended: bool,
     multi_frag_min_length: int,
-) -> tuple[list[bytes], dict, set, list[tuple], list[float], int, int]:
+) -> ScoringContext:
     """Run the expensive corpus-wide scoring pass once.
 
-    Returns ``(corpus_list, scores, multi_frag, sorted_scores, bits_saved_table,
-    min_length, max_length)``. ``sorted_scores`` is a decorated list
-    ``[(-score, -len, sub), ...]`` sorted ascending — equivalent to sorting
-    ``scores.items()`` by ``(score desc, len desc, bytes asc)`` but using
-    C-level tuple comparison instead of a Python key function.
+    The returned context is shareable across multiple ``_build_from_scores``
+    calls with different ``trim_threshold`` values as long as
+    ``multi_frag_min_length`` was set to the lowest such value.
 
-    The returned ``scores``, ``multi_frag``, and ``sorted_scores`` are
-    shareable across multiple ``_build_from_scores`` calls with different
-    ``trim_threshold`` values as long as ``multi_frag_min_length`` was set
-    to the lowest such value.
+    ``sorted_scores`` is a decorated list ``[(-score, -len, sub), ...]``
+    sorted ascending — equivalent to sorting ``scores.items()`` by
+    ``(score desc, len desc, bytes asc)`` but using C-level tuple
+    comparison instead of a Python key function.
     """
     dictionary_size = 1 << window_bits
     min_length = tamp.compute_min_pattern_size(window_bits, literal_bits)
@@ -140,7 +152,12 @@ def _prepare_corpus_scoring(
     # window_size bytes of each message benefit from the dictionary.
     corpus_list = [s[:dictionary_size] for s in corpus if s]
     if not corpus_list:
-        return corpus_list, {}, set(), [], bits_saved_table, min_length, max_length
+        return ScoringContext(
+            corpus_list=corpus_list,
+            bits_saved_table=bits_saved_table,
+            min_length=min_length,
+            max_length=max_length,
+        )
 
     scores, multi_frag = score_and_multi_frag(
         corpus_list,
@@ -155,19 +172,21 @@ def _prepare_corpus_scoring(
     # is reproducible across runs regardless of hash randomization.
     sorted_scores = [(-sc, -len(sub), sub) for sub, sc in scores.items()]
     sorted_scores.sort()
-    return corpus_list, scores, multi_frag, sorted_scores, bits_saved_table, min_length, max_length
+    return ScoringContext(
+        corpus_list=corpus_list,
+        scores=scores,
+        multi_frag=multi_frag,
+        sorted_scores=sorted_scores,
+        bits_saved_table=bits_saved_table,
+        min_length=min_length,
+        max_length=max_length,
+    )
 
 
 def _build_from_scores(
-    corpus_list: list[bytes],
-    scores: dict,
-    multi_frag_content: set,
-    sorted_scores: list[tuple],
-    bits_saved_table: list[float],
+    ctx: ScoringContext,
     window_bits: int,
     literal_bits: int,
-    min_length: int,
-    max_length: int,
     trim_threshold: int,
     target_fill: float,
 ) -> tuple[bytearray, int]:
@@ -180,23 +199,28 @@ def _build_from_scores(
     dictionary_size = 1 << window_bits
     budget = int(dictionary_size * max(0.0, min(1.0, target_fill)))
 
-    if not corpus_list or not scores:
+    if not ctx.corpus_list or not ctx.scores:
         return tamp.initialize_dictionary(dictionary_size, literal=literal_bits), 0
 
     # Phase 1: Extract common long substrings using pre-computed scores.
-    fragments = list(corpus_list)
+    min_length = ctx.min_length
+    max_length = ctx.max_length
+    fragments = list(ctx.corpus_list)
 
     # Walk the pre-sorted decorated scores, taking the top 50000 whose
     # length meets trim_threshold. Cap: only top candidates matter for a
     # ~1KB dictionary.
     candidates: list[tuple] = []
-    for neg_score, neg_len, sub in sorted_scores:
+    for neg_score, neg_len, sub in ctx.sorted_scores:
         if -neg_len >= trim_threshold:
             candidates.append((sub, -neg_score))
+            # Cap at 50k: only the top candidates matter for a ~1KB
+            # dictionary, and diminishing returns make further entries
+            # unlikely to be selected after overlap filtering.
             if len(candidates) >= 50000:
                 break
 
-    entries = select_candidates(candidates, multi_frag_content, budget, min_length + 1)
+    entries = select_candidates(candidates, ctx.multi_frag, budget, min_length + 1)
     total_entry_bytes = sum(len(e) for e in entries)
     for entry in entries:
         fragments = _split_fragments(fragments, entry, min_length)
@@ -215,7 +239,7 @@ def _build_from_scores(
             min_length,
             max_length,
             dictionary_size,
-            bits_saved_table,
+            ctx.bits_saved_table,
             min_length,
         )
         ranked = sorted(frag_scores.items(), key=lambda x: (-x[1], -len(x[0]), x[0]))
@@ -233,7 +257,9 @@ def _build_from_scores(
 
     # Deduplicate: extract shared substrings of >= trim_threshold bytes
     # across entries, replacing containing entries with unique remainders.
-    # Bounded to prevent pathological cases from looping indefinitely.
+    # Complexity: O(N^2 * L^2) per iteration where N = len(entries) and
+    # L = max entry length. Acceptable because N and L are bounded by
+    # the dictionary size (typically 256-1024 bytes total).
     deduplicated = list(entries)
     for _dedup_iter in range(len(entries)):
         sub_counts: Counter[bytes] = Counter()
@@ -276,7 +302,8 @@ def _build_from_scores(
                 new_entries.append(entry)
         deduplicated = new_entries
 
-    # Remove entries fully contained in other entries
+    # Remove entries fully contained in other entries.
+    # O(N^2 * L) but N is small (bounded by dictionary size / trim_threshold).
     deduplicated = [e for e in deduplicated if not any(e in other and e != other for other in deduplicated)]
 
     # Phase 3: Backfill remaining space after deduplication freed space.
@@ -293,7 +320,7 @@ def _build_from_scores(
     if deduplicated_bytes < budget:
         # Walk the pre-sorted scores directly — same ordering as a fresh
         # sorted(scores.items(), key=...) but without the resort cost.
-        for neg_score, _neg_len, substring in sorted_scores:
+        for neg_score, _neg_len, substring in ctx.sorted_scores:
             if neg_score >= 0:  # score <= 0
                 continue
             if substring in deduplicated_set:
@@ -315,9 +342,9 @@ def _build_from_scores(
                 break
 
     # Compute positions only for the final small set of entries.
-    positions = _compute_positions(deduplicated, corpus_list, window_bits)
+    positions = _compute_positions(deduplicated, ctx.corpus_list, window_bits)
 
-    scored_entries = [(entry, scores.get(entry, 0.0), positions.get(entry, 0.5)) for entry in deduplicated]
+    scored_entries = [(entry, ctx.scores.get(entry, 0.0), positions.get(entry, 0.5)) for entry in deduplicated]
     return pack_dictionary(scored_entries, window_bits, literal_bits)
 
 
@@ -360,22 +387,8 @@ def build_dictionary(
     dictionary is exactly 2^window_bits bytes.
     effective_size is how many bytes contain useful corpus-derived content.
     """
-    corpus_list, scores, multi_frag, sorted_scores, bits_saved_table, min_length, max_length = _prepare_corpus_scoring(
-        corpus, window_bits, literal_bits, extended, multi_frag_min_length=trim_threshold
-    )
-    return _build_from_scores(
-        corpus_list,
-        scores,
-        multi_frag,
-        sorted_scores,
-        bits_saved_table,
-        window_bits,
-        literal_bits,
-        min_length,
-        max_length,
-        trim_threshold,
-        target_fill,
-    )
+    ctx = _prepare_corpus_scoring(corpus, window_bits, literal_bits, extended, multi_frag_min_length=trim_threshold)
+    return _build_from_scores(ctx, window_bits, literal_bits, trim_threshold, target_fill)
 
 
 # Default trim_threshold candidates for the auto-tuning sweep. Covers
@@ -420,33 +433,13 @@ def find_best_trim_threshold(
     # candidate threshold is a superset of ``multi_frag`` at higher
     # thresholds, and candidates are length-filtered at selection time
     # anyway — so the shared result is correct for every sweep point.
-    (
-        corpus_list,
-        scores,
-        multi_frag,
-        sorted_scores,
-        bits_saved_table,
-        min_length,
-        max_length,
-    ) = _prepare_corpus_scoring(corpus, window_bits, literal_bits, extended, multi_frag_min_length=min(candidates))
-    if not corpus_list:
+    ctx = _prepare_corpus_scoring(corpus, window_bits, literal_bits, extended, multi_frag_min_length=min(candidates))
+    if not ctx.corpus_list:
         dictionary_size = 1 << window_bits
         return tamp.initialize_dictionary(dictionary_size, literal=literal_bits), 0, candidates[0]
 
     def _build(tt: int) -> tuple[bytearray, int, int]:
-        dictionary, effective_size = _build_from_scores(
-            corpus_list,
-            scores,
-            multi_frag,
-            sorted_scores,
-            bits_saved_table,
-            window_bits,
-            literal_bits,
-            min_length,
-            max_length,
-            tt,
-            target_fill,
-        )
+        dictionary, effective_size = _build_from_scores(ctx, window_bits, literal_bits, tt, target_fill)
         total = sum(
             len(
                 tamp.compress(
@@ -457,7 +450,7 @@ def find_best_trim_threshold(
                     extended=extended,
                 )
             )
-            for s in corpus_list
+            for s in ctx.corpus_list
         )
         return dictionary, effective_size, total
 
@@ -497,17 +490,18 @@ def evaluate_dictionary_tradeoff(
     """
     dictionary_size = 1 << window_bits
     default_dict = tamp.initialize_dictionary(dictionary_size, literal=literal_bits)
-    header_bytes = len(corpus)  # 1 header byte per sample to subtract
 
     def _compress_total(d: bytearray) -> int:
-        total = 0
-        for sample in corpus:
-            total += len(
+        # Subtract 1-byte header per sample to measure payload size only.
+        return sum(
+            len(
                 tamp.compress(
                     sample, window=window_bits, literal=literal_bits, dictionary=bytearray(d), extended=extended
                 )
             )
-        return total - header_bytes
+            - 1
+            for sample in corpus
+        )
 
     if effective_size == 0:
         return [(0, _compress_total(default_dict))]
@@ -528,30 +522,37 @@ def evaluate_dictionary_tradeoff(
 
 def find_knee(
     results: list[tuple[int, int]],
-    min_benefit: float = 0.90,
-    linearity_threshold: float = 0.10,
+    marginal_fraction: float = 0.5,
 ) -> int:
     """Find the knee of the compression-vs-size curve.
 
-    Uses the Kneedle method: in normalized space, find the point with
-    maximum perpendicular distance from the line connecting the first
-    and last points. The ``min_benefit`` floor then guarantees the knee
-    captures at least that fraction of the total compression improvement,
-    walking forward from the Kneedle point if necessary.
+    Uses a marginal-return approach: find the last dictionary size where
+    adding more bytes still provides meaningful compression improvement
+    relative to the average improvement per byte.
 
-    Handles three curve shapes:
+    A segment's marginal benefit (compressed bytes saved per dictionary
+    byte added) is compared against a threshold derived from the overall
+    average benefit per byte. The knee is the last point whose segment
+    marginal meets the threshold — the last fill level that's still
+    clearly worth adding.
 
-    - Sharp knee (e.g., green-eggs, tweets): Kneedle point is used as
-      the starting candidate; the ``min_benefit`` floor rarely moves it
-      because the knee already captures >= 90% of the improvement.
-    - Gradual curve (e.g., sms): Kneedle picks a point too early —
-      around the inflection of the concavity — which on a smoothly
-      concave curve lands near the middle. The ``min_benefit`` floor
-      then walks forward to the first point that captures >= 90% of
-      the total improvement, giving a more useful knee.
-    - Nearly linear: Kneedle's maximum perpendicular distance falls
-      below ``linearity_threshold`` and we return the full effective
-      size — every byte has roughly equal value.
+    Handles all curve shapes naturally:
+
+    - Sharp knee: marginal drops to near-zero after the knee, so the
+      last worthwhile point is at the knee.
+    - Gradual curve (e.g., sms): marginal decreases slowly, so the
+      knee lands at a high fill level where returns finally taper off.
+    - Nearly linear: marginal stays close to the average everywhere,
+      so every fill level is worthwhile — returns full size.
+
+    Parameters
+    ----------
+    results
+        List of (dict_effective_bytes, total_compressed_bytes).
+    marginal_fraction
+        A segment is considered worthwhile if its marginal benefit per
+        byte is at least this fraction of the average benefit per byte
+        across the full range.
 
     Returns the dict_effective_bytes value at the knee.
     """
@@ -561,44 +562,31 @@ def find_knee(
     xs = [r[0] for r in results]
     ys = [r[1] for r in results]
 
-    x_min, x_max = xs[0], xs[-1]
-    y_min, y_max = min(ys), max(ys)
+    total_improvement = ys[0] - ys[-1]
+    total_range = xs[-1] - xs[0]
 
-    if x_max == x_min or y_max == y_min:
+    if total_range <= 0 or total_improvement <= 0:
         return results[-1][0]
 
-    # Kneedle: maximum perpendicular distance from diagonal.
-    xn = [(x - x_min) / (x_max - x_min) for x in xs]
-    yn = [(y - y_min) / (y_max - y_min) for y in ys]
+    avg_benefit = total_improvement / total_range
+    threshold = avg_benefit * marginal_fraction
 
-    x1, y1 = xn[0], yn[0]
-    x2, y2 = xn[-1], yn[-1]
-    line_len = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+    # Minimum segment width to consider. Narrow tail segments (e.g., a
+    # 2-byte remainder) have noisy per-byte marginals and shouldn't
+    # override the trend from the regular-sized segments.
+    typical_step = total_range / (len(results) - 1)
+    min_segment = typical_step * 0.5
 
-    best_dist = -1.0
+    # Find the last segment whose marginal benefit per byte meets
+    # the threshold — the last fill level still worth adding.
     knee_idx = 0
-    for i in range(1, len(results) - 1):
-        dist = abs((y2 - y1) * xn[i] - (x2 - x1) * yn[i] + x2 * y1 - y2 * x1) / line_len
-        if dist > best_dist:
-            best_dist = dist
+    for i in range(1, len(results)):
+        dx = xs[i] - xs[i - 1]
+        if dx < min_segment:
+            continue
+        marginal = (ys[i - 1] - ys[i]) / dx
+        if marginal >= threshold:
             knee_idx = i
-
-    # If the curve is nearly linear (max distance from diagonal is small),
-    # there's no meaningful knee — every byte provides similar value.
-    # Use the full dictionary.
-    if best_dist < linearity_threshold:
-        return results[-1][0]
-
-    # Ensure the knee captures at least min_benefit of the total improvement.
-    # For gradual curves (like tweets), the Kneedle point may be too early.
-    improvement_range = y_max - y_min
-    if improvement_range > 0:
-        knee_benefit = (y_max - ys[knee_idx]) / improvement_range
-        if knee_benefit < min_benefit:
-            for i, y in enumerate(ys):
-                if (y_max - y) / improvement_range >= min_benefit:
-                    knee_idx = i
-                    break
 
     return results[knee_idx][0]
 
@@ -823,9 +811,12 @@ def build_dictionary_cli(
         highlight_size = knee_size
 
     if not quiet:
-        from rich.console import Console
-        from rich.table import Table
-        from rich.text import Text
+        try:
+            from rich.console import Console
+            from rich.table import Table
+            from rich.text import Text
+        except ImportError:
+            raise ImportError("rich is required for build-dictionary output. Install it with: pip install tamp[cli]")
 
         console = Console(stderr=True, width=80)
         table = Table(show_header=True, show_edge=False, pad_edge=False, box=None)

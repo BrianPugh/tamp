@@ -137,7 +137,7 @@ def build_cython_extensions():
             [
                 "tamp/_c_build_dictionary.pyx",
             ],
-            **extension_kwargs,
+            language="c",
         ),
         Extension(
             "tamp._c_common",

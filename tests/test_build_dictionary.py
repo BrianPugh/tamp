@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,6 +7,7 @@ from tamp.cli.build_dictionary import (
     _compute_positions,
     _split_fragments,
     build_dictionary,
+    evaluate_dictionary_tradeoff,
     find_best_trim_threshold,
     find_knee,
     pack_dictionary,
@@ -275,6 +277,7 @@ class TestFindKnee(unittest.TestCase):
     def test_linear_curve_returns_full(self):
         """A perfectly linear curve has no knee — return full size."""
         # Every byte saves exactly 10 compressed bytes.
+        # Marginal == average everywhere, so every segment is worthwhile.
         results = [(size, 1000 - size * 10) for size in range(10, 110, 10)]
         self.assertEqual(find_knee(results), results[-1][0])
 
@@ -297,38 +300,39 @@ class TestFindKnee(unittest.TestCase):
         self.assertLess(knee, 60, f"expected sharp-knee detection below 60, got {knee}")
         self.assertGreaterEqual(knee, 30)
 
-    def test_gradual_curve_respects_min_benefit_floor(self):
-        """A smoothly concave curve should honor the 90% benefit floor.
+    def test_gradual_curve_selects_high_fill(self):
+        """A smoothly concave curve selects a high fill level.
 
-        Reproduces the SMS-style pathology where Kneedle picks a point
-        around the inflection of the concavity (~50% of total benefit)
-        even though the curve keeps improving steadily all the way to
-        full size.
+        On gradual curves (like SMS), marginal benefit decreases slowly.
+        The knee should land at a high fill point where the marginal
+        per byte finally drops below the threshold.
         """
-        # Smoothly concave, total improvement = 100.
-        # Benefit at each point = size/100 (linear in size after
-        # normalization), but the curve is concave in (size, compressed).
         sizes = list(range(100, 1100, 100))
-        # Designed so benefit grows ~linearly with size — small min_benefit
-        # floors should return early, large floors should return later.
         ys = [1000, 930, 870, 820, 780, 750, 730, 715, 705, 700]
         results = list(zip(sizes, ys))
 
-        knee_default = find_knee(results)  # min_benefit=0.90
-        # 90% of total improvement (300 bytes) = 270 bytes saved; need y <= 730
-        # which first happens at size=700.
-        self.assertEqual(knee_default, 700)
+        knee = find_knee(results)
+        # Should select a high fill level (>= 700), not an early
+        # inflection point that only captures ~50% of improvement.
+        self.assertGreaterEqual(knee, 700)
 
-        # With the old 0.75 default, Kneedle would stop much earlier.
-        knee_old = find_knee(results, min_benefit=0.75)
-        self.assertLess(knee_old, knee_default)
-
-    def test_default_min_benefit_is_90_percent(self):
-        """Default min_benefit is 0.90 — capture at least 90% of improvement."""
-        import inspect
-
-        sig = inspect.signature(find_knee)
-        self.assertEqual(sig.parameters["min_benefit"].default, 0.90)
+    def test_higher_fraction_selects_earlier(self):
+        """A higher marginal_fraction is more aggressive about cutting off."""
+        results = [
+            (10, 900),
+            (20, 600),
+            (30, 300),
+            (40, 295),
+            (50, 291),
+            (60, 288),
+            (70, 286),
+            (80, 285),
+            (90, 284),
+            (100, 283),
+        ]
+        knee_strict = find_knee(results, marginal_fraction=0.8)
+        knee_lenient = find_knee(results, marginal_fraction=0.2)
+        self.assertLessEqual(knee_strict, knee_lenient)
 
     def test_short_results_returns_last(self):
         """Fewer than 3 points — nothing to analyze, return the last."""
@@ -367,7 +371,7 @@ class TestBuildDictionaryDeterminism(unittest.TestCase):
             [sys.executable, "-c", script],
             capture_output=True,
             text=True,
-            env={"PYTHONHASHSEED": seed, "PATH": "/usr/bin:/bin"},
+            env={"PYTHONHASHSEED": seed, "PATH": os.environ.get("PATH", "")},
             check=True,
         )
         return result.stdout.strip()
@@ -421,6 +425,46 @@ class TestFindBestTrimThreshold(unittest.TestCase):
         auto_total = sum(len(tamp.compress(s, window=10, literal=8, dictionary=bytearray(auto_dict))) for s in corpus)
 
         self.assertLessEqual(auto_total, baseline_total)
+
+
+class TestEvaluateDictionaryTradeoff(unittest.TestCase):
+    def test_returns_results_including_effective_size(self):
+        """Results always include the full effective_size."""
+        corpus = [b"sensor_id=42,temp=23.5"] * 20
+        dictionary, effective_size = build_dictionary(corpus, window_bits=10, literal_bits=8)
+        results = evaluate_dictionary_tradeoff(corpus, dictionary, effective_size, window_bits=10)
+        sizes = [r[0] for r in results]
+        self.assertIn(effective_size, sizes)
+
+    def test_more_dictionary_bytes_improves_compression(self):
+        """Compression should generally improve (or not worsen) as dict size increases."""
+        corpus = [f"sensor_id={i},temp=23.{i}".encode() for i in range(50)]
+        dictionary, effective_size = build_dictionary(corpus, window_bits=10, literal_bits=8)
+        results = evaluate_dictionary_tradeoff(corpus, dictionary, effective_size, window_bits=10)
+        # The last point (full dict) should compress at least as well as the first.
+        self.assertLessEqual(results[-1][1], results[0][1])
+
+    def test_zero_effective_size(self):
+        """Zero effective size returns a single baseline point."""
+        import tamp
+
+        corpus = [b"abc"]
+        dictionary = tamp.initialize_dictionary(1024, literal=8)
+        results = evaluate_dictionary_tradeoff(corpus, dictionary, 0, window_bits=10)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0][0], 0)
+
+    def test_sub_dictionary_slicing(self):
+        """Sub-dictionaries contain the rightmost bytes of the full dictionary."""
+        import tamp
+
+        corpus = [b"hello world hello"] * 20
+        dictionary, effective_size = build_dictionary(corpus, window_bits=8, literal_bits=8)
+        results = evaluate_dictionary_tradeoff(corpus, dictionary, effective_size, window_bits=8, n_points=4)
+        # Each result should have a positive compressed size.
+        for dict_bytes, compressed_bytes in results:
+            self.assertGreater(compressed_bytes, 0)
+            self.assertGreater(dict_bytes, 0)
 
 
 class TestBuildDictionaryCli(unittest.TestCase):

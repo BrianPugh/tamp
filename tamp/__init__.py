@@ -84,6 +84,12 @@ except ImportError:
             pass
 
 
+try:
+    from .cli.build_dictionary import build_dictionary
+except ImportError:
+    pass
+
+
 def open(f, mode="rb", **kwargs):
     if "r" in mode and "w" in mode:
         raise ValueError

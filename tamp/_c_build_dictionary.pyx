@@ -15,6 +15,10 @@ def score_substrings(
 ):
     """Count all substring occurrences and return scores dict.
 
+    Retained for unit testing (TestScoreSubstrings). The main pipeline
+    uses ``score_and_multi_frag`` which adds bottom-up pruning and
+    multi-fragment tracking.
+
     Combines counting and scoring into a single Cython pass.
     Returns dict mapping substring -> total bits saved across corpus.
     """
