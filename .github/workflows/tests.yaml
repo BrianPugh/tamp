@@ -310,7 +310,6 @@ jobs:
           key: venv-integrity-${{ matrix.implementation }}-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'build.py', 'tamp/_c_src/**', 'tamp/*.pyx') }}
 
       - name: Install library with sanitizers
-        if: steps.cached-venv.outputs.cache-hit != 'true'
         run: |
           if [ "${{ matrix.implementation }}" = "embedded" ]; then
             TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 poetry install --only main --extras cli --no-interaction
