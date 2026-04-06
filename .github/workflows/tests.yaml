@@ -223,7 +223,7 @@ jobs:
       - name: Run MicroPython tests (reference implementation)
         run: |
           source .venv/bin/activate
-          belay run micropython -X heapsize=200M -m unittest $(find tests -name "test_*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py")
+          belay run micropython -X heapsize=200M -m unittest $(find tests -name "test_*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py" ! -name "test_build_dictionary.py")
 
       - name: Run C tests
         run: make c-test
