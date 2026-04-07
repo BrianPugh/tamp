@@ -160,7 +160,7 @@ describe('Comprehensive Streaming Tests', () => {
           const invalidData = new Uint8Array([0x00, 0x01, 0x02]);
           await d.decompress(invalidData);
         });
-      } catch (error) {
+      } catch (_error) {
         // Expected to fail
       }
 
