@@ -257,6 +257,7 @@ enwik8*
 !datasets/extended-compressed/**
 
 # Cython-generated files
+tamp/_c_build_dictionary.c
 tamp/_c_compressor.c
 tamp/_c_decompressor.c
 tamp/_c_common.c
@@ -453,6 +454,7 @@ tramp
 # Temporary files
 *.tmp
 *.temp
+*.bin
 
 # Fuzz testing corpora and crash artifacts
 fuzz/corpus_*/

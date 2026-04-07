@@ -87,15 +87,16 @@ cdef class Compressor:
         output_buffer_mv = memoryview(output_buffer)
 
         while input_remaining_size:
-            res = ctamp.tamp_compressor_compress(
-                self._c_compressor,
-                output_buffer_ptr,
-                CHUNK_SIZE,
-                &output_buffer_written_size,
-                data_ptr,
-                input_remaining_size,
-                &input_consumed_size
-            )
+            with nogil:
+                res = ctamp.tamp_compressor_compress(
+                    self._c_compressor,
+                    output_buffer_ptr,
+                    CHUNK_SIZE,
+                    &output_buffer_written_size,
+                    data_ptr,
+                    input_remaining_size,
+                    &input_consumed_size
+                )
             if res < 0:
                 raise ERROR_LOOKUP.get(res, NotImplementedError)
             self.f.write(output_buffer_mv[:output_buffer_written_size])
@@ -113,13 +114,16 @@ cdef class Compressor:
         cdef bytearray buffer = bytearray(32)
         cdef size_t output_written_size = 0
 
-        res = ctamp.tamp_compressor_flush(
-            self._c_compressor,
-            <unsigned char *> buffer,
-            len(buffer),
-            &output_written_size,
-            write_token,
-        )
+        cdef unsigned char *buffer_ptr = <unsigned char *> buffer
+        cdef size_t buffer_len = len(buffer)
+        with nogil:
+            res = ctamp.tamp_compressor_flush(
+                self._c_compressor,
+                buffer_ptr,
+                buffer_len,
+                &output_written_size,
+                write_token,
+            )
 
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)

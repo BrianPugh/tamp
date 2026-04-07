@@ -4692,9 +4692,9 @@ test = ["big-O", "jaraco.functools", "jaraco.itertools", "jaraco.test", "more_it
 type = ["pytest-mypy"]
 
 [extras]
-cli = ["cyclopts"]
+cli = ["cyclopts", "rich"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.9"
-content-hash = "7b258fe2498f1f6936ca7ea79737d9a1884684ee30fa0720cf7911a7f6249cf7"
+content-hash = "b156c20f2715e5ff51334773b56cc59a5db7672eebc13f10b34c12390f0fe3a2"

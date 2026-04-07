@@ -223,7 +223,7 @@ jobs:
       - name: Run MicroPython tests (reference implementation)
         run: |
           source .venv/bin/activate
-          belay run micropython -X heapsize=200M -m unittest $(find tests -name "test_*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py")
+          belay run micropython -X heapsize=200M -m unittest $(find tests -name "test_*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py" ! -name "test_build_dictionary.py")
 
       - name: Run C tests
         run: make c-test
@@ -310,7 +310,6 @@ jobs:
           key: venv-integrity-${{ matrix.implementation }}-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'build.py', 'tamp/_c_src/**', 'tamp/*.pyx') }}
 
       - name: Install library with sanitizers
-        if: steps.cached-venv.outputs.cache-hit != 'true'
         run: |
           if [ "${{ matrix.implementation }}" = "embedded" ]; then
             TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 poetry install --only main --extras cli --no-interaction

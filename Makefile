@@ -29,6 +29,8 @@ help:
 	@echo "  make v1-compressed-datasets  Compress all datasets/ files to datasets/v1-compressed/"
 	@echo "  make c-benchmark-stream Benchmark stream API with various temporary working buffer sizes"
 	@echo "  make download-enwik8    Download enwik8 test dataset"
+	@echo "  make download-sms       Download UCI SMS Spam Collection"
+	@echo "  make download-tweets    Download Sentiment140 tweets (10K sample)"
 	@echo "  make tamp-c-library     Build static C library"
 	@echo "  make website-build      Build website for deployment"
 
@@ -144,7 +146,7 @@ endif
 # Data Downloads
 ################
 # Datasets are stored in datasets/ to persist across `make clean`
-.PHONY: download-enwik8 download-silesia v1-compressed-datasets
+.PHONY: download-enwik8 download-silesia download-sms download-tweets v1-compressed-datasets
 
 datasets/enwik8.zip:
 	@mkdir -p datasets
@@ -165,6 +167,35 @@ datasets/silesia:
 	fi
 
 download-silesia: datasets/silesia
+
+datasets/sms-spam-collection.zip:
+	@mkdir -p datasets
+	curl -sL -o datasets/sms-spam-collection.zip \
+		https://archive.ics.uci.edu/static/public/228/sms+spam+collection.zip
+
+datasets/sms.txt: | datasets/sms-spam-collection.zip
+	@unzip -oq datasets/sms-spam-collection.zip SMSSpamCollection -d datasets
+	@cut -f2- datasets/SMSSpamCollection > datasets/sms.txt
+	@rm -f datasets/SMSSpamCollection datasets/readme
+
+download-sms: datasets/sms.txt
+
+datasets/sentiment140.zip:
+	@mkdir -p datasets
+	curl -sL -o datasets/sentiment140.zip \
+		https://cs.stanford.edu/people/alecmgo/trainingandtestdata.zip
+
+datasets/tweets.txt: | datasets/sentiment140.zip
+	@unzip -oq datasets/sentiment140.zip training.1600000.processed.noemoticon.csv -d datasets
+	@python3 -c "\
+	import csv, random; random.seed(42); \
+	tweets = [row[5] for row in csv.reader(open('datasets/training.1600000.processed.noemoticon.csv', encoding='latin-1')) if row[5]]; \
+	open('datasets/tweets.txt', 'w').write('\n'.join(random.sample(tweets, 10000)))"
+	@rm -f datasets/training.1600000.processed.noemoticon.csv
+
+download-tweets: datasets/tweets.txt
+
+.PHONY: download-tweets
 
 v1-compressed-datasets: datasets/enwik8 datasets/silesia
 	@mkdir -p datasets/v1-compressed
@@ -195,7 +226,7 @@ download-micropython:
 	mkdir -p datasets
 	cd datasets && curl -O https://micropython.org/resources/firmware/RPI_PICO-20250415-v1.25.0.uf2
 
-download: download-enwik8 download-silesia download-micropython
+download: download-enwik8 download-silesia download-sms download-tweets download-micropython
 
 
 ##################

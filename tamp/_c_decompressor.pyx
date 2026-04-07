@@ -7,7 +7,6 @@ from . import bit_size
 from ._c_common cimport CHUNK_SIZE
 from ._c_common import ERROR_LOOKUP
 
-
 from typing import Union
 
 
@@ -21,7 +20,7 @@ cdef class Decompressor:
         size_t input_size
         size_t input_consumed
         object f
-        cdef bint _close_f_on_close
+        bint _close_f_on_close
 
     def __cinit__(self):
         self._c_decompressor = <ctamp.TampDecompressor*>PyMem_Malloc(sizeof(ctamp.TampDecompressor))
@@ -76,21 +75,29 @@ cdef class Decompressor:
         cdef:
             unsigned char *output_buffer_ptr = buf
             size_t output_written_size, input_chunk_consumed
+            unsigned char *input_ptr
+            size_t input_avail
+            size_t output_size
+            size_t size
+            ctamp.tamp_res res
 
         size = len(buf)
         while size:
-            # decompress in chunks so we can skill check PyErr_CheckSignals
-            output_size = min(CHUNK_SIZE, size)
+            # decompress in chunks so we can still check PyErr_CheckSignals
+            output_size = min(<size_t>CHUNK_SIZE, size)
 
-            res = ctamp.tamp_decompressor_decompress(
-                self._c_decompressor,
-                output_buffer_ptr,
-                output_size,
-                &output_written_size,
-                self.input_buffer_ptr + self.input_consumed,
-                self.input_size,
-                &input_chunk_consumed
-            )
+            input_ptr = self.input_buffer_ptr + self.input_consumed
+            input_avail = self.input_size
+            with nogil:
+                res = ctamp.tamp_decompressor_decompress(
+                    self._c_decompressor,
+                    output_buffer_ptr,
+                    output_size,
+                    &output_written_size,
+                    input_ptr,
+                    input_avail,
+                    &input_chunk_consumed
+                )
             self.input_size -= input_chunk_consumed
             self.input_consumed += input_chunk_consumed
             output_buffer_ptr += output_written_size
