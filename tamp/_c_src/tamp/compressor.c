@@ -368,10 +368,13 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compres
     res = partial_flush(compressor, output, output_size, output_written_size);
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
 
-    // Write to window (up to end of buffer, no wrap)
-    uint16_t remaining = WINDOW_SIZE - compressor->window_pos;
+    // Write to window (up to end of buffer, no wrap).
+    // Local uint16_t matches tamp_window_copy signature; struct field may be uint32_t (TAMP_ESP32).
+    uint16_t wp = compressor->window_pos;
+    uint16_t remaining = WINDOW_SIZE - wp;
     uint8_t window_write = MIN(count, remaining);
-    tamp_window_copy(compressor->window, &compressor->window_pos, position, window_write, window_mask);
+    tamp_window_copy(compressor->window, &wp, position, window_write, window_mask);
+    compressor->window_pos = wp;
 
     compressor->extended_match_count = 0;  // Position reset not needed - only read when count > 0
 
