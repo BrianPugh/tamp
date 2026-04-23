@@ -26,7 +26,7 @@
  * Note: A 64-byte table with special-cased symbol 1 was tried but was ~10% slower
  * and only saved 8 bytes in final firmware due to added branch logic.
  */
-static const uint8_t HUFFMAN_TABLE[128] = {
+TAMP_STATIC_CONST uint8_t HUFFMAN_TABLE[128] = {
     50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,  50,  85,  85,  85, 85, 122, 123, 104, 104, 86, 86,
     86, 86, 93, 93, 93, 93, 68, 68, 68, 68, 68, 68, 68, 68, 105, 105, 124, 126, 87, 87, 87,  87,  51,  51,  51, 51,
     51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 17, 17, 17,  17,  17,  17,  17, 17, 17,  17,  17,  17,  17, 17,
