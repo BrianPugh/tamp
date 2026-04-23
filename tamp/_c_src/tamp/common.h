@@ -88,6 +88,16 @@ extern "C" {
     } while (0)
 #endif
 
+/* TAMP_STATIC_CONST: declaration prefix for file-local read-only tables.
+ * Normally `static const`, but drops `static` on Xtensa MicroPython native
+ * modules, where `static const` rodata returns incorrect values.
+ * See micropython/micropython#14429. */
+#if defined(__XTENSA__) && defined(MICROPY_ENABLE_DYNRUNTIME)
+#define TAMP_STATIC_CONST const
+#else
+#define TAMP_STATIC_CONST static const
+#endif
+
 /* Include stream API (tamp_compress_stream, tamp_decompress_stream).
  * Enabled by default. Disable with -DTAMP_STREAM=0 to save ~2.8KB.
  */
