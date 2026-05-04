@@ -181,8 +181,10 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
 #endif
     };
     if (!conf) conf = &conf_default;
-    if (conf->window < 8 || conf->window > 15) return TAMP_INVALID_CONF;
-    if (conf->literal < 5 || conf->literal > 8) return TAMP_INVALID_CONF;
+    uint8_t window_bits = conf->window;
+    uint8_t literal_bits = conf->literal;
+    if (window_bits < 8 || window_bits > 15) return TAMP_INVALID_CONF;
+    if (literal_bits < 5 || literal_bits > 8) return TAMP_INVALID_CONF;
     if (conf->append && (!conf->dictionary_reset || conf->use_custom_dictionary)) return TAMP_INVALID_CONF;
 #if !TAMP_EXTENDED_COMPRESS
     if (conf->extended) return TAMP_INVALID_CONF;  // Extended requested but not compiled in

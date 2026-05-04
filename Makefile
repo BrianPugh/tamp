@@ -366,6 +366,8 @@ CTEST_DEFINES = -DTAMP_STREAM_STDIO=1 -DTAMP_STREAM_MEMORY=1 \
 	-DTAMP_STREAM_FATFS=1 -DTEST_FATFS=1 \
 	-DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR
 CTEST_CFLAGS = $(CTEST_INCLUDES) $(CTEST_SANITIZER_FLAGS) $(CTEST_DEFINES)
+# Strict warnings applied only to first-party tamp sources, not third-party (Unity/LittleFS/FatFs)
+CTEST_WARN_FLAGS = -Wall -Wextra -Wtype-limits -Werror
 CTEST_LDFLAGS = $(CTEST_SANITIZER_FLAGS)
 
 # Tamp library objects for testing
@@ -394,7 +396,7 @@ CTEST_TEST_OBJS = \
 # Build tamp source files for testing
 build/ctests/%.o: tamp/_c_src/tamp/%.c
 	@mkdir -p build/ctests
-	$(CTEST_CC) $(CTEST_CFLAGS) -c $< -o $@
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -c $< -o $@
 
 # Build Unity framework
 build/unity/unity.o: ctests/Unity/src/unity.c ctests/Unity/src/unity.h
@@ -460,7 +462,7 @@ CTEST_EMBEDDED_TEST_OBJS = \
 
 build/ctests-embedded/%.o: tamp/_c_src/tamp/%.c
 	@mkdir -p build/ctests-embedded
-	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
 
 build/ctests-embedded/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
 	@mkdir -p build/ctests-embedded
