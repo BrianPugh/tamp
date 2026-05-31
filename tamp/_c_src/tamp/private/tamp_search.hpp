@@ -171,7 +171,7 @@ namespace tamp {
                     // Pointer to potential match on last byte of pattern:
                     const uint8_t* last = first + patLen - 1;
 
-                    const uint8_t* const end = first + dataLen - patLen;
+                    const uint8_t* const end = first + dataLen - patLen + 1;
 
 
                     // Using (q1:q0) to load+align 'first' data,
