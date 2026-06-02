@@ -237,6 +237,9 @@ class Compressor:
             # trailing FLUSH, this triggers a dictionary reset in the decompressor.
             self._bit_writer.write(_FLUSH_CODE, 9, flush=False)
             self._bit_writer.bit_pos = 16  # Pad to 2 bytes (bits are already zero)
+            # This FLUSH is the most recently emitted token; mark it so an immediate
+            # redundant flush() doesn't append a second FLUSH and over-signal a reset.
+            self._last_was_flush = True
         else:
             # Write header
             self._bit_writer.write(window - 8, 3, flush=False)
@@ -265,6 +268,9 @@ class Compressor:
         self._extended_match_position = 0
         self._cached_match_index = -1
         self._cached_match_size = 0
+        # True if the most recently emitted token was a FLUSH with no data since.
+        # Suppresses an accidental double-FLUSH (a dictionary-reset signal).
+        self._last_was_flush = False
 
     def _validate_no_match_overlap(self, write_pos, match_index, match_size):
         """Check if writing a single byte will overlap with a future match section."""
@@ -275,6 +281,10 @@ class Compressor:
 
         if not self._input_buffer:
             return bytes_written
+
+        # Real data is being processed: any pending RLE/extended state drained by a
+        # later flush() was also created here, so the next FLUSH won't be "consecutive".
+        self._last_was_flush = False
 
         if self._extended_match_count:
             while self._input_buffer:
@@ -567,8 +577,15 @@ class Compressor:
             self._cached_match_index = -1
             self._cached_match_size = 0
 
-        bytes_written_flush = self._bit_writer.flush(write_token=write_token, force_token=self.dictionary_reset)
-        bytes_written += bytes_written_flush
+        # Suppress a redundant second consecutive FLUSH. Two FLUSH tokens with no
+        # data between them are the double-FLUSH dictionary-reset signal: a
+        # decompressor on a dictionary_reset stream would re-initialize its window,
+        # but this compressor's window is not reset here, desyncing the two. The
+        # sanctioned reset path, reset_dictionary(), emits its FLUSH tokens directly.
+        emit_token = write_token and not self._last_was_flush
+        bytes_written += self._bit_writer.flush(write_token=emit_token, force_token=self.dictionary_reset)
+        if self._bit_writer._flush_token_written:
+            self._last_was_flush = True
         return bytes_written
 
     def reset_dictionary(self) -> int:
@@ -593,21 +610,15 @@ class Compressor:
 
         bytes_written = 0
 
-        # Flush all pending data with write_token=True.
-        bytes_written += self.flush(write_token=True)
-
-        # We need exactly 2 consecutive FLUSHes in the stream.
-        # If flush already wrote one, we need 1 more; otherwise 2.
-        flushes_needed = 1 if self._bit_writer._flush_token_written else 2
-        for _ in range(flushes_needed):
-            bytes_written += self._bit_writer.write(_FLUSH_CODE, 9)
-            # Pad to byte boundary
-            if self._bit_writer.bit_pos > 0:
-                byte = (self._bit_writer.buffer >> 24) & 0xFF
-                self._bit_writer.f.write(byte.to_bytes(1, "big"))
-                self._bit_writer.bit_pos = 0
-                self._bit_writer.buffer = 0
-                bytes_written += 1
+        # Write 2 FLUSH tokens for the double-FLUSH reset signal. The first drains
+        # any pending data. dictionary_reset being set guarantees flush() writes a
+        # FLUSH token even when the bit buffer is empty. Clearing _last_was_flush
+        # before each flush bypasses the double-FLUSH suppression in flush(): here
+        # we *intend* to emit two consecutive FLUSH tokens, paired with the
+        # dictionary re-init below. Mirrors tamp_compressor_reset_dictionary in C.
+        for _ in range(2):
+            self._last_was_flush = False
+            bytes_written += self.flush(write_token=True)
 
         # Re-initialize dictionary with default and reset all mutable state,
         # matching what the decompressor does on a double-FLUSH reset

@@ -544,6 +544,74 @@ void test_reset_dictionary_small_output_buffer(void) {
     TEST_ASSERT_EQUAL_MEMORY(data2, output + strlen(data1), strlen(data2));
 }
 
+void test_double_flush_does_not_reset(void) {
+    // A redundant flush(write_token=true) must NOT emit a second consecutive FLUSH.
+    // With dictionary_reset=true, two FLUSH tokens with no data between them are the
+    // double-FLUSH reset signal: the decompressor would re-initialize its window while
+    // this compressor's window stays put, corrupting all later output. The redundant
+    // FLUSH must be suppressed so the stream round-trips cleanly.
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 10];
+    unsigned char compressed[512];
+    size_t total_written = 0;
+    size_t chunk_written, input_consumed;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .extended = true,
+        .dictionary_reset = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    const char *data1 = "Hello world! Hello world! Hello world! ";
+    res = tamp_compressor_compress(&compressor, compressed, sizeof(compressed), &chunk_written,
+                                   (const unsigned char *)data1, strlen(data1), &input_consumed);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    // First flush emits a FLUSH; the next two redundant flushes must emit nothing.
+    res = tamp_compressor_flush(&compressor, compressed + total_written, sizeof(compressed) - total_written,
+                                &chunk_written, true);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    for (int i = 0; i < 2; i++) {
+        res = tamp_compressor_flush(&compressor, compressed + total_written, sizeof(compressed) - total_written,
+                                    &chunk_written, true);
+        TEST_ASSERT_EQUAL(TAMP_OK, res);
+        TEST_ASSERT_EQUAL(0, chunk_written);  // redundant FLUSH suppressed
+        total_written += chunk_written;
+    }
+
+    const char *data2 = "Goodbye world! Goodbye world! Goodbye world! ";
+    res = tamp_compressor_compress_and_flush(&compressor, compressed + total_written,
+                                             sizeof(compressed) - total_written, &chunk_written,
+                                             (const unsigned char *)data2, strlen(data2), &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    total_written += chunk_written;
+
+    // Decompress: must recover data1 + data2 with no dictionary reset in between.
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 10];
+    unsigned char output[512];
+    size_t output_written;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       total_written, NULL);
+    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+
+    size_t expected_size = strlen(data1) + strlen(data2);
+    TEST_ASSERT_EQUAL(expected_size, output_written);
+    TEST_ASSERT_EQUAL_MEMORY(data1, output, strlen(data1));
+    TEST_ASSERT_EQUAL_MEMORY(data2, output + strlen(data1), strlen(data2));
+}
+
 void test_compress_cb_callback_abort(void) {
     TampCompressor compressor;
     unsigned char window[1 << 10];

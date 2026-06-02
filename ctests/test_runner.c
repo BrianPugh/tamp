@@ -38,6 +38,7 @@ int main(void) {
     RUN_TEST(test_reset_dictionary_roundtrip);
     RUN_TEST(test_reset_dictionary_requires_conf_flag);
     RUN_TEST(test_reset_dictionary_small_output_buffer);
+    RUN_TEST(test_double_flush_does_not_reset);
 
     // Decompressor extended tests
     RUN_TEST(test_decompressor_extended_rle);
