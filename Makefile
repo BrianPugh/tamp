@@ -147,7 +147,7 @@ endif
 # Data Downloads
 ################
 # Datasets are stored in datasets/ to persist across `make clean`
-.PHONY: download-enwik8 download-silesia download-sms download-tweets v1-compressed-datasets extended-compressed-datasets
+.PHONY: download-enwik8 download-silesia download-sms download-tweets download-micropython v1-compressed-datasets extended-compressed-datasets
 
 datasets/enwik8.zip:
 	@mkdir -p datasets

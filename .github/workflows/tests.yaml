@@ -176,7 +176,7 @@ jobs:
         id: cached-venv
         with:
           path: .venv/
-          key: venv-dataset-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+          key: venv-dataset-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'build.py', 'tamp/_c_src/**', 'tamp/*.pyx') }}
 
       - name: Install library
         run: poetry install --extras cli --no-interaction
@@ -241,7 +241,7 @@ jobs:
         id: cached-venv
         with:
           path: .venv/
-          key: venv-test-${{ runner.os }}-${{ steps.setup-python-project.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+          key: venv-test-${{ runner.os }}-${{ steps.setup-python-project.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'build.py', 'tamp/_c_src/**', 'tamp/*.pyx') }}
 
       - name: Install MicroPython
         uses: BrianPugh/install-micropython@v2

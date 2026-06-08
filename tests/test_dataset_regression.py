@@ -4,8 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from tamp._c_compressor import compress as c_compress
-from tamp._c_decompressor import decompress as c_decompress
+try:
+    from tamp._c_compressor import compress as c_compress
+    from tamp._c_decompressor import decompress as c_decompress
+except ImportError:
+    c_compress = None
+    c_decompress = None
 
 PROJECT_DIR = Path(__file__).parent.parent
 
@@ -17,9 +21,10 @@ PROJECT_DIR = Path(__file__).parent.parent
 # bytes hash to the recorded value (format-stability regression), then decompresses
 # and asserts a byte-exact round trip (correctness).
 #
-# The source corpora are fetched with ``make download-enwik8 download-silesia``;
-# the uf2 fixture lives at ``datasets/RPI_PICO-20250415-v1.25.0.uf2``. Tests for a
-# corpus that isn't present locally are skipped (use ``--no-dataset`` to skip all).
+# The source corpora are fetched with
+# ``make download-enwik8 download-silesia download-micropython``; the uf2 fixture
+# lives at ``datasets/RPI_PICO-20250415-v1.25.0.uf2``. Tests for a corpus that isn't
+# present locally are skipped (use ``--no-dataset`` to skip all).
 #
 # To regenerate the ``.tamp`` ground-truth binaries (e.g. for cross-checking against
 # another implementation), see ``make v1-compressed-datasets`` /
@@ -105,9 +110,14 @@ DATASETS = [
 
 
 def _check(rel_path, expected_compressed_sha256, *, extended):
+    if c_compress is None or c_decompress is None:
+        raise unittest.SkipTest("C extensions not built (run `poetry run python build.py build_ext --inplace`)")
+
     source = PROJECT_DIR / rel_path
     if not source.is_file():
-        raise unittest.SkipTest(f"source corpus not found: {rel_path} (run `make download-enwik8 download-silesia`)")
+        raise unittest.SkipTest(
+            f"source corpus not found: {rel_path} (run `make download-enwik8 download-silesia download-micropython`)"
+        )
 
     data = source.read_bytes()
     compressed = c_compress(data, extended=extended)
