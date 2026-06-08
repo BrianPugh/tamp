@@ -6,12 +6,12 @@ def pytest_addoption(parser):
         "--no-dataset",
         action="store_true",
         default=False,
-        help="Skip dataset regression tests (which require LFS files).",
+        help="Skip dataset regression tests (which require the downloaded corpora).",
     )
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "dataset: mark test as requiring dataset files (use --no-dataset to skip)")
+    config.addinivalue_line("markers", "dataset: mark test as requiring corpus files (use --no-dataset to skip)")
 
 
 def pytest_collection_modifyitems(config, items):
