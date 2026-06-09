@@ -26,7 +26,8 @@ help:
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make binary-size        Show binary sizes for README table"
-	@echo "  make v1-compressed-datasets  Compress all datasets/ files to datasets/v1-compressed/"
+	@echo "  make v1-compressed-datasets        Regenerate ground-truth v1 (--no-extended) .tamp binaries"
+	@echo "  make extended-compressed-datasets  Regenerate ground-truth extended .tamp binaries"
 	@echo "  make c-benchmark-stream Benchmark stream API with various temporary working buffer sizes"
 	@echo "  make download-enwik8    Download enwik8 test dataset"
 	@echo "  make download-sms       Download UCI SMS Spam Collection"
@@ -146,7 +147,7 @@ endif
 # Data Downloads
 ################
 # Datasets are stored in datasets/ to persist across `make clean`
-.PHONY: download-enwik8 download-silesia download-sms download-tweets v1-compressed-datasets
+.PHONY: download-enwik8 download-silesia download-sms download-tweets download-micropython v1-compressed-datasets extended-compressed-datasets
 
 datasets/enwik8.zip:
 	@mkdir -p datasets
@@ -197,20 +198,33 @@ download-tweets: datasets/tweets.txt
 
 .PHONY: download-tweets
 
+# Regenerate the ground-truth compressed binaries. These are no longer committed
+# (tests/test_dataset_regression.py stores only their SHA256s and re-derives them);
+# use these targets when you actually need the binaries on disk. The recorded
+# hashes identify the exact files these targets must produce.
 v1-compressed-datasets: datasets/enwik8 datasets/silesia
 	@mkdir -p datasets/v1-compressed
 	@for f in datasets/*; do \
 		[ -f "$$f" ] || continue; \
 		base=$$(basename "$$f"); \
 		echo "Compressing $$f -> datasets/v1-compressed/$$base.tamp"; \
-		poetry run tamp compress "$$f" -o "datasets/v1-compressed/$$base.tamp"; \
+		poetry run tamp compress --no-extended "$$f" -o "datasets/v1-compressed/$$base.tamp"; \
 	done
 	@mkdir -p datasets/v1-compressed/silesia
 	@for f in datasets/silesia/*; do \
 		[ -f "$$f" ] || continue; \
 		base=$$(basename "$$f"); \
 		echo "Compressing $$f -> datasets/v1-compressed/silesia/$$base.tamp"; \
-		poetry run tamp compress "$$f" -o "datasets/v1-compressed/silesia/$$base.tamp"; \
+		poetry run tamp compress --no-extended "$$f" -o "datasets/v1-compressed/silesia/$$base.tamp"; \
+	done
+
+extended-compressed-datasets: datasets/enwik8 datasets/silesia
+	@mkdir -p datasets/extended-compressed
+	@for f in datasets/* datasets/silesia/*; do \
+		[ -f "$$f" ] || continue; \
+		base=$$(basename "$$f"); \
+		echo "Compressing $$f -> datasets/extended-compressed/$$base.tamp"; \
+		poetry run tamp compress --extended "$$f" -o "datasets/extended-compressed/$$base.tamp"; \
 	done
 
 # Derived test files (OK to be in build/, quick to regenerate)

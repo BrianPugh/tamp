@@ -4,166 +4,145 @@ from pathlib import Path
 
 import pytest
 
+try:
+    from tamp._c_compressor import compress as c_compress
+    from tamp._c_decompressor import decompress as c_decompress
+except ImportError:
+    c_compress = None
+    c_decompress = None
+
 PROJECT_DIR = Path(__file__).parent.parent
 
-# Test C implementation (Python implementation is too slow for large datasets)
-from tamp._c_decompressor import decompress as c_decompress
+# Regression fixtures for the compressed output of known corpora.
+#
+# Rather than committing the (large) ground-truth ``.tamp`` binaries via git LFS,
+# we store only the SHA256 of the compressed output here. Each test compresses
+# the source corpus with the current C implementation and asserts the compressed
+# bytes hash to the recorded value (format-stability regression), then decompresses
+# and asserts a byte-exact round trip (correctness).
+#
+# The source corpora are fetched with
+# ``make download-enwik8 download-silesia download-micropython``; the uf2 fixture
+# lives at ``datasets/RPI_PICO-20250415-v1.25.0.uf2``. Tests for a corpus that isn't
+# present locally are skipped (use ``--no-dataset`` to skip all).
+#
+# To regenerate the ``.tamp`` ground-truth binaries (e.g. for cross-checking against
+# another implementation), see ``make v1-compressed-datasets`` /
+# ``make extended-compressed-datasets``; the SHA256s below identify the exact files
+# those targets must produce.
+#
+# Compression settings are the library defaults (window=10, literal=8, no lazy
+# matching); only the ``extended`` flag varies between the two formats.
 
-DECOMPRESSOR_IMPLEMENTATIONS = [
-    ("C (Cython)", c_decompress),
-]
-
-# Expected SHA256 hashes of the *decompressed* content.
-V1_DATASETS = [
+# (source_rel_path, v1_compressed_sha256, extended_compressed_sha256)
+DATASETS = [
     (
-        "datasets/v1-compressed/enwik8.tamp",
-        "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+        "datasets/enwik8",
+        "02e05af059a0040d641988075cf1dfc479a084f9a34b5c8a348354211c5fa038",
+        "d9d804c91b4dc5e81856db074760037040421cfa84e1ea211e16dde8c295ce6d",
     ),
     (
-        "datasets/v1-compressed/RPI_PICO-20250415-v1.25.0.uf2.tamp",
-        "e0c40eacf1afc550a6add74888c48bb981b28788a6d75a62a0e2444e997b9864",
+        "datasets/RPI_PICO-20250415-v1.25.0.uf2",
+        "b14029d9171b6fdff493b03db6634cf20d654674fbd68c0ea6e1b321af1a4aad",
+        "94be865699e667ceffb7bae10bc5c040fe6cdc22b9e02e61bd88363d767ec171",
     ),
     (
-        "datasets/v1-compressed/silesia/dickens.tamp",
-        "b24c37886142e11d0ee687db6ab06f936207aa7f2ea1fd1d9a36763c7a507e6a",
+        "datasets/silesia/dickens",
+        "caacd14fc2a6bbf5b8ee13b49f94d1ddab2b8eba8e6379685ee67f6b309f33fd",
+        "01482dc4fa9c7c7674eca711a378d8d1ac7c59615b326a8d9a06f09bc9f33c30",
     ),
     (
-        "datasets/v1-compressed/silesia/mozilla.tamp",
-        "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
+        "datasets/silesia/mozilla",
+        "5a4d69d28071e4327917be293ff4c9cd9c1b362a48d8f15d5693b786622e7343",
+        "53497c04175742c323b7e086a4f0ce44533c8f238ef85562591c79a587a81679",
     ),
     (
-        "datasets/v1-compressed/silesia/mr.tamp",
-        "68637ed52e3e4860174ed2dc0840ac77d5f1a60abbcb13770d5754e3774d53e6",
+        "datasets/silesia/mr",
+        "7862014d14955b765959ddc875f00f36401b49654e75a564f9313b9ac04c35dd",
+        "94f27dfffe842fff3669e80eb5a3c769c33cd591f08001ae5e2eb95ff152a1fc",
     ),
     (
-        "datasets/v1-compressed/silesia/nci.tamp",
-        "fc63a31770947b8c2062d3b19ca94c00485a232bb91b502021948fee983e1635",
+        "datasets/silesia/nci",
+        "cb20a8e688046e36d123d2528c16c12dfa75e6cb1ae6e7bbf7d634f80ea7ae07",
+        "0acbb7c787947df92ab4a44d4259f52d327d98dd2ec5860a998c51ed32409753",
     ),
     (
-        "datasets/v1-compressed/silesia/ooffice.tamp",
-        "e7ee013880d34dd5208283d0d3d91b07f442e067454276095ded14f322a656eb",
+        "datasets/silesia/ooffice",
+        "8d7c35aae8fc664d89350fbf6162db34151f7ef85175c555d4c366f23ecd2b80",
+        "ae3bcd7bbff8f223a2c4ca937a5e2eafd793c8abda48d203ed110e98f2896526",
     ),
     (
-        "datasets/v1-compressed/silesia/osdb.tamp",
-        "60f027179302ca3ad87c58ac90b6be72ec23588aaa7a3b7fe8ecc0f11def3fa3",
+        "datasets/silesia/osdb",
+        "2e28f5f7cb1173a288cdaadfedb3a554ed50af3bb297fe029964876d7345d69b",
+        "1eb802368db32844da9c195095cb6727f0c39f719325ac23c446cee2de1d557d",
     ),
     (
-        "datasets/v1-compressed/silesia/reymont.tamp",
-        "0eac0114a3dfe6e2ee1f345a0f79d653cb26c3bc9f0ed79238af4933422b7578",
+        "datasets/silesia/reymont",
+        "f81ae5f8ae000a3ba898efea3c4b303628fe2d3d432f8913f07d5feac9274e3f",
+        "4024c6820a3af628dd2059c9261b2713c9a8f48b4a26e57c45a9776fec9b8068",
     ),
     (
-        "datasets/v1-compressed/silesia/samba.tamp",
-        "93ba07bc44d8267789c1d911992f40b089ffa2140b4a160fac11ccae9a40e7b2",
+        "datasets/silesia/samba",
+        "41a7d7d82211282c56c538e78376e8454867eb83cd0b7c1722135b9590d92306",
+        "f13c7e856a8e0366b7c2fa58de56bde427bf1840335e596a70db46a6aff4feec",
     ),
     (
-        "datasets/v1-compressed/silesia/sao.tamp",
-        "c2d0ea2cc59d4c21b7fe43a71499342a00cbe530a1d5548770e91ecd6214adcc",
+        "datasets/silesia/sao",
+        "3b041d04441550f118ae2e0a179e32a43c8cfe364daa9c5233a316932bb35a62",
+        "8c05ac1c7d78b04874f07e10265cd254ecf9d6dcf1a3f0d1ea695815509ff0b1",
     ),
     (
-        "datasets/v1-compressed/silesia/webster.tamp",
-        "6a68f69b26daf09f9dd84f7470368553194a0b294fcfa80f1604efb11143a383",
+        "datasets/silesia/webster",
+        "dec3393e12db417223069da7b77cd458f08f288ee5bf456ea48656a9024674e8",
+        "91d3c9ddb94e370d4f9cb518e846fda8a197bd9ef4ea4fcb91f84688af49316a",
     ),
     (
-        "datasets/v1-compressed/silesia/x-ray.tamp",
-        "7de9fce1405dc44ae5e6813ed21cd5751e761bd4265655a005d39b9685d1c9ad",
+        "datasets/silesia/x-ray",
+        "933bbf2441f5938a80a6b4817160c86e77f47c48ab84612adceb45d728efdfd5",
+        "4ba0c1fb79addae24888c12a466e84b73c32ca608836c458487226d224a63fc3",
     ),
     (
-        "datasets/v1-compressed/silesia/xml.tamp",
-        "0e82e54e695c1938e4193448022543845b33020c8be6bf3bf3ead2224903e08c",
-    ),
-]
-
-# Extended format datasets (uses RLE and Extended Match encoding)
-EXTENDED_DATASETS = [
-    (
-        "datasets/extended-compressed/RPI_PICO-20250415-v1.25.0.uf2.tamp",
-        "e0c40eacf1afc550a6add74888c48bb981b28788a6d75a62a0e2444e997b9864",
-    ),
-    (
-        "datasets/extended-compressed/dickens.tamp",
-        "b24c37886142e11d0ee687db6ab06f936207aa7f2ea1fd1d9a36763c7a507e6a",
-    ),
-    (
-        "datasets/extended-compressed/mr.tamp",
-        "68637ed52e3e4860174ed2dc0840ac77d5f1a60abbcb13770d5754e3774d53e6",
-    ),
-    (
-        "datasets/extended-compressed/ooffice.tamp",
-        "e7ee013880d34dd5208283d0d3d91b07f442e067454276095ded14f322a656eb",
-    ),
-    (
-        "datasets/extended-compressed/osdb.tamp",
-        "60f027179302ca3ad87c58ac90b6be72ec23588aaa7a3b7fe8ecc0f11def3fa3",
-    ),
-    (
-        "datasets/extended-compressed/reymont.tamp",
-        "0eac0114a3dfe6e2ee1f345a0f79d653cb26c3bc9f0ed79238af4933422b7578",
-    ),
-    (
-        "datasets/extended-compressed/sao.tamp",
-        "c2d0ea2cc59d4c21b7fe43a71499342a00cbe530a1d5548770e91ecd6214adcc",
-    ),
-    (
-        "datasets/extended-compressed/x-ray.tamp",
-        "7de9fce1405dc44ae5e6813ed21cd5751e761bd4265655a005d39b9685d1c9ad",
-    ),
-    (
-        "datasets/extended-compressed/xml.tamp",
-        "0e82e54e695c1938e4193448022543845b33020c8be6bf3bf3ead2224903e08c",
-    ),
-    (
-        "datasets/extended-compressed/samba.tamp",
-        "93ba07bc44d8267789c1d911992f40b089ffa2140b4a160fac11ccae9a40e7b2",
-    ),
-    (
-        "datasets/extended-compressed/nci.tamp",
-        "fc63a31770947b8c2062d3b19ca94c00485a232bb91b502021948fee983e1635",
-    ),
-    (
-        "datasets/extended-compressed/webster.tamp",
-        "6a68f69b26daf09f9dd84f7470368553194a0b294fcfa80f1604efb11143a383",
-    ),
-    (
-        "datasets/extended-compressed/mozilla.tamp",
-        "657fc3764b0c75ac9de9623125705831ebbfbe08fed248df73bc2dc66e2a963b",
-    ),
-    (
-        "datasets/extended-compressed/enwik8.tamp",
-        "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+        "datasets/silesia/xml",
+        "1340ee234214f06e36b43bd3089d56b29ae9fa31ef945c75d9b23ab67cb89bc6",
+        "11a9d7e077f31a83b06cbcfb95c6ef2d74355e6f6af9decba3c2e3529e1e903f",
     ),
 ]
 
 
-class TestV1Decompression(unittest.TestCase):
+def _check(rel_path, expected_compressed_sha256, *, extended):
+    if c_compress is None or c_decompress is None:
+        raise unittest.SkipTest("C extensions not built (run `poetry run python build.py build_ext --inplace`)")
+
+    source = PROJECT_DIR / rel_path
+    if not source.is_file():
+        raise unittest.SkipTest(
+            f"source corpus not found: {rel_path} (run `make download-enwik8 download-silesia download-micropython`)"
+        )
+
+    data = source.read_bytes()
+    compressed = c_compress(data, extended=extended)
+
+    actual = hashlib.sha256(compressed).hexdigest()
+    assert actual == expected_compressed_sha256, f"compressed SHA256 mismatch for {rel_path} (extended={extended})"
+
+    # Round-trip: the compressed stream must decompress back to the original bytes.
+    assert c_decompress(compressed) == data, f"round-trip mismatch for {rel_path} (extended={extended})"
+
+
+class TestV1Compression(unittest.TestCase):
     @pytest.mark.dataset
-    def test_v1_decompress(self):
-        for impl_name, decompress_func in DECOMPRESSOR_IMPLEMENTATIONS:
-            for rel_path, expected_sha256 in V1_DATASETS:
-                with self.subTest(implementation=impl_name, dataset=rel_path):
-                    path = PROJECT_DIR / rel_path
-
-                    with open(path, "rb") as f:
-                        data = f.read()
-
-                    decompressed = decompress_func(data)
-                    actual = hashlib.sha256(decompressed).hexdigest()
-                    self.assertEqual(actual, expected_sha256, f"SHA256 mismatch for {rel_path} using {impl_name}")
+    def test_v1_compress(self):
+        for rel_path, v1_sha256, _ in DATASETS:
+            with self.subTest(dataset=rel_path):
+                _check(rel_path, v1_sha256, extended=False)
 
 
-class TestExtendedDecompression(unittest.TestCase):
+class TestExtendedCompression(unittest.TestCase):
     @pytest.mark.dataset
-    def test_extended_decompress(self):
-        for impl_name, decompress_func in DECOMPRESSOR_IMPLEMENTATIONS:
-            for rel_path, expected_sha256 in EXTENDED_DATASETS:
-                with self.subTest(implementation=impl_name, dataset=rel_path):
-                    path = PROJECT_DIR / rel_path
-
-                    with open(path, "rb") as f:
-                        data = f.read()
-
-                    decompressed = decompress_func(data)
-                    actual = hashlib.sha256(decompressed).hexdigest()
-                    self.assertEqual(actual, expected_sha256, f"SHA256 mismatch for {rel_path} using {impl_name}")
+    def test_extended_compress(self):
+        for rel_path, _, extended_sha256 in DATASETS:
+            with self.subTest(dataset=rel_path):
+                _check(rel_path, extended_sha256, extended=True)
 
 
 if __name__ == "__main__":
