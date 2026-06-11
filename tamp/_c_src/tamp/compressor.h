@@ -23,6 +23,8 @@ typedef struct TampCompressor {
 
     /* WARM: read frequently, often cached in locals */
     uint8_t min_pattern_size;  // Minimum pattern size (2 bits used; 2 or 3)
+    uint8_t last_was_flush;    // 1 if the most recently emitted token was a FLUSH (no data since).
+                               // Suppresses an accidental double-FLUSH (a dictionary-reset signal).
     TampConf conf;
 #else   // Use bitfields for reduced memory-usage
     /* HOT: accessed every iteration of the compression loop */
@@ -52,6 +54,14 @@ typedef struct TampCompressor {
 #if TAMP_EXTENDED_COMPRESS
     uint8_t rle_count;             // Current RLE run length (max 241)
     uint8_t extended_match_count;  // Current extended match size (max ~134)
+#endif
+#if !TAMP_ESP32
+    // 1 if the most recently emitted token was a FLUSH (no data since); suppresses an
+    // accidental double-FLUSH (a dictionary-reset signal). Placed at the struct tail (in
+    // existing padding) so it does NOT shift the trailing fields above to higher offsets,
+    // which would push them out of Cortex-M0+ small load/store immediate range and bloat
+    // unrelated functions. The ESP32 variant keeps it inline (free in WARM-section padding).
+    uint8_t last_was_flush;
 #endif
 } TampCompressor;
 

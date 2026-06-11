@@ -208,6 +208,9 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_init(TampCompressor* compressor, con
         // previous stream's trailing FLUSH, this triggers a dictionary reset.
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
         compressor->bit_buffer_pos = 16;
+        // This FLUSH is the most recently emitted token; mark it so an immediate
+        // redundant flush() doesn't append a second FLUSH and over-signal a reset.
+        compressor->last_was_flush = 1;
     } else {
         // Header byte 1: [window:3][literal:2][use_custom_dictionary:1][extended:1][more_headers:1]
         uint8_t header = ((conf->window - 8) << 5) | ((conf->literal - 5) << 3) | (conf->use_custom_dictionary << 2) |
@@ -491,6 +494,10 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
 
     if (TAMP_UNLIKELY(compressor->input_size == 0)) return TAMP_OK;
 
+    // Real data is being processed: any pending RLE/extended state drained by a
+    // later flush() was also created here, so the next FLUSH won't be "consecutive".
+    compressor->last_was_flush = 0;
+
     // Make sure there's enough room in the bit buffer.
     res = partial_flush(compressor, &output, &output_size, output_written_size);
     if (TAMP_UNLIKELY(res != TAMP_OK)) return res;
@@ -711,7 +718,14 @@ flush_check:
 flush_done:
     // At this point, up to 7 bits may remain in the compressor->bit_buffer
     // The output buffer may have 0 bytes remaining.
-    if (write_token && (compressor->bit_buffer_pos || compressor->conf.dictionary_reset)) {
+    // Suppress a redundant second consecutive FLUSH. Two FLUSH tokens with no data
+    // between them are the double-FLUSH dictionary-reset signal: a decompressor on a
+    // dictionary_reset stream would re-initialize its window, but THIS compressor's
+    // window is not reset here, desyncing the two and corrupting all later output.
+    // The sanctioned reset path, tamp_compressor_reset_dictionary(), clears
+    // last_was_flush before each flush so it can still emit the real double-FLUSH.
+    if (write_token && !compressor->last_was_flush &&
+        (compressor->bit_buffer_pos || compressor->conf.dictionary_reset)) {
         // We don't want to write the FLUSH token to the bit_buffer unless
         // we are confident that it'll wind up in the output buffer
         // in THIS function call.
@@ -719,6 +733,7 @@ flush_done:
         // end up accidentally writing multiple FLUSH tokens.
         if (TAMP_UNLIKELY(output_size < 2)) return TAMP_OUTPUT_FULL;
         write_to_bit_buffer(compressor, FLUSH_CODE, 9);
+        compressor->last_was_flush = 1;
     }
 
     // At this point, up to 16 bits may remain in the compressor->bit_buffer
@@ -787,6 +802,9 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_reset_dictionary(TampCompressor* com
     // FLUSH token even when bit_buffer_pos is 0.
     for (uint8_t i = 0; i < 2; i++) {
         size_t flush_written_size;
+        // Bypass the double-FLUSH suppression in flush(): here we *intend* to emit
+        // two consecutive FLUSH tokens, paired with the dictionary re-init below.
+        compressor->last_was_flush = 0;
         res = tamp_compressor_flush(compressor, output, output_size, &flush_written_size, true);
         *output_written_size += flush_written_size;
         if (TAMP_UNLIKELY(res != TAMP_OK)) return res;

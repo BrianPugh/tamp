@@ -529,6 +529,31 @@ class TestCompressorAndDecompressor(unittest.TestCase):
                 actual = d.read()
                 self.assertEqual(actual, data1 + data2)
 
+    def test_double_flush_does_not_reset(self):
+        """An accidental redundant flush() must not emit a corrupting double-FLUSH.
+
+        With dictionary_reset=True every flush(write_token=True) would otherwise
+        emit a FLUSH token. Two in a row (no data between) form the double-FLUSH
+        dictionary-reset signal, which would reset the decompressor's window while
+        the compressor's window stays put -> corruption. The redundant FLUSH must
+        be suppressed so the stream round-trips cleanly.
+        """
+        data1 = b"Hello world! " * 20
+        data2 = b"Goodbye world! " * 20
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            with BytesIO() as f, self.subTest(Compressor=Compressor, Decompressor=Decompressor):
+                c = Compressor(f, dictionary_reset=True)
+                c.write(data1)
+                c.flush(write_token=True)
+                c.flush(write_token=True)  # redundant: must NOT signal a reset
+                c.flush(write_token=True)  # still must NOT signal a reset
+                c.write(data2)
+                c.flush(write_token=False)
+
+                f.seek(0)
+                d = Decompressor(f)
+                self.assertEqual(d.read(), data1 + data2)
+
 
 if __name__ == "__main__":
     unittest.main()
