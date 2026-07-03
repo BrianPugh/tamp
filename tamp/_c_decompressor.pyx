@@ -21,6 +21,7 @@ cdef class Decompressor:
         size_t input_consumed
         object f
         bint _close_f_on_close
+        bint _f_has_readinto
 
     def __cinit__(self):
         self._c_decompressor = <ctamp.TampDecompressor*>PyMem_Malloc(sizeof(ctamp.TampDecompressor))
@@ -42,6 +43,7 @@ cdef class Decompressor:
             self._close_f_on_close = False
 
         self.f = f
+        self._f_has_readinto = hasattr(f, "readinto")
 
         self.input_buffer = bytearray(CHUNK_SIZE)
         self.input_buffer_ptr = self.input_buffer
@@ -63,6 +65,11 @@ cdef class Decompressor:
 
         if conf.use_custom_dictionary and dictionary is None:
             raise ValueError
+
+        if dictionary and bit_size(len(dictionary) - 1) != conf.window:
+            # A wrong-size buffer used as the window would let the C decompressor
+            # write out of bounds.
+            raise ValueError("Dictionary-window size mismatch.")
 
         self._window_buffer = dictionary if dictionary else bytearray(1 << conf.window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
@@ -105,7 +112,13 @@ cdef class Decompressor:
 
             if res == ctamp.TAMP_INPUT_EXHAUSTED:
                 # Read in more data
-                self.input_size = self.f.readinto(self.input_buffer)
+                if self._f_has_readinto:
+                    self.input_size = self.f.readinto(self.input_buffer)
+                else:
+                    # Fall back for file-like objects that only implement read().
+                    chunk = self.f.read(CHUNK_SIZE)
+                    self.input_size = len(chunk)
+                    self.input_buffer[:self.input_size] = chunk
                 self.input_consumed = 0
                 if self.input_size == 0:
                     break;
@@ -137,7 +150,9 @@ cdef class Decompressor:
             # decompression happens inside of readinto
             read_size = self.readinto(buf)
             if size > 0:
-                # We one-shot the decompression
+                # We one-shot the decompression.
+                # Trim unwritten zero-padding when the stream ended early.
+                del buf[read_size:]
                 out.append(buf)
                 break
             # We are decompressing in chunks

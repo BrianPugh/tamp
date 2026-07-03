@@ -32,7 +32,9 @@ int main(void) {
     RUN_TEST(test_compressor_extended_window9_roundtrip);
 #if TAMP_LAZY_MATCHING
     RUN_TEST(test_compressor_extended_lazy_roundtrip);
+    RUN_TEST(test_compressor_extended_lazy_rle_fuzz);
 #endif
+    RUN_TEST(test_compressor_extended_rle_lone_byte_sink_poll);
     RUN_TEST(test_compress_cb_callback_receives_input_consumed);
     RUN_TEST(test_compress_cb_callback_abort);
     RUN_TEST(test_reset_dictionary_roundtrip);

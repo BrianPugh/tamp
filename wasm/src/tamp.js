@@ -419,10 +419,13 @@ export class TampCompressor {
 
   /**
    * Flush any remaining data and finalize compression
-   * @param {boolean} [write_token=false] - Whether to write a token during flush
+   * @param {boolean} [write_token=true] - Whether to write a FLUSH token. Keep the
+   *   default (true) for a mid-stream flush so the decompressor stays byte-aligned;
+   *   pass false only when no more data will be compressed. Matches the Python
+   *   API's default.
    * @returns {Promise<Uint8Array>} - Final compressed output
    */
-  async flush(write_token = false) {
+  async flush(write_token = true) {
     await this.initialize();
 
     if (!this.compressorPtr) {

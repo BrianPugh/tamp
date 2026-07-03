@@ -101,11 +101,16 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
     const uint64_t first_pattern = 0x0101010101010101ULL * input_bytes[0];
     const uint64_t second_pattern = 0x0101010101010101ULL * input_bytes[1];
 
-    // Pre-compute 64-bit input word for extension (bytes 2-9)
-    const uint64_t input_word_ext = (uint64_t)input_bytes[2] | ((uint64_t)input_bytes[3] << 8) |
-                                    ((uint64_t)input_bytes[4] << 16) | ((uint64_t)input_bytes[5] << 24) |
-                                    ((uint64_t)input_bytes[6] << 32) | ((uint64_t)input_bytes[7] << 40) |
-                                    ((uint64_t)input_bytes[8] << 48) | ((uint64_t)input_bytes[9] << 56);
+    // Pre-compute 64-bit input word for extension (bytes 2-9).
+    // Only built when max_pattern_size >= 10: input_bytes[max_pattern_size..] is
+    // uninitialized, so an unconditional read would be UB (flagged by MSan).
+    uint64_t input_word_ext = 0;
+    if (max_pattern_size >= 10) {
+        input_word_ext = (uint64_t)input_bytes[2] | ((uint64_t)input_bytes[3] << 8) | ((uint64_t)input_bytes[4] << 16) |
+                         ((uint64_t)input_bytes[5] << 24) | ((uint64_t)input_bytes[6] << 32) |
+                         ((uint64_t)input_bytes[7] << 40) | ((uint64_t)input_bytes[8] << 48) |
+                         ((uint64_t)input_bytes[9] << 56);
+    }
 
     uint16_t window_index = 0;
 

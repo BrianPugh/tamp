@@ -75,14 +75,22 @@ cdef class Compressor:
         cdef:
             ctamp.tamp_res res
 
-            bytearray output_buffer = bytearray(CHUNK_SIZE)
-            unsigned char *output_buffer_ptr = output_buffer
-            const unsigned char* data_ptr = &data[0]
+            bytearray output_buffer
+            unsigned char *output_buffer_ptr
+            const unsigned char* data_ptr
 
             size_t input_consumed_size = 0
             size_t input_remaining_size = data.shape[0]
             size_t output_buffer_written_size
             int written_to_disk_size = 0
+
+        if input_remaining_size == 0:
+            # &data[0] on an empty buffer raises IndexError.
+            return 0
+
+        output_buffer = bytearray(CHUNK_SIZE)
+        output_buffer_ptr = output_buffer
+        data_ptr = &data[0]
 
         output_buffer_mv = memoryview(output_buffer)
 
