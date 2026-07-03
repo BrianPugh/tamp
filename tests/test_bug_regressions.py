@@ -113,10 +113,18 @@ class TestBugRegressions(unittest.TestCase):
             c.flush(write_token=False)
             compressed = f.getvalue()
 
+        # 2560 is in (2**11, 2**12]: the old bit_size(len - 1) check accepted it
+        # even though it is still too small for a window=12 stream.
+        for wrong_size in (256, 2560, 0):
+            for name, Compressor, Decompressor in PAIRS:
+                with self.subTest(implementation=name, wrong_size=wrong_size):
+                    with self.assertRaises(ValueError):
+                        Decompressor(io.BytesIO(compressed), dictionary=bytearray(wrong_size))
+                    with self.assertRaises(ValueError):
+                        Compressor(io.BytesIO(), window=12, dictionary=bytearray(wrong_size))
+
         for name, _Compressor, Decompressor in PAIRS:
             with self.subTest(implementation=name):
-                with self.assertRaises(ValueError):
-                    Decompressor(io.BytesIO(compressed), dictionary=bytearray(256))
                 # Correct-size dictionary still round-trips.
                 d = Decompressor(io.BytesIO(compressed), dictionary=bytearray(dictionary))
                 self.assertEqual(bytes(d.read()), b"payload " * 20)

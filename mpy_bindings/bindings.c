@@ -27,7 +27,7 @@ static mp_obj_t initialize_dictionary(size_t n_args, const mp_obj_t *args) {
     // The C implementation only supports the default seed; reject anything else so
     // shared code fails loudly instead of building a silently different dictionary.
     if (n_args >= 2 && args[1] != mp_const_none) {
-        mp_raise_ValueError("seed");
+        mp_raise_ValueError("custom seed unsupported");
     }
     uint8_t literal = (n_args >= 3) ? mp_obj_get_int(args[2]) : 8;
     mp_buffer_info_t buffer_info;
@@ -203,7 +203,7 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
         tamp_res header_res = tamp_decompressor_read_header(&conf, input_buffer_info.buf, o->input_buffer_size,
                                                             &input_buffer_consumed_size);
         if (TAMP_UNLIKELY(header_res != TAMP_OK)) {
-            mp_raise_ValueError("");
+            mp_raise_ValueError("invalid header");
         }
         o->input_buffer_consumed_size += input_buffer_consumed_size;
     }

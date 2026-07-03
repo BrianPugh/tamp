@@ -3,7 +3,6 @@ from cpython.exc cimport PyErr_CheckSignals
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
-from . import bit_size
 from ._c_common cimport CHUNK_SIZE
 from ._c_common import ERROR_LOOKUP
 
@@ -66,12 +65,12 @@ cdef class Decompressor:
         if conf.use_custom_dictionary and dictionary is None:
             raise ValueError
 
-        if dictionary and bit_size(len(dictionary) - 1) != conf.window:
-            # A wrong-size buffer used as the window would let the C decompressor
-            # write out of bounds.
+        if dictionary is not None and len(dictionary) != (1 << conf.window):
+            # The exact size is required: a too-small buffer used as the window
+            # would let the C decompressor write out of bounds.
             raise ValueError("Dictionary-window size mismatch.")
 
-        self._window_buffer = dictionary if dictionary else bytearray(1 << conf.window)
+        self._window_buffer = dictionary if dictionary is not None else bytearray(1 << conf.window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
         res = ctamp.tamp_decompressor_init(self._c_decompressor, &conf, self._window_buffer_ptr, conf.window)

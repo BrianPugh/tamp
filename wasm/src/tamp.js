@@ -889,8 +889,10 @@ export async function compress(data, options = {}) {
   try {
     const compressed = await compressor.compress(data, callbackOptions);
     // When dictionary_reset is enabled, emit a trailing FLUSH token so a
-    // future append-mode compressor can form a double-FLUSH.
-    const flushed = await compressor.flush(compressionOptions.dictionary_reset);
+    // future append-mode compressor can form a double-FLUSH. Otherwise this is
+    // the end of the stream: pass an explicit false (dictionary_reset may be
+    // undefined here, which would otherwise take flush()'s mid-stream default).
+    const flushed = await compressor.flush(compressionOptions.dictionary_reset === true);
 
     // Concatenate compressed data and flush output
     const result = new Uint8Array(compressed.length + flushed.length);

@@ -1,11 +1,9 @@
-import builtins
 cimport ctamp
 from libcpp cimport bool
 from cpython.exc cimport PyErr_CheckSignals
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
-from . import bit_size
 from ._c_common cimport CHUNK_SIZE
 from ._c_common import ERROR_LOOKUP
 
@@ -42,7 +40,9 @@ cdef class Compressor:
     ):
         cdef ctamp.TampConf conf
 
-        if dictionary and bit_size(len(dictionary) - 1) != window:
+        if dictionary is not None and len(dictionary) != (1 << window):
+            # The exact size is required: a too-small buffer used as the window
+            # would let the C compressor write out of bounds.
             raise ValueError("Dictionary-window size mismatch.")
 
         if not hasattr(f, "write"):  # It's probably a path-like object.
@@ -55,7 +55,7 @@ cdef class Compressor:
 
         conf.window = window
         conf.literal = literal
-        conf.use_custom_dictionary = builtins.bool(dictionary)
+        conf.use_custom_dictionary = dictionary is not None
         # Set lazy_matching - this field is conditionally compiled based on TAMP_LAZY_MATCHING
         # The build system defines this macro, so the field should be available
         conf.lazy_matching = lazy_matching
@@ -63,7 +63,7 @@ cdef class Compressor:
         conf.dictionary_reset = dictionary_reset
         conf.append = append
 
-        self._window_buffer = dictionary if dictionary else bytearray(1 << window)
+        self._window_buffer = dictionary if dictionary is not None else bytearray(1 << window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
         self._dictionary_reset = dictionary_reset

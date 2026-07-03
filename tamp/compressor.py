@@ -19,7 +19,7 @@ try:
 except ImportError:
     sz = None
 
-from . import ExcessBitsError, bit_size, compute_min_pattern_size, initialize_dictionary
+from . import ExcessBitsError, compute_min_pattern_size, initialize_dictionary
 
 # encodes [0, 14] pattern lengths
 _huffman_codes = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'\xab"
@@ -199,7 +199,9 @@ class Compressor:
             close_f_on_close = False
 
         self._bit_writer = _BitWriter(f, close_f_on_close=close_f_on_close)
-        if dictionary and bit_size(len(dictionary) - 1) != window:
+        if dictionary is not None and len(dictionary) != (1 << window):
+            # The exact size is required: a too-small buffer used as the window
+            # would be indexed out of bounds.
             raise ValueError("Dictionary-window size mismatch.")
 
         if self.extended:
@@ -244,7 +246,7 @@ class Compressor:
             # Write header
             self._bit_writer.write(window - 8, 3, flush=False)
             self._bit_writer.write(literal - 5, 2, flush=False)
-            self._bit_writer.write(bool(dictionary), 1, flush=False)
+            self._bit_writer.write(dictionary is not None, 1, flush=False)
             self._bit_writer.write(self.extended, 1, flush=False)
             self._bit_writer.write(
                 1 if dictionary_reset else 0, 1, flush=False
@@ -258,7 +260,7 @@ class Compressor:
         self._window_buffer = _RingBuffer(
             buffer=(
                 dictionary
-                if dictionary
+                if dictionary is not None
                 else initialize_dictionary(1 << self.window_bits, literal=self.literal_bits if self.extended else 8)
             ),
         )

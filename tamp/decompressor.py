@@ -193,7 +193,7 @@ class Decompressor:
         if uses_custom_dictionary and dictionary is None:
             raise ValueError
 
-        if dictionary:
+        if dictionary is not None:
             if len(dictionary) != (1 << self.window_bits):
                 raise ValueError("Dictionary-window size mismatch.")
             if not uses_custom_dictionary:
@@ -205,7 +205,7 @@ class Decompressor:
         self._window_buffer = _RingBuffer(
             buffer=(
                 dictionary
-                if dictionary
+                if dictionary is not None
                 else initialize_dictionary(1 << self.window_bits, literal=self.literal_bits if self.extended else 8)
             ),
         )
