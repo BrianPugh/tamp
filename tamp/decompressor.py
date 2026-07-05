@@ -193,10 +193,19 @@ class Decompressor:
         if uses_custom_dictionary and dictionary is None:
             raise ValueError
 
+        if dictionary is not None:
+            if len(dictionary) != (1 << self.window_bits):
+                raise ValueError("Dictionary-window size mismatch.")
+            if not uses_custom_dictionary:
+                # Stream does not use a custom dictionary: initialize the supplied
+                # buffer in place instead of using its contents verbatim, matching
+                # the C implementation.
+                initialize_dictionary(dictionary, literal=self.literal_bits if self.extended else 8)
+
         self._window_buffer = _RingBuffer(
             buffer=(
                 dictionary
-                if dictionary
+                if dictionary is not None
                 else initialize_dictionary(1 << self.window_bits, literal=self.literal_bits if self.extended else 8)
             ),
         )
@@ -335,6 +344,8 @@ class Decompressor:
             read_size = self.readinto(buf)
             if size > 0:
                 # Read the entire contents in one go.
+                # Trim unwritten zero-padding when the stream ended early.
+                del buf[read_size:]
                 out.append(buf)
                 break
             else:
