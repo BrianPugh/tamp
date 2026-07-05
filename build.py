@@ -20,6 +20,11 @@ if profile and sanitize:
         "Please choose either TAMP_PROFILE=1 or TAMP_SANITIZE=1, not both."
     )
 
+# Sanitizer flags below are UNIX-only; previously this path crashed with a
+# NameError (extra_link_args unbound) instead of a clear message.
+if sanitize and os.name == "nt":
+    raise ValueError("TAMP_SANITIZE=1 is not supported on Windows.")
+
 
 def build_cython_extensions():
     import Cython.Compiler.Options

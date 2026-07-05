@@ -7,8 +7,18 @@ from typing import Annotated, Optional
 from cyclopts import Parameter, validators
 
 import tamp
-from tamp._c_build_dictionary import score_and_multi_frag, select_candidates
-from tamp._c_build_dictionary import score_substrings as _c_score_substrings
+
+try:
+    from tamp._c_build_dictionary import score_and_multi_frag, select_candidates
+    from tamp._c_build_dictionary import score_substrings as _c_score_substrings
+except ImportError:
+    # C extensions unavailable (e.g. TAMP_BUILD_C_EXTENSIONS=0). Importing this
+    # module must still succeed so the rest of the tamp CLI works; only the
+    # build-dictionary command itself requires the compiled kernels.
+    score_and_multi_frag = None
+    select_candidates = None
+    _c_score_substrings = None
+
 from tamp.compressor import (
     _EXTENDED_MATCH_SYMBOL,
     _LEADING_EXTENDED_MATCH_HUFFMAN_BITS,
@@ -760,6 +770,12 @@ def build_dictionary_cli(
     quiet: bool
         Suppress the tradeoff table and summary output.
     """
+    if score_and_multi_frag is None:
+        raise RuntimeError(
+            "The build-dictionary command requires tamp's compiled C extensions, "
+            "which are not available in this installation."
+        )
+
     dictionary_size = 1 << window
 
     # Materialize corpus for reuse in compression analysis.
