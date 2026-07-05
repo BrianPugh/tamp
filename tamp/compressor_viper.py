@@ -5,7 +5,7 @@ from io import BytesIO
 import micropython
 from micropython import const
 
-from . import ExcessBitsError, bit_size, compute_min_pattern_size, initialize_dictionary
+from . import ExcessBitsError, compute_min_pattern_size, initialize_dictionary
 
 # encodes [2, 15] pattern lengths
 _HUFFMAN_CODES = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
@@ -39,8 +39,11 @@ class Compressor:
 
         # Window Buffer
         if dictionary:
-            if bit_size(len(dictionary) - 1) != window:
-                raise ValueError
+            if len(dictionary) != (1 << window):
+                # The previous bit_size check accepted any length in
+                # (2**(window-1), 2**window]; a short buffer used as the window
+                # would make the unchecked ptr8 window accesses go out of bounds.
+                raise ValueError("Dictionary-window size mismatch.")
             self.window_buf = dictionary
         else:
             self.window_buf = initialize_dictionary(1 << window)
