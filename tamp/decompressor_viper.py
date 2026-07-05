@@ -35,6 +35,10 @@ class Decompressor:
         if uses_custom_dictionary:
             if not dictionary:
                 raise ValueError
+            if len(dictionary) != (1 << self.w_bits):
+                # A wrong-size buffer used as the window would make the unchecked
+                # ptr8 window writes below go out of bounds.
+                raise ValueError("Dictionary-window size mismatch.")
             self.w_buf = dictionary
         else:
             self.w_buf = initialize_dictionary(1 << self.w_bits)
@@ -140,6 +144,10 @@ class Decompressor:
 
                     match_size += min_pattern_size
                     index = (f_buf >> (30 - token_bits)) & w_mask
+                    if index + match_size > w_mask + 1:
+                        # Corrupt stream: the match would read past the window
+                        # buffer (the C implementation returns TAMP_OOB here).
+                        raise ValueError("out-of-bounds window reference")
                     f_buf = (f_buf << token_bits) & full_mask
                     f_pos -= token_bits
 

@@ -23,7 +23,13 @@ static void TAMP_CHECK(tamp_res res) {
 
 static mp_obj_t initialize_dictionary(size_t n_args, const mp_obj_t *args) {
     mp_obj_t obj = args[0];
-    uint8_t literal = (n_args >= 2) ? mp_obj_get_int(args[1]) : 8;
+    // Signature matches CPython: initialize_dictionary(source, seed=None, literal=8).
+    // The C implementation only supports the default seed; reject anything else so
+    // shared code fails loudly instead of building a silently different dictionary.
+    if (n_args >= 2 && args[1] != mp_const_none) {
+        mp_raise_ValueError("custom seed unsupported");
+    }
+    uint8_t literal = (n_args >= 3) ? mp_obj_get_int(args[2]) : 8;
     mp_buffer_info_t buffer_info;
 #if MICROPY_VERSION_MAJOR == 1 && MICROPY_VERSION_MINOR <= 21
     // "mp_get_buffer" is not available in micropython <= v1.21
@@ -45,7 +51,7 @@ static mp_obj_t initialize_dictionary(size_t n_args, const mp_obj_t *args) {
     tamp_initialize_dictionary(buffer_info.buf, buffer_info.len, literal);
     return obj;
 }
-MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(initialize_dictionary_obj, 1, 2, initialize_dictionary);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(initialize_dictionary_obj, 1, 3, initialize_dictionary);
 
 /**************
  * COMPRESSOR *
@@ -186,12 +192,19 @@ static mp_obj_t decompressor_make_new(const mp_obj_type_t *type, size_t n_args, 
     o->input_buffer_consumed_size = 0;
 
     {
-        /* Read the Tamp Header */
+        /* Read the Tamp Header.
+         * Pass the number of bytes actually read, not the buffer capacity:
+         * the m_malloc'd buffer past input_buffer_size is uninitialized.
+         * A truncated stream returns TAMP_INPUT_EXHAUSTED (positive, not
+         * caught by TAMP_CHECK), so require TAMP_OK explicitly. */
         size_t input_buffer_consumed_size;
         mp_buffer_info_t input_buffer_info;
         mp_get_buffer_raise(o->input_buffer_obj, &input_buffer_info, MP_BUFFER_READ);
-        TAMP_CHECK(tamp_decompressor_read_header(&conf, input_buffer_info.buf, input_buffer_info.len,
-                                                 &input_buffer_consumed_size));
+        tamp_res header_res = tamp_decompressor_read_header(&conf, input_buffer_info.buf, o->input_buffer_size,
+                                                            &input_buffer_consumed_size);
+        if (TAMP_UNLIKELY(header_res != TAMP_OK)) {
+            mp_raise_ValueError("invalid header");
+        }
         o->input_buffer_consumed_size += input_buffer_consumed_size;
     }
 

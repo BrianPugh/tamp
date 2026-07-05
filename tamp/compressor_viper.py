@@ -97,7 +97,9 @@ class Compressor:
                 current_match_size = int(2)
                 for k in range(current_match_size, input_size):
                     input_index = (input_pos + k) & 0xF
-                    if input_buf[input_index] != window_buf[window_index + k] or window_index + k >= window_size:
+                    # Bounds check must come first: reading window_buf[window_index + k]
+                    # through ptr8 past the buffer end is an out-of-bounds access.
+                    if window_index + k >= window_size or input_buf[input_index] != window_buf[window_index + k]:
                         break
                     current_match_size = k + 1
                 if current_match_size > match_size:
