@@ -1,4 +1,7 @@
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -586,3 +589,55 @@ class TestBuildDictionaryCli(unittest.TestCase):
             app(["decompress", str(compressed_file), "-o", str(output_file), "-d", str(dict_file)], **_app_kwargs)
 
             self.assertEqual(output_file.read_bytes(), test_input)
+
+
+class TestMissingCExtensions(unittest.TestCase):
+    def test_build_dictionary_cli_raises_without_kernels(self):
+        """build_dictionary_cli raises a clear RuntimeError when the compiled kernels are unavailable."""
+        import tamp.cli.build_dictionary as bd
+
+        original = bd.score_and_multi_frag
+        bd.score_and_multi_frag = None
+        try:
+            with self.assertRaisesRegex(RuntimeError, "compiled C extensions"):
+                bd.build_dictionary_cli(Path("unused"))
+        finally:
+            bd.score_and_multi_frag = original
+
+    def test_cli_importable_without_c_build_dictionary(self):
+        """The tamp CLI must remain importable when tamp._c_build_dictionary is missing."""
+        code = textwrap.dedent(
+            """
+            import sys
+
+            class Blocker:
+                def find_spec(self, name, path=None, target=None):
+                    if name == "tamp._c_build_dictionary":
+                        raise ImportError("blocked for testing")
+                    return None
+
+            sys.meta_path.insert(0, Blocker())
+
+            import tamp.cli.main  # noqa: F401  (must import without error)
+            import tamp.cli.build_dictionary as bd
+
+            assert bd.score_and_multi_frag is None
+            assert bd.select_candidates is None
+            assert bd._c_score_substrings is None
+
+            from pathlib import Path
+
+            try:
+                bd.build_dictionary_cli(Path("unused"))
+            except RuntimeError as e:
+                assert "compiled C extensions" in str(e), str(e)
+            else:
+                raise SystemExit("expected RuntimeError from build_dictionary_cli")
+            """
+        )
+        result = subprocess.run(  # noqa: S603
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
