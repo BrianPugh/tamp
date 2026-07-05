@@ -171,6 +171,34 @@ describe('Tamp WebAssembly Tests', () => {
     }
   });
 
+  test('Mid-stream flush with default arguments round-trips', async () => {
+    // Regression: flush() defaulted write_token=false (unlike the Python API),
+    // so a default mid-stream flush omitted the FLUSH token and the padding
+    // bits desynchronized the decompressor, corrupting all subsequent output.
+    const compressor = new TampCompressor();
+    const parts = [];
+    parts.push(await compressor.compress(new TextEncoder().encode('the quick brown')));
+    parts.push(await compressor.flush()); // mid-stream flush, default arguments
+    parts.push(await compressor.compress(new TextEncoder().encode(' fox jumps over the lazy dog')));
+    parts.push(await compressor.flush(false)); // end of stream
+    compressor.destroy();
+
+    const total = parts.reduce((n, p) => n + p.length, 0);
+    const blob = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      blob.set(part, offset);
+      offset += part.length;
+    }
+
+    const decompressed = await decompress(blob);
+    assert.equal(
+      new TextDecoder().decode(decompressed),
+      'the quick brown fox jumps over the lazy dog',
+      'Mid-stream flush should round-trip'
+    );
+  });
+
   test('Memory cleanup', async () => {
     const compressor = new TampCompressor();
     const decompressor = new TampDecompressor();

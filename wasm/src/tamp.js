@@ -419,10 +419,13 @@ export class TampCompressor {
 
   /**
    * Flush any remaining data and finalize compression
-   * @param {boolean} [write_token=false] - Whether to write a token during flush
+   * @param {boolean} [write_token=true] - Whether to write a FLUSH token. Keep the
+   *   default (true) for a mid-stream flush so the decompressor stays byte-aligned;
+   *   pass false only when no more data will be compressed. Matches the Python
+   *   API's default.
    * @returns {Promise<Uint8Array>} - Final compressed output
    */
-  async flush(write_token = false) {
+  async flush(write_token = true) {
     await this.initialize();
 
     if (!this.compressorPtr) {
@@ -886,8 +889,10 @@ export async function compress(data, options = {}) {
   try {
     const compressed = await compressor.compress(data, callbackOptions);
     // When dictionary_reset is enabled, emit a trailing FLUSH token so a
-    // future append-mode compressor can form a double-FLUSH.
-    const flushed = await compressor.flush(compressionOptions.dictionary_reset);
+    // future append-mode compressor can form a double-FLUSH. Otherwise this is
+    // the end of the stream: pass an explicit false (dictionary_reset may be
+    // undefined here, which would otherwise take flush()'s mid-stream default).
+    const flushed = await compressor.flush(compressionOptions.dictionary_reset === true);
 
     // Concatenate compressed data and flush output
     const result = new Uint8Array(compressed.length + flushed.length);
