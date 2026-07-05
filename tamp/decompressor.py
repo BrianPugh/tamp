@@ -345,8 +345,9 @@ class Decompressor:
             if size > 0:
                 # Read the entire contents in one go.
                 # Trim unwritten zero-padding when the stream ended early.
-                del buf[read_size:]
-                out.append(buf)
+                # Slice instead of ``del buf[read_size:]``: MicroPython
+                # bytearrays don't support item deletion.
+                out.append(buf if read_size == len(buf) else buf[:read_size])
                 break
             else:
                 if read_size < len(buf):
