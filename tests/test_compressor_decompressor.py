@@ -554,6 +554,67 @@ class TestCompressorAndDecompressor(unittest.TestCase):
                 d = Decompressor(f)
                 self.assertEqual(d.read(), data1 + data2)
 
+    def test_extended_lazy_rle_stale_cache(self):
+        """Regression: stale lazy-match cache after the RLE path consumed input.
+
+        With lazy_matching + extended, the RLE path consumed input and mutated
+        the window without invalidating the cached lazy match, so a stale match
+        was later emitted for data that no longer matched (~5% of run-heavy
+        seeds corrupted pre-fix).
+        """
+
+        def run_heavy_data(seed, size=512):
+            # Deterministic LCG: micropython lacks random.Random.
+            state = seed * 2 + 12345
+            out = bytearray()
+            while len(out) < size:
+                state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+                r = state >> 7
+                byte = ord("a") + (r & 1)
+                if r & 2:  # Short run of one letter.
+                    out += bytes([byte]) * (1 + ((r >> 2) & 3))
+                elif r & 4:  # Two letters.
+                    out += bytes([byte, ord("a") + ((r >> 3) & 1)])
+                else:  # One letter.
+                    out.append(byte)
+            return bytes(out[:size])
+
+        for Compressor, Decompressor in walk_compressors_decompressors():
+            if Compressor is NativeCompressor:
+                continue  # Native module doesn't support lazy_matching kwarg
+
+            for seed in range(150):
+                data = run_heavy_data(seed)
+                with BytesIO() as f:
+                    c = Compressor(f, extended=True, lazy_matching=True)
+                    c.write(data)
+                    c.flush(write_token=False)
+
+                    f.seek(0)
+                    actual = Decompressor(f).read()
+
+                self.assertEqual(actual, data, f"corrupt roundtrip at seed {seed}")
+
+    def test_extended_rle_lone_byte_not_dropped(self):
+        """Regression: a lone run byte accumulated by one compression cycle was
+        dropped when a later cycle saw the run had ended ("AAB" decompressed to
+        "AB"). Drives the pure-Python internals cycle-by-cycle, mirroring the C
+        library's low-level sink/poll usage (covered by ctests for C).
+        """
+        if PyCompressor is None:
+            self.skipTest("pure-Python internals not available")
+
+        f = BytesIO()
+        c = PyCompressor(f)
+        payload = b"AAB"
+        for b in payload:
+            c.write(bytes([b]))
+            while c._input_buffer:
+                c._compress_input_buffer_single()
+        c.flush(write_token=False)
+        f.seek(0)
+        self.assertEqual(bytes(PyDecompressor(f).read()), payload)
+
 
 if __name__ == "__main__":
     unittest.main()
