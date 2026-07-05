@@ -115,6 +115,10 @@ cdef class Decompressor:
                     # Fall back for file-like objects that only implement read().
                     chunk = self.f.read(CHUNK_SIZE)
                     self.input_size = len(chunk)
+                    if self.input_size > <size_t>CHUNK_SIZE:
+                        # A larger chunk would resize (reallocate) input_buffer,
+                        # leaving input_buffer_ptr dangling.
+                        raise ValueError("read() returned more bytes than requested")
                     self.input_buffer[:self.input_size] = chunk
                 self.input_consumed = 0
                 if self.input_size == 0:

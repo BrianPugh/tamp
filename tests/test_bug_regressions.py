@@ -93,6 +93,33 @@ class TestBugRegressions(unittest.TestCase):
                 d = Decompressor(f, dictionary=bytearray(b"\xff" * 1024))
                 self.assertEqual(bytes(d.read()), payload)
 
+    def test_decompressor_read_overreturning_stream_raises(self):
+        # Bug: the read() fallback grew the internal input buffer when a
+        # non-conforming file object returned more bytes than requested,
+        # reallocating it out from under a cached pointer (silent corruption).
+        if CDecompressor is None:
+            self.skipTest("Cython implementation unavailable")
+
+        class OverRead:
+            def __init__(self, data):
+                self._f = io.BytesIO(data)
+
+            def read(self, n=-1):
+                return self._f.read(n * 2 if n > 0 else -1)
+
+        # Compressed stream must exceed CHUNK_SIZE (1 MiB) so that
+        # read(CHUNK_SIZE) can over-return.
+        import random
+
+        payload = random.Random(0).randbytes(200_000) * 12
+        with io.BytesIO() as f:
+            c = CCompressor(f)
+            c.write(payload)
+            c.flush(write_token=False)
+            compressed = f.getvalue()
+        with self.assertRaises(ValueError):
+            CDecompressor(OverRead(compressed)).read()
+
     def test_decompressor_read_only_stream(self):
         # Bug: Cython Decompressor accepted objects with only read() but later
         # required readinto(), raising AttributeError mid-stream.
