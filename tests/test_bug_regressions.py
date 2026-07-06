@@ -1,7 +1,8 @@
 """Regression tests for specific fixed bugs in the Python bindings.
 
 Each test names the bug it guards against, covering the pure-Python and
-Cython implementations.
+Cython implementations. ``TestOversizedDictionary`` also runs under
+MicroPython against the pure-Python implementation.
 """
 
 import io
@@ -12,10 +13,11 @@ try:
 except ImportError:
     micropython = None
 
+from tamp import initialize_dictionary
+from tamp.decompressor import Decompressor as PyDecompressor
+
 if micropython is None:
-    from tamp import initialize_dictionary
     from tamp.compressor import Compressor as PyCompressor
-    from tamp.decompressor import Decompressor as PyDecompressor
 
     try:
         from tamp._c_compressor import Compressor as CCompressor
@@ -33,7 +35,15 @@ if micropython is None:
         if c is not None
     ]
 else:
+    CCompressor = None
+    CDecompressor = None
     PAIRS = []
+
+# Decompressors supporting oversized dictionaries. The viper decompressor is
+# deliberately stricter (exact size only) and is excluded.
+DECOMPRESSORS = [("python", PyDecompressor)]
+if CDecompressor is not None:
+    DECOMPRESSORS.append(("cython", CDecompressor))
 
 
 @unittest.skipIf(micropython is not None, "CPython-implementation regression tests")
@@ -73,6 +83,13 @@ class TestBugRegressions(unittest.TestCase):
                         Decompressor(io.BytesIO(compressed), dictionary=bytearray(wrong_size))
                     with self.assertRaises(ValueError):
                         Compressor(io.BytesIO(), window=12, dictionary=bytearray(wrong_size))
+
+        # Oversized: compressors require an exact size (the caller chooses the
+        # window, so it can always slice); decompressors accept it and use the
+        # prefix (see TestOversizedDictionary).
+        for name, Compressor, _Decompressor in PAIRS:
+            with self.subTest(implementation=name), self.assertRaises(ValueError):
+                Compressor(io.BytesIO(), window=12, dictionary=bytearray(8192))
 
         for name, _Compressor, Decompressor in PAIRS:
             with self.subTest(implementation=name):
@@ -139,6 +156,84 @@ class TestBugRegressions(unittest.TestCase):
                     c.flush(write_token=False)
                     compressed = f.getvalue()
                 self.assertEqual(bytes(Decompressor(ReadOnly(compressed)).read()), payload)
+
+
+class TestOversizedDictionary(unittest.TestCase):
+    """Decompressors accept dictionaries of at least 2**window bytes and use
+    the first 2**window bytes in place; bytes past the window are never read
+    or written. One long shared dictionary can thus serve compressors with
+    different (unknown-in-advance) window sizes.
+
+    Streams are hardcoded so these tests also run under MicroPython, where the
+    pure-Python compressor is unavailable. Both were generated from
+    ``PAYLOAD`` with window=10; regenerate with::
+
+        f = io.BytesIO()
+        c = Compressor(f, window=10, dictionary=bytearray(initialize_dictionary(4096)[:1024]))
+        c.write(PAYLOAD); c.flush(write_token=False)   # -> CUSTOM_DICT_STREAM
+        # DEFAULT_STREAM: same, with Compressor(f) (no dictionary)
+    """
+
+    PAYLOAD = b"payload " * 20
+    CUSTOM_DICT_STREAM = bytes.fromhex("5eb8586f36c06cb248130009c8004f08004f320013c20000")
+    DEFAULT_STREAM = bytes.fromhex("5ab8586f36c06cb248130009c8004f08004f320013c20000")
+
+    def test_oversized_dictionary_uses_prefix_in_place(self):
+        big = initialize_dictionary(4096)
+        for name, Decompressor in DECOMPRESSORS:
+            with self.subTest(implementation=name):
+                oversized = bytearray(big)
+                d = Decompressor(io.BytesIO(self.CUSTOM_DICT_STREAM), dictionary=oversized)
+                self.assertEqual(bytes(d.read()), self.PAYLOAD)
+                # The prefix is the live window, mutated in place; bytes past
+                # the window are never written.
+                self.assertNotEqual(oversized[:1024], big[:1024])
+                self.assertEqual(oversized[1024:], big[1024:])
+
+                # Bytes past the window must never influence output.
+                garbage_tail = bytearray(big[:1024]) + bytearray(b"\xff" * 3072)
+                d = Decompressor(io.BytesIO(self.CUSTOM_DICT_STREAM), dictionary=garbage_tail)
+                self.assertEqual(bytes(d.read()), self.PAYLOAD)
+
+                # A wrong prefix must not round-trip (guards against the size
+                # check accidentally accepting a mismatched dictionary basis).
+                wrong_prefix = bytearray(b"\x00" * 4096)
+                d = Decompressor(io.BytesIO(self.CUSTOM_DICT_STREAM), dictionary=wrong_prefix)
+                self.assertNotEqual(bytes(d.read()), self.PAYLOAD)
+
+    def test_undersized_dictionary_raises(self):
+        for wrong_size in (256, 1023, 0):
+            for name, Decompressor in DECOMPRESSORS:
+                with self.subTest(implementation=name, wrong_size=wrong_size), self.assertRaises(ValueError):
+                    Decompressor(io.BytesIO(self.CUSTOM_DICT_STREAM), dictionary=bytearray(wrong_size))
+
+    def test_unused_oversized_dictionary_reinitialized(self):
+        # Oversized dictionary supplied for a stream that doesn't use a custom
+        # dictionary: only the prefix is re-initialized (in place) and used;
+        # output is correct and bytes past the window are never touched.
+        for name, Decompressor in DECOMPRESSORS:
+            with self.subTest(implementation=name):
+                oversized = bytearray(b"\xff" * 4096)
+                d = Decompressor(io.BytesIO(self.DEFAULT_STREAM), dictionary=oversized)
+                self.assertEqual(bytes(d.read()), self.PAYLOAD)
+                self.assertNotEqual(oversized[:1024], bytearray(b"\xff" * 1024))
+                self.assertEqual(oversized[1024:], bytearray(b"\xff" * 3072))
+
+    @unittest.skipIf(micropython is not None, "compressors unavailable on MicroPython")
+    def test_live_compression_roundtrip(self):
+        # Same scenario without fixtures: compress with each implementation
+        # against the window-size prefix, decompress with the full dictionary.
+        big = initialize_dictionary(4096)
+        for cname, Compressor, _ in PAIRS:
+            with io.BytesIO() as f:
+                c = Compressor(f, window=10, dictionary=bytearray(big[:1024]))
+                c.write(self.PAYLOAD)
+                c.flush(write_token=False)
+                compressed = f.getvalue()
+            for dname, Decompressor in DECOMPRESSORS:
+                with self.subTest(compressor=cname, decompressor=dname):
+                    d = Decompressor(io.BytesIO(compressed), dictionary=bytearray(big))
+                    self.assertEqual(bytes(d.read()), self.PAYLOAD)
 
 
 if __name__ == "__main__":

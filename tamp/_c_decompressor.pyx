@@ -63,9 +63,10 @@ cdef class Decompressor:
         if conf.use_custom_dictionary and dictionary is None:
             raise ValueError
 
-        if dictionary is not None and len(dictionary) != (1 << conf.window):
-            # The exact size is required: a too-small buffer used as the window
-            # would let the C decompressor write out of bounds.
+        if dictionary is not None and len(dictionary) < (1 << conf.window):
+            # A too-small buffer used as the window would let the C
+            # decompressor write out of bounds. An oversized buffer is fine:
+            # C uses only the first 2**window bytes, in place.
             raise ValueError("Dictionary-window size mismatch.")
 
         self._window_buffer = dictionary if dictionary is not None else bytearray(1 << conf.window)
@@ -118,7 +119,7 @@ cdef class Decompressor:
                     if self.input_size > <size_t>CHUNK_SIZE:
                         # A larger chunk would resize (reallocate) input_buffer,
                         # leaving input_buffer_ptr dangling.
-                        raise ValueError("read() returned more bytes than requested")
+                        raise ValueError("read() returned more bytes than requested.")
                     self.input_buffer[:self.input_size] = chunk
                 self.input_consumed = 0
                 if self.input_size == 0:
