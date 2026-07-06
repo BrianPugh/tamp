@@ -471,7 +471,18 @@ static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE tamp_res poll_extended_handling(TampComp
         return TAMP_OK;
     }
 
-    if (total_rle == 1) compressor->rle_count = 0;
+    if (TAMP_UNLIKELY(compressor->rle_count == 1)) {
+        // A lone run byte was consumed into rle_count by a previous poll and the
+        // run then ended; RLE tokens require count >= 2 and the byte is no longer
+        // in the input buffer, so re-emit it as a literal (mirrors the
+        // rle_count == 1 drain in tamp_compressor_flush).
+        const uint16_t window_mask = (1 << compressor->conf.window) - 1;
+        write_to_bit_buffer(compressor, IS_LITERAL_FLAG | last_byte, compressor->conf.literal + 1);
+        compressor->window[compressor->window_pos] = last_byte;
+        compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+        compressor->rle_count = 0;
+        return TAMP_OK;
+    }
     return TAMP_POLL_CONTINUE;  // Proceed to pattern matching
 }
 #endif  // TAMP_EXTENDED_COMPRESS
@@ -511,7 +522,14 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
     if (TAMP_UNLIKELY(compressor->conf.extended)) {
         // Handle extended match continuation + RLE (outlined for code size)
         res = poll_extended_handling(compressor, &output, &output_size, output_written_size);
-        if (res != TAMP_POLL_CONTINUE) return res;
+        if (res != TAMP_POLL_CONTINUE) {
+#if TAMP_LAZY_MATCHING
+            // Extended handling consumed input and/or mutated the window, so any
+            // match cached by lazy matching no longer matches the current input.
+            compressor->cached_match_index = -1;
+#endif
+            return res;
+        }
         // TAMP_POLL_CONTINUE: proceed to pattern matching below
     }
 #endif  // TAMP_EXTENDED_COMPRESS
@@ -824,6 +842,12 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compressor_reset_dictionary(TampCompressor* com
 }
 
 #if TAMP_STREAM
+
+#if TAMP_EXTENDED_COMPRESS && (TAMP_STREAM_WORK_BUFFER_SIZE / 2) < EXTENDED_MATCH_MIN_OUTPUT_BYTES
+// A smaller buffer deadlocks tamp_compress_stream: write_extended_match_token
+// returns TAMP_OUTPUT_FULL forever because the token can never fit.
+#error "TAMP_STREAM_WORK_BUFFER_SIZE must be at least 12 bytes when extended compression is enabled"
+#endif
 
 TAMP_OPTIMIZE_SIZE tamp_res tamp_compress_stream(TampCompressor* compressor, tamp_read_t read_cb, void* read_handle,
                                                  tamp_write_t write_cb, void* write_handle, size_t* input_consumed_size,

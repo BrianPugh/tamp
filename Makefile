@@ -378,6 +378,7 @@ CTEST_INCLUDES = -Ictests/Unity/src -Itamp/_c_src -Ictests -Ictests/littlefs -Ic
 CTEST_DEFINES = -DTAMP_STREAM_STDIO=1 -DTAMP_STREAM_MEMORY=1 \
 	-DTAMP_STREAM_LITTLEFS=1 -DTEST_LITTLEFS=1 \
 	-DTAMP_STREAM_FATFS=1 -DTEST_FATFS=1 \
+	-DTAMP_LAZY_MATCHING=1 \
 	-DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR
 CTEST_CFLAGS = $(CTEST_INCLUDES) $(CTEST_SANITIZER_FLAGS) $(CTEST_DEFINES)
 # Strict warnings applied only to first-party tamp sources, not third-party (Unity/LittleFS/FatFs)
@@ -482,7 +483,7 @@ build/ctests-embedded/test_runner.o: ctests/test_runner.c ctests/test_compressor
 	@mkdir -p build/ctests-embedded
 	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
 
-build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OBJS)
+build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OBJS) $(CTEST_LFS_OBJS) $(CTEST_FATFS_OBJS)
 	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
 
 c-test-embedded: build/test_runner_embedded

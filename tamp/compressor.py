@@ -287,6 +287,9 @@ class Compressor:
         self._last_was_flush = False
 
         if self._extended_match_count:
+            # This block consumes input and/or mutates the window, so any match
+            # cached by lazy matching no longer matches the current input.
+            self._cached_match_index = -1
             while self._input_buffer:
                 if (self._extended_match_position + self._extended_match_count) >= self._window_buffer.size:
                     # Reached window boundary - emit match (no wrap-around, only 0.02% compression loss)
@@ -332,6 +335,7 @@ class Compressor:
 
             # If RLE hasn't ended and we haven't hit max, consume and wait for more
             if not rle_ended and total_rle > 0:
+                self._cached_match_index = -1  # Input consumed; cached lazy match is stale.
                 self._rle_count = total_rle
                 for _ in range(rle_available):
                     self._input_buffer.popleft()
@@ -353,6 +357,7 @@ class Compressor:
 
                 if not use_pattern:
                     # Use RLE - consume bytes and write token
+                    self._cached_match_index = -1  # Input consumed; cached lazy match is stale.
                     for _ in range(rle_available):
                         self._input_buffer.popleft()
                     self._rle_count = total_rle
@@ -360,7 +365,15 @@ class Compressor:
                     return bytes_written
                 self._rle_count = 0
             elif total_rle == 1:
-                # Single byte - not worth RLE, will be handled as literal/pattern
+                if self._rle_count == 1:
+                    # The lone run byte was consumed into _rle_count by a previous
+                    # cycle and the run then ended; it is no longer in the input
+                    # buffer, so emit it (_write_rle writes a count-1 run as a literal).
+                    self._cached_match_index = -1
+                    bytes_written += self._write_rle()
+                    return bytes_written
+                # Single byte still in the input buffer - not worth RLE, will be
+                # handled as literal/pattern
                 self._rle_count = 0
 
         # Normal pattern matching

@@ -635,3 +635,117 @@ void test_compress_cb_callback_abort(void) {
     // Should have consumed less than all input
     TEST_ASSERT_LESS_THAN(input_size, input_consumed);
 }
+
+void test_compressor_extended_rle_lone_byte_sink_poll(void) {
+    // Regression: a lone run byte accumulated into rle_count by one poll was
+    // silently dropped when a later poll saw the run had ended (byte-at-a-time
+    // sink/poll usage). "AAB" previously decompressed to "AB".
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 10];
+    unsigned char compressed[64];
+    size_t compressed_size = 0;
+    TampConf conf = {
+        .window = 10,
+        .literal = 8,
+        .extended = true,
+    };
+
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    const unsigned char payload[3] = {'A', 'A', 'B'};
+    for (size_t i = 0; i < sizeof(payload); i++) {
+        size_t written = 0;
+        tamp_compressor_sink(&compressor, &payload[i], 1, NULL);
+        res = tamp_compressor_poll(&compressor, compressed + compressed_size, sizeof(compressed) - compressed_size,
+                                   &written);
+        TEST_ASSERT_EQUAL(TAMP_OK, res);
+        compressed_size += written;
+    }
+    {
+        size_t written = 0;
+        res = tamp_compressor_flush(&compressor, compressed + compressed_size, sizeof(compressed) - compressed_size,
+                                    &written, false);
+        TEST_ASSERT_EQUAL(TAMP_OK, res);
+        compressed_size += written;
+    }
+
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 10];
+    unsigned char output[16];
+    size_t output_written = 0;
+
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 10);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                       compressed_size, NULL);
+    // On success, decompress returns TAMP_INPUT_EXHAUSTED (all input consumed)
+    // in lieu of TAMP_OK; the output buffer cannot fill on this payload.
+    TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED, res);
+    TEST_ASSERT_EQUAL(sizeof(payload), output_written);
+    TEST_ASSERT_EQUAL_MEMORY(payload, output, sizeof(payload));
+}
+
+#if TAMP_LAZY_MATCHING
+void test_compressor_extended_lazy_rle_fuzz(void) {
+    // Regression: with lazy_matching + extended, the RLE path consumed input
+    // without invalidating the cached lazy match, corrupting output.
+    // Generator: two-letter alphabet with short runs and 1-2 byte words, using
+    // the same fixed LCG as the Python regression test so the corpus is
+    // identical across toolchains and failing seeds are reproducible; on the
+    // pre-fix code this corrupts ~5-10% of seeds.
+    static unsigned char data[512];
+    static unsigned char compressed[8192];
+    static unsigned char output[4096];
+    unsigned char c_window[1 << 10];
+    unsigned char d_window[1 << 10];
+
+    for (unsigned int seed = 0; seed < 1000; seed++) {
+        unsigned int state = seed * 2 + 12345;
+        size_t len = 0;
+        while (len < sizeof(data)) {
+            state = (state * 1103515245u + 12345u) & 0x7FFFFFFFu;
+            unsigned int r = state >> 7;
+            unsigned char b = (unsigned char)('a' + (r & 1));
+            if (r & 2) {
+                // Short run of one letter.
+                unsigned int run = 1 + ((r >> 2) & 3);
+                for (unsigned int j = 0; j < run && len < sizeof(data); j++) data[len++] = b;
+            } else if (r & 4) {
+                // Two letters.
+                data[len++] = b;
+                if (len < sizeof(data)) data[len++] = (unsigned char)('a' + ((r >> 3) & 1));
+            } else {
+                // One letter.
+                data[len++] = b;
+            }
+        }
+        len = sizeof(data);
+
+        TampCompressor compressor;
+        TampConf conf = {
+            .window = 10,
+            .literal = 8,
+            .extended = true,
+            .lazy_matching = true,
+        };
+        TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_init(&compressor, &conf, c_window));
+
+        size_t compressed_size = 0, input_consumed = 0;
+        tamp_res res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size,
+                                                          data, len, &input_consumed, false);
+        TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+        TampDecompressor decompressor;
+        TEST_ASSERT_EQUAL(TAMP_OK, tamp_decompressor_init(&decompressor, NULL, d_window, 10));
+        size_t output_written = 0;
+        res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
+                                           compressed_size, NULL);
+        // On success, decompress returns TAMP_INPUT_EXHAUSTED in lieu of TAMP_OK.
+        TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED, res);
+        TEST_ASSERT_EQUAL_MESSAGE(len, output_written, "roundtrip length mismatch");
+        TEST_ASSERT_EQUAL_MEMORY_MESSAGE(data, output, len, "roundtrip data mismatch");
+    }
+}
+#endif  // TAMP_LAZY_MATCHING
