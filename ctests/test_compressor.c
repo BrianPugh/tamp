@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "tamp/compressor.h"
@@ -661,7 +660,7 @@ void test_compressor_extended_rle_lone_byte_sink_poll(void) {
         tamp_compressor_sink(&compressor, &payload[i], 1, NULL);
         res = tamp_compressor_poll(&compressor, compressed + compressed_size, sizeof(compressed) - compressed_size,
                                    &written);
-        TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+        TEST_ASSERT_EQUAL(TAMP_OK, res);
         compressed_size += written;
     }
     {
@@ -681,7 +680,9 @@ void test_compressor_extended_rle_lone_byte_sink_poll(void) {
     TEST_ASSERT_EQUAL(TAMP_OK, res);
     res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
                                        compressed_size, NULL);
-    TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+    // On success, decompress returns TAMP_INPUT_EXHAUSTED (all input consumed)
+    // in lieu of TAMP_OK; the output buffer cannot fill on this payload.
+    TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED, res);
     TEST_ASSERT_EQUAL(sizeof(payload), output_written);
     TEST_ASSERT_EQUAL_MEMORY(payload, output, sizeof(payload));
 }
@@ -690,10 +691,10 @@ void test_compressor_extended_rle_lone_byte_sink_poll(void) {
 void test_compressor_extended_lazy_rle_fuzz(void) {
     // Regression: with lazy_matching + extended, the RLE path consumed input
     // without invalidating the cached lazy match, corrupting output.
-    // Generator: two-letter alphabet with short runs and 1-2 byte words; on the
-    // pre-fix code this corrupts ~5% of seeds (first failure at seed 19 with
-    // this platform's rand), so any libc's rand should hit it well within
-    // 1000 seeds.
+    // Generator: two-letter alphabet with short runs and 1-2 byte words, using
+    // the same fixed LCG as the Python regression test so the corpus is
+    // identical across toolchains and failing seeds are reproducible; on the
+    // pre-fix code this corrupts ~5-10% of seeds.
     static unsigned char data[512];
     static unsigned char compressed[8192];
     static unsigned char output[4096];
@@ -701,19 +702,23 @@ void test_compressor_extended_lazy_rle_fuzz(void) {
     unsigned char d_window[1 << 10];
 
     for (unsigned int seed = 0; seed < 1000; seed++) {
-        srand(seed);
+        unsigned int state = seed * 2 + 12345;
         size_t len = 0;
         while (len < sizeof(data)) {
-            int r = rand();
-            if (r & 1) {
-                // Short run: repeats of one of the two letters.
-                unsigned char b = (unsigned char)('a' + (r >> 3) % 2);
-                int run = 1 + (r >> 8) % 4;
-                for (int j = 0; j < run && len < sizeof(data); j++) data[len++] = b;
+            state = (state * 1103515245u + 12345u) & 0x7FFFFFFFu;
+            unsigned int r = state >> 7;
+            unsigned char b = (unsigned char)('a' + (r & 1));
+            if (r & 2) {
+                // Short run of one letter.
+                unsigned int run = 1 + ((r >> 2) & 3);
+                for (unsigned int j = 0; j < run && len < sizeof(data); j++) data[len++] = b;
+            } else if (r & 4) {
+                // Two letters.
+                data[len++] = b;
+                if (len < sizeof(data)) data[len++] = (unsigned char)('a' + ((r >> 3) & 1));
             } else {
-                // 1-2 random letters.
-                int w = 1 + (r >> 8) % 2;
-                for (int j = 0; j < w && len < sizeof(data); j++) data[len++] = (unsigned char)('a' + rand() % 2);
+                // One letter.
+                data[len++] = b;
             }
         }
         len = sizeof(data);
@@ -737,7 +742,8 @@ void test_compressor_extended_lazy_rle_fuzz(void) {
         size_t output_written = 0;
         res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_written, compressed,
                                            compressed_size, NULL);
-        TEST_ASSERT_GREATER_OR_EQUAL(TAMP_OK, res);
+        // On success, decompress returns TAMP_INPUT_EXHAUSTED in lieu of TAMP_OK.
+        TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED, res);
         TEST_ASSERT_EQUAL_MESSAGE(len, output_written, "roundtrip length mismatch");
         TEST_ASSERT_EQUAL_MEMORY_MESSAGE(data, output, len, "roundtrip data mismatch");
     }

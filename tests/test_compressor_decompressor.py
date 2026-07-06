@@ -579,6 +579,11 @@ class TestCompressorAndDecompressor(unittest.TestCase):
                     out.append(byte)
             return bytes(out[:size])
 
+        if PyCompressor is None and CCompressor is None:
+            # MicroPython: only the native module is available, and it doesn't
+            # support the lazy_matching kwarg.
+            self.skipTest("no lazy_matching-capable implementation available")
+
         for Compressor, Decompressor in walk_compressors_decompressors():
             if Compressor is NativeCompressor:
                 continue  # Native module doesn't support lazy_matching kwarg
