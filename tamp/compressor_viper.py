@@ -38,7 +38,7 @@ class Compressor:
         self.min_pattern_size = compute_min_pattern_size(window, literal)
 
         # Window Buffer
-        if dictionary:
+        if dictionary is not None:
             if len(dictionary) != (1 << window):
                 raise ValueError("Dictionary-window size mismatch.")
             self.window_buf = dictionary
@@ -53,7 +53,7 @@ class Compressor:
 
         # Write header
         self.f = f
-        self.f_buf = ((window - 8) << 5 | (literal - 5) << 3 | int(bool(dictionary)) << 2) << (22)
+        self.f_buf = ((window - 8) << 5 | (literal - 5) << 3 | int(dictionary is not None) << 2) << (22)
         self.f_pos = 8
 
     @micropython.viper
