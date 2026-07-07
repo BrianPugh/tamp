@@ -505,6 +505,7 @@ c-test-embedded: build/test_runner_embedded
 
 # Apple Clang does not ship the fuzzer runtime; use Homebrew LLVM if available.
 # Override with: make fuzz-decompressor FUZZ_CC=/path/to/clang
+# (if FUZZ_CC is a version-suffixed name like clang-18, also set FUZZ_CXX=clang++-18)
 FUZZ_CC := $(shell \
 	if [ -x /opt/homebrew/opt/llvm/bin/clang ]; then echo /opt/homebrew/opt/llvm/bin/clang; \
 	elif [ -x /usr/local/opt/llvm/bin/clang ]; then echo /usr/local/opt/llvm/bin/clang; \

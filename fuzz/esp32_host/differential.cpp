@@ -15,6 +15,7 @@
  *
  * Deterministic (fixed seed); exits non-zero on the first mismatch.
  */
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

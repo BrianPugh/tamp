@@ -126,7 +126,8 @@ void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t 
         out = tamp::Locator::find_longest_match(input.getInput(patLen), patLen, compressor->window, WINDOW_SIZE);
     }
     *match_size = out.size();
-    *match_index = out.data() - compressor->window;
+    // out.data() is nullptr on the no-match path; subtracting from it is UB.
+    *match_index = out.empty() ? 0 : out.data() - compressor->window;
 }
 
 #if TAMP_EXTENDED_COMPRESS
