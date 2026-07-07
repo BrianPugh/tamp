@@ -3,7 +3,6 @@ from cpython.exc cimport PyErr_CheckSignals
 from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.stddef cimport size_t
 from io import BytesIO
-from . import bit_size
 from ._c_common cimport CHUNK_SIZE
 from ._c_common import ERROR_LOOKUP
 
@@ -64,7 +63,13 @@ cdef class Decompressor:
         if conf.use_custom_dictionary and dictionary is None:
             raise ValueError
 
-        self._window_buffer = dictionary if dictionary else bytearray(1 << conf.window)
+        if dictionary is not None and len(dictionary) < (1 << conf.window):
+            # A too-small buffer used as the window would let the C
+            # decompressor write out of bounds. An oversized buffer is fine:
+            # C uses only the first 2**window bytes, in place.
+            raise ValueError("Dictionary-window size mismatch.")
+
+        self._window_buffer = dictionary if dictionary is not None else bytearray(1 << conf.window)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
         res = ctamp.tamp_decompressor_init(self._c_decompressor, &conf, self._window_buffer_ptr, conf.window)
@@ -105,7 +110,17 @@ cdef class Decompressor:
 
             if res == ctamp.TAMP_INPUT_EXHAUSTED:
                 # Read in more data
-                self.input_size = self.f.readinto(self.input_buffer)
+                if hasattr(self.f, "readinto"):
+                    self.input_size = self.f.readinto(self.input_buffer)
+                else:
+                    # Fall back for file-like objects that only implement read().
+                    chunk = self.f.read(CHUNK_SIZE)
+                    self.input_size = len(chunk)
+                    if self.input_size > <size_t>CHUNK_SIZE:
+                        # A larger chunk would resize (reallocate) input_buffer,
+                        # leaving input_buffer_ptr dangling.
+                        raise ValueError("read() returned more bytes than requested.")
+                    self.input_buffer[:self.input_size] = chunk
                 self.input_consumed = 0
                 if self.input_size == 0:
                     break;
@@ -137,7 +152,9 @@ cdef class Decompressor:
             # decompression happens inside of readinto
             read_size = self.readinto(buf)
             if size > 0:
-                # We one-shot the decompression
+                # We one-shot the decompression.
+                # Trim unwritten zero-padding when the stream ended early.
+                del buf[read_size:]
                 out.append(buf)
                 break
             # We are decompressing in chunks

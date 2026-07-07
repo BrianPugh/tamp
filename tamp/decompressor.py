@@ -111,9 +111,10 @@ class _BitReader:
 
 
 class _RingBuffer:
-    def __init__(self, buffer):
+    def __init__(self, buffer, size=None):
         self.buffer = buffer
-        self.size = len(buffer)
+        # The window may occupy only a prefix of an oversized buffer.
+        self.size = len(buffer) if size is None else size
         self.pos = 0  # Always pointing to the byte-to-be-overwritten
         self.index = self.buffer.index
 
@@ -163,7 +164,10 @@ class Decompressor:
         dictionary: Optional[bytearray]
             Use the given **initialized** buffer inplace.
             At compression time, the same initialized buffer must be provided.
-            Decompression stream's ``window`` must agree with the dictionary size.
+            Must be at least ``2**window`` bytes long for the stream's window
+            (read from the header). The first ``2**window`` bytes are used in
+            place as the decompression window; bytes past that are never read
+            or written.
             If providing a pre-allocated buffer, but with default initialization, it must
             first be initialized with :func:`~tamp.initialize_dictionary`
         """
@@ -193,12 +197,27 @@ class Decompressor:
         if uses_custom_dictionary and dictionary is None:
             raise ValueError
 
+        window_size = 1 << self.window_bits
+        if dictionary is not None:
+            if len(dictionary) < window_size:
+                raise ValueError("Dictionary-window size mismatch.")
+            if not uses_custom_dictionary:
+                # Stream does not use a custom dictionary: initialize the
+                # supplied buffer's window region in place instead of using its
+                # contents verbatim, matching the C implementation.
+                literal = self.literal_bits if self.extended else 8
+                if len(dictionary) == window_size:
+                    initialize_dictionary(dictionary, literal=literal)
+                else:
+                    dictionary[:window_size] = initialize_dictionary(window_size, literal=literal)
+
         self._window_buffer = _RingBuffer(
             buffer=(
                 dictionary
-                if dictionary
-                else initialize_dictionary(1 << self.window_bits, literal=self.literal_bits if self.extended else 8)
+                if dictionary is not None
+                else initialize_dictionary(window_size, literal=self.literal_bits if self.extended else 8)
             ),
+            size=window_size,
         )
 
         self.min_pattern_size = compute_min_pattern_size(self.window_bits, self.literal_bits)
@@ -335,7 +354,10 @@ class Decompressor:
             read_size = self.readinto(buf)
             if size > 0:
                 # Read the entire contents in one go.
-                out.append(buf)
+                # Trim unwritten zero-padding when the stream ended early.
+                # Slice instead of ``del buf[read_size:]``: MicroPython
+                # bytearrays don't support item deletion.
+                out.append(buf if read_size == len(buf) else buf[:read_size])
                 break
             else:
                 if read_size < len(buf):
