@@ -32,7 +32,8 @@ export class TampCompressionStream extends TransformStream {
 
       async flush(controller) {
         try {
-          const finalData = await compressor.flush();
+          // End of stream: no FLUSH token needed (no more data follows).
+          const finalData = await compressor.flush(false);
           if (finalData.length > 0) {
             controller.enqueue(finalData);
           }

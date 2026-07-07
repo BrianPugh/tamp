@@ -132,7 +132,9 @@ export class TampCompressor {
 
   /**
    * Flush any remaining data and finalize compression
-   * @param write_token - Whether to write a flush token (default false)
+   * @param write_token - Whether to write a FLUSH token (default true). Keep the
+   *   default for a mid-stream flush so the decompressor stays byte-aligned; pass
+   *   false only when no more data will be compressed.
    * @returns Promise resolving to final compressed output
    */
   flush(write_token?: boolean): Promise<Uint8Array>;
