@@ -5,7 +5,7 @@ from io import BytesIO
 import micropython
 from micropython import const
 
-from . import ExcessBitsError, bit_size, compute_min_pattern_size, initialize_dictionary
+from . import ExcessBitsError, compute_min_pattern_size, initialize_dictionary
 
 # encodes [2, 15] pattern lengths
 _HUFFMAN_CODES = b"\x00\x03\x08\x0b\x14$&+KT\x94\x95\xaa'"
@@ -38,9 +38,9 @@ class Compressor:
         self.min_pattern_size = compute_min_pattern_size(window, literal)
 
         # Window Buffer
-        if dictionary:
-            if bit_size(len(dictionary) - 1) != window:
-                raise ValueError
+        if dictionary is not None:
+            if len(dictionary) != (1 << window):
+                raise ValueError("Dictionary-window size mismatch.")
             self.window_buf = dictionary
         else:
             self.window_buf = initialize_dictionary(1 << window)
@@ -53,7 +53,7 @@ class Compressor:
 
         # Write header
         self.f = f
-        self.f_buf = ((window - 8) << 5 | (literal - 5) << 3 | int(bool(dictionary)) << 2) << (22)
+        self.f_buf = ((window - 8) << 5 | (literal - 5) << 3 | int(dictionary is not None) << 2) << (22)
         self.f_pos = 8
 
     @micropython.viper
