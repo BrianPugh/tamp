@@ -40,9 +40,6 @@ class Compressor:
         # Window Buffer
         if dictionary:
             if len(dictionary) != (1 << window):
-                # The previous bit_size check accepted any length in
-                # (2**(window-1), 2**window]; a short buffer used as the window
-                # would make the unchecked ptr8 window accesses go out of bounds.
                 raise ValueError("Dictionary-window size mismatch.")
             self.window_buf = dictionary
         else:
