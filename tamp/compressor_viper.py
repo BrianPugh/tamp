@@ -95,11 +95,14 @@ class Compressor:
                     continue  # Small Speed short-cut
 
                 current_match_size = int(2)
-                for k in range(current_match_size, input_size):
+                # Clamp to the window edge so the ptr8 read below can't go
+                # out of bounds; keeps the hot loop to a single comparison.
+                max_k = window_size - window_index
+                if max_k > input_size:
+                    max_k = input_size
+                for k in range(current_match_size, max_k):
                     input_index = (input_pos + k) & 0xF
-                    # Bounds check must come first: reading window_buf[window_index + k]
-                    # through ptr8 past the buffer end is an out-of-bounds access.
-                    if window_index + k >= window_size or input_buf[input_index] != window_buf[window_index + k]:
+                    if input_buf[input_index] != window_buf[window_index + k]:
                         break
                     current_match_size = k + 1
                 if current_match_size > match_size:
