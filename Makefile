@@ -532,6 +532,59 @@ fuzz-round-trip: build/fuzz_round_trip
 fuzz-clean:
 	@rm -f build/fuzz_decompressor build/fuzz_round_trip
 	@rm -rf fuzz/corpus_decompressor fuzz/corpus_round_trip
+	@rm -rf build/esp32_host build/fuzz_round_trip_esp32 build/esp32_host_differential fuzz/corpus_round_trip_esp32
+
+##################################
+# ESP32-optimized compressor: host-side verification.
+#
+# The ESP32 build (TAMP_ESP32=1, espidf/tamp/compressor_esp32.cpp) compiles on
+# desktop: all Xtensa asm/SIMD is behind `if constexpr` arch flags, so the
+# scalar C++ search paths run natively and can be checked under ASan/UBSan
+# against large inputs - something the device itself can't do.
+#
+#   make esp32-host-test        # differential checks + bounded round-trip fuzz
+#   make fuzz-round-trip-esp32  # open-ended round-trip fuzzing (Ctrl-C to stop)
+##################################
+.PHONY: esp32-host-test fuzz-round-trip-esp32
+
+FUZZ_CXX := $(FUZZ_CC)++
+# -fno-sanitize=alignment: the ESP32 search code does unaligned word loads by
+# design (its targets support them in hardware); don't drown out real findings.
+ESP32_HOST_FLAGS = -DTAMP_ESP32=1 -DTAMP_LAZY_MATCHING=1 -fno-strict-aliasing -fno-sanitize=alignment \
+	-Itamp/_c_src -Itamp/_c_src/tamp -Iespidf/tamp -Ifuzz/esp32_host
+
+build/fuzz_round_trip_esp32: fuzz/fuzz_round_trip.c espidf/tamp/compressor_esp32.cpp \
+		espidf/tamp/private/tamp_search.hpp espidf/tamp/private/copyutil.hpp \
+		tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c tamp/_c_src/tamp/common.c
+	@mkdir -p build/esp32_host
+	$(FUZZ_CC) $(FUZZ_CFLAGS) $(ESP32_HOST_FLAGS) -c tamp/_c_src/tamp/compressor.c -o build/esp32_host/compressor.o
+	$(FUZZ_CC) $(FUZZ_CFLAGS) $(ESP32_HOST_FLAGS) -c tamp/_c_src/tamp/decompressor.c -o build/esp32_host/decompressor.o
+	$(FUZZ_CC) $(FUZZ_CFLAGS) $(ESP32_HOST_FLAGS) -c tamp/_c_src/tamp/common.c -o build/esp32_host/common.o
+	$(FUZZ_CC) $(FUZZ_CFLAGS) $(ESP32_HOST_FLAGS) -c fuzz/fuzz_round_trip.c -o build/esp32_host/fuzz_round_trip.o
+	$(FUZZ_CXX) -std=c++20 $(FUZZ_CFLAGS) $(ESP32_HOST_FLAGS) -c espidf/tamp/compressor_esp32.cpp -o build/esp32_host/compressor_esp32.o
+	$(FUZZ_CXX) $(FUZZ_LDFLAGS) -o $@ build/esp32_host/compressor.o build/esp32_host/decompressor.o \
+		build/esp32_host/common.o build/esp32_host/fuzz_round_trip.o build/esp32_host/compressor_esp32.o
+
+build/esp32_host_differential: fuzz/esp32_host/differential.cpp espidf/tamp/compressor_esp32.cpp \
+		espidf/tamp/private/tamp_search.hpp espidf/tamp/private/copyutil.hpp
+	@mkdir -p build
+	$(FUZZ_CXX) -std=c++20 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer $(ESP32_HOST_FLAGS) \
+		-o $@ fuzz/esp32_host/differential.cpp espidf/tamp/compressor_esp32.cpp
+
+# Seed the fuzz corpus with match-rich data; pure-random inputs rarely reach
+# the RLE/extended-match paths.
+fuzz/corpus_round_trip_esp32:
+	@mkdir -p $@
+	@head -c 4096 /dev/zero | tr '\0' 'a' > $@/seed_run
+	@printf 'abcabcabcabc%.0s' $$(seq 1 300) > $@/seed_cycle
+	@if [ -f build/enwik8-100kb ]; then head -c 16384 build/enwik8-100kb > $@/seed_text; fi
+
+esp32-host-test: build/esp32_host_differential build/fuzz_round_trip_esp32 fuzz/corpus_round_trip_esp32
+	./build/esp32_host_differential
+	./build/fuzz_round_trip_esp32 -runs=100000 -max_len=8192 fuzz/corpus_round_trip_esp32
+
+fuzz-round-trip-esp32: build/fuzz_round_trip_esp32 fuzz/corpus_round_trip_esp32
+	./build/fuzz_round_trip_esp32 -max_len=16384 fuzz/corpus_round_trip_esp32
 
 
 ###############
