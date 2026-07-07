@@ -596,13 +596,13 @@ class TestMissingCExtensions(unittest.TestCase):
         """build_dictionary_cli raises a clear RuntimeError when the compiled kernels are unavailable."""
         import tamp.cli.build_dictionary as bd
 
-        original = bd.score_and_multi_frag
-        bd.score_and_multi_frag = None
+        original = bd._KERNELS_AVAILABLE
+        bd._KERNELS_AVAILABLE = False
         try:
             with self.assertRaisesRegex(RuntimeError, "compiled C extensions"):
                 bd.build_dictionary_cli(Path("unused"))
         finally:
-            bd.score_and_multi_frag = original
+            bd._KERNELS_AVAILABLE = original
 
     def test_cli_importable_without_c_build_dictionary(self):
         """The tamp CLI must remain importable when tamp._c_build_dictionary is missing."""
@@ -621,9 +621,18 @@ class TestMissingCExtensions(unittest.TestCase):
             import tamp.cli.main  # noqa: F401  (must import without error)
             import tamp.cli.build_dictionary as bd
 
-            assert bd.score_and_multi_frag is None
-            assert bd.select_candidates is None
-            assert bd._c_score_substrings is None
+            assert not bd._KERNELS_AVAILABLE
+
+            # Every kernel entry point must raise a clear RuntimeError, not a
+            # confusing TypeError, when invoked without the C extensions.
+            for fn in (bd.score_and_multi_frag, bd.select_candidates, bd._c_score_substrings):
+                try:
+                    fn()
+                except RuntimeError as e:
+                    assert "compiled C extensions" in str(e), str(e)
+                    assert isinstance(e.__cause__, ImportError), repr(e.__cause__)
+                else:
+                    raise SystemExit("expected RuntimeError from kernel stub")
 
             from pathlib import Path
 
