@@ -35,6 +35,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         .literal = literal_bits,
         .use_custom_dictionary = 0,
         .extended = extended,
+#if TAMP_LAZY_MATCHING
+        .lazy_matching = (config_byte >> 6) & 1,
+#endif
     };
 
     tamp_res res = tamp_compressor_init(&compressor, &conf, comp_window);

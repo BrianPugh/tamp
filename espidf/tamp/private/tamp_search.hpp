@@ -456,8 +456,9 @@ class Locator {
                     }
 
                     if (data >= end_unrolled) {
-                        // Nothing found so far.
-                        while (data < end && (as<uint32_t>(data) << 8) != vl) {
+                        // Nothing found so far. Compare 3 bytes without a 4-byte load:
+                        // a 4-byte load at end-1 would read 1 byte past data+dataLen.
+                        while (data < end && !(as<uint16_t>(data) == (uint16_t)vh && data[2] == (uint8_t)(vh >> 16))) {
                             incptr<1>(data);
                         }
                     }
@@ -610,6 +611,7 @@ class Locator {
      */
     // Attention: For some reason, when gcc inlines this, sometimes this DOUBLES the total processing time. Needs
     // investigation!
+    template <bool LONG_VERIFY>
     static const uint8_t* /* __attribute__((noinline)) */ find_pattern_long_scalar(const uint8_t* pattern,
                                                                                    const uint32_t patLen,
                                                                                    const uint8_t* data,
@@ -649,7 +651,7 @@ class Locator {
             }
 
             if (first < end) {
-                if (cmpLen == 0 || cmp8(first + sw, pattern + sw, cmpLen) >= cmpLen) {
+                if (cmpLen == 0 || verify_cmp<LONG_VERIFY>(first + sw, pattern + sw, cmpLen) >= cmpLen) {
                     return first;
                 } else {
                     incptr<1>(first);
@@ -745,8 +747,11 @@ class Locator {
      * @param len maximum number of bytes to compare
      * @return common prefix length of \p *d1 and \p *d2, i.e. the number of equal bytes
      * from the start of both memory regions; returns \p len if all bytes are equal.
+     *
+     * noinline: only called for long (>= 16 byte) verifies via ::verify_cmp(); no need
+     * to bloat the LONG_VERIFY find_pattern instantiation by inlining it.
      */
-    static uint32_t cmp(const void* d1, const void* d2, const uint32_t len) noexcept {
+    static uint32_t __attribute__((noinline)) cmp(const void* d1, const void* d2, const uint32_t len) noexcept {
         const uint8_t* const end = (const uint8_t*)d1 + len;
 
         if constexpr (Arch::XTENSA && Arch::XT_LOOP) {
@@ -819,21 +824,44 @@ class Locator {
             return (const uint8_t*)d1 - (end - len);
 
         } else {
-            {
-                const void* const end32 = p<uint8_t>(d1) + multof<4>(len);
-                while (d1 < end32 && as<uint32_t>(d1) == as<uint32_t>(d2)) {
-                    incptr<4>(d1);
-                    incptr<4>(d2);
-                }
+            const uint8_t* const start = p<uint8_t>(d1);
+            const void* const end32 = start + multof<4>(len);
+            while (d1 < end32 && as<uint32_t>(d1) == as<uint32_t>(d2)) {
+                incptr<4>(d1);
+                incptr<4>(d2);
             }
 
-            if (d1 < end) {
-                // Find any common prefix in (d1+0)...(d1+sizeof(uint32_t)-1)
-                const uint32_t sml = subword_match_len(d1, d2);
-                return std::min(len, (uint32_t)(((p<uint8_t>(d1) + len) - end) + sml));
-            } else {
-                return len;
+            if (d1 < end32) {
+                // Mismatch inside a full 4-byte word: safe to load 4 bytes and
+                // find the common prefix in (d1+0)...(d1+sizeof(uint32_t)-1).
+                return (uint32_t)(p<uint8_t>(d1) - start) + subword_match_len(d1, d2);
             }
+            // Compare the remaining 0..3 tail bytes byte-wise; a 4-byte load
+            // here could read past d1+len.
+            while (d1 < end && as<uint8_t>(d1) == as<uint8_t>(d2)) {
+                incptr<1>(d1);
+                incptr<1>(d2);
+            }
+            return (uint32_t)(p<uint8_t>(d1) - start);
+        }
+    }
+
+    /**
+     * @brief Candidate-verify compare: byte-wise (::cmp8()) when an early mismatch is
+     * likely, word-wise (::cmp()) for long compares where a full match is expected.
+     *
+     * The choice is a compile-time flag: find_best_match patterns are <= 16 bytes so
+     * its verifies are always short, and even a well-predicted runtime length check
+     * in find_pattern's verify path costs measurable time on match-dense data.
+     * Only the extended-match search (long patterns) instantiates LONG_VERIFY.
+     */
+    template <bool LONG_VERIFY>
+    static uint32_t __attribute__((always_inline)) verify_cmp(const void* d1, const void* d2,
+                                                              const uint32_t len) noexcept {
+        if constexpr (LONG_VERIFY) {
+            return (len >= 16) ? cmp(d1, d2, len) : cmp8(d1, d2, len);
+        } else {
+            return cmp8(d1, d2, len);
         }
     }
 
@@ -846,10 +874,11 @@ class Locator {
      * @param dataLen length of data to search
      * @return first start of pattern in data, or \c nullptr if not found
      */
+    template <bool LONG_VERIFY>
     static const uint8_t* find_pattern_scalar(const uint8_t* const pattern, const uint32_t patLen, const uint8_t* data,
                                               const uint32_t dataLen) noexcept {
         if (patLen > sizeof(uint32_t)) {
-            return find_pattern_long_scalar(pattern, patLen, data, dataLen);
+            return find_pattern_long_scalar<LONG_VERIFY>(pattern, patLen, data, dataLen);
         } else {
             return find_pattern_short_scalar(pattern, patLen, data, dataLen);
         }
@@ -865,6 +894,7 @@ class Locator {
      * @param dataLen length of data to search
      * @return first start of pattern in data, or \c nullptr if not found
      */
+    template <bool LONG_VERIFY = false>
     static const uint8_t* __attribute__((noinline))
     find_pattern(const uint8_t* const pattern, const uint32_t patLen, const uint8_t* const data,
                  const uint32_t dataLen) noexcept {
@@ -1034,7 +1064,7 @@ class Locator {
                             tmp = tmp << bits;  // Remove the bit we're handling now.
                         }
                         if (s1 <= end) TAMP_CPP_LIKELY {
-                            if (cmpLen == 0 || cmp8(s1, pat1, cmpLen) >= cmpLen) {
+                            if (cmpLen == 0 || verify_cmp<LONG_VERIFY>(s1, pat1, cmpLen) >= cmpLen) {
                                 // stats.matchFound(patLen, (s1-1)-data + patLen);
                                 return s1 - 1;
                             }
@@ -1051,7 +1081,7 @@ class Locator {
             return nullptr;
 
         } else {
-            return find_pattern_scalar(pattern, patLen, data, dataLen);
+            return find_pattern_scalar<LONG_VERIFY>(pattern, patLen, data, dataLen);
         }
     }
 
@@ -1059,28 +1089,36 @@ class Locator {
      * @brief Searches \p data for the longest prefix of \p pattern that can be found.
      *
      * @param pattern
-     * @param patLen length of the pattern; must be >= 2
+     * @param patLen length of the pattern; must be >= \p minLen
      * @param data
      * @param dataLen
-     * @return a std::span of the match found in data, or an empty std::span if no prefix was found.
+     * @param minLen minimum acceptable match length; must be >= 2
+     * @tparam LONG_VERIFY set for long-pattern searches (see ::verify_cmp())
+     * @return a std::span of the match found in data, or an empty std::span if no match of at
+     * least \p minLen bytes was found. The returned span never extends past \p data + \p dataLen.
      */
+    template <bool LONG_VERIFY = false>
     static byte_span find_longest_match(const uint8_t* const pattern, const uint32_t patLen, const uint8_t* data,
-                                        uint32_t dataLen) noexcept {
+                                        uint32_t dataLen, const uint32_t minLen = 2) noexcept {
         const uint8_t* bestMatch{nullptr};
         uint32_t matchLen{0};
 
-        {
+        if (minLen <= patLen && minLen <= dataLen) {
+            const uint8_t* const dataEnd = data + dataLen;
             const uint8_t* match;
-            uint32_t searchLen = 2;
+            uint32_t searchLen = minLen;
             do {
-                match = find_pattern(pattern, searchLen, data, dataLen);
+                match = find_pattern<LONG_VERIFY>(pattern, searchLen, data, dataLen);
                 if (match) {
                     bestMatch = match;
                     matchLen = searchLen;
-                    if (searchLen < patLen) TAMP_CPP_LIKELY {
-                        // If the current match happens to extend beyond what we searched for,
-                        // we'll take that too.
-                        matchLen += cmp8(pattern + searchLen, match + searchLen, patLen - searchLen);
+                    // If the current match happens to extend beyond what we searched for,
+                    // we'll take that too -- but never past dataEnd: bytes beyond it are
+                    // outside the window, so reading them is OOB and a match reaching
+                    // past the window end is rejected by the decompressor.
+                    const uint32_t maxLen = std::min(patLen, (uint32_t)(dataEnd - match));
+                    if (searchLen < maxLen) TAMP_CPP_LIKELY {
+                        matchLen += cmp8(pattern + searchLen, match + searchLen, maxLen - searchLen);
                     }
                     dataLen -= match + 1 - data;
                     data = match + 1;
