@@ -42,6 +42,12 @@ int main(void) {
     RUN_TEST(test_reset_dictionary_small_output_buffer);
     RUN_TEST(test_double_flush_does_not_reset);
 
+    // find_best_match edge cases (exact-bitstream pinned)
+    RUN_TEST(test_find_best_match_window_edge);
+    RUN_TEST(test_find_best_match_alignment_phases);
+    RUN_TEST(test_find_best_match_swar_byte_patterns);
+    RUN_TEST(test_find_best_match_max_pattern_early_exit);
+
     // Decompressor extended tests
     RUN_TEST(test_decompressor_extended_rle);
     RUN_TEST(test_decompressor_extended_match);

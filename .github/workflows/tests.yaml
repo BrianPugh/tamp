@@ -270,6 +270,9 @@ jobs:
       - name: Run C tests
         run: make c-test
 
+      - name: Run C tests (embedded find_best_match)
+        run: make c-test-embedded
+
       - name: Verify CLI compression/decompression integrity
         run: |
           source .venv/bin/activate
@@ -355,7 +358,9 @@ jobs:
       - name: Install library with sanitizers
         run: |
           if [ "${{ matrix.implementation }}" = "embedded" ]; then
-            TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 poetry install --only main --extras cli --no-interaction
+            # Full install (not --only main): the embedded leg also runs the
+            # pytest dataset regression suite below.
+            TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 poetry install --extras cli --no-interaction
           else
             TAMP_SANITIZE=1 poetry install --only main --extras cli --no-interaction
           fi
@@ -405,3 +410,12 @@ jobs:
             echo "Roundtrip hash: $roundtrip_hash"
             exit 1
           fi
+
+      - name: Run dataset regression tests (embedded find_best_match)
+        if: matrix.implementation == 'embedded'
+        # The recorded compressed-output SHA256s are implementation-independent,
+        # so this pins the embedded matcher's exact bitstream on every cached
+        # corpus (corpora missing from the cache are skipped by the test).
+        run: |
+          source .venv/bin/activate
+          LD_PRELOAD=$(gcc -print-file-name=libasan.so) python -m pytest tests/test_dataset_regression.py -v

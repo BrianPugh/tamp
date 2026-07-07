@@ -749,3 +749,100 @@ void test_compressor_extended_lazy_rle_fuzz(void) {
     }
 }
 #endif  // TAMP_LAZY_MATCHING
+
+/*
+ * find_best_match edge cases.
+ *
+ * Each case pins the exact compressed bytes (goldens generated from the
+ * pure-Python reference implementation), so a match-finder change that
+ * degrades match quality — while still producing a valid, decompressible
+ * stream — fails loudly. They run against whichever find_best_match
+ * implementation this binary was built with (desktop, or embedded via
+ * TAMP_USE_EMBEDDED_MATCH=1 / `make c-test-embedded`).
+ */
+
+static void run_match_finder_case(const unsigned char *dictionary, const unsigned char *input, size_t input_size,
+                                  const unsigned char *expected, size_t expected_size) {
+    tamp_res res;
+    TampCompressor compressor;
+    unsigned char c_window[1 << 8];
+    unsigned char compressed[64];
+    unsigned char decompressed[64];
+    size_t compressed_size, input_consumed, decompressed_size;
+    TampConf conf = {
+        .window = 8,
+        .literal = 8,
+        .use_custom_dictionary = true,
+    };
+
+    memcpy(c_window, dictionary, sizeof(c_window));
+    res = tamp_compressor_init(&compressor, &conf, c_window);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+
+    res = tamp_compressor_compress_and_flush(&compressor, compressed, sizeof(compressed), &compressed_size, input,
+                                             input_size, &input_consumed, false);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    TEST_ASSERT_EQUAL(input_size, input_consumed);
+    TEST_ASSERT_EQUAL(expected_size, compressed_size);
+    TEST_ASSERT_EQUAL_MEMORY(expected, compressed, expected_size);
+
+    // Round-trip with a fresh copy of the dictionary.
+    TampDecompressor decompressor;
+    unsigned char d_window[1 << 8];
+    memcpy(d_window, dictionary, sizeof(d_window));
+    res = tamp_decompressor_init(&decompressor, NULL, d_window, 8);
+    TEST_ASSERT_EQUAL(TAMP_OK, res);
+    res = tamp_decompressor_decompress(&decompressor, decompressed, sizeof(decompressed), &decompressed_size,
+                                       compressed, compressed_size, NULL);
+    TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED, res);
+    TEST_ASSERT_EQUAL(input_size, decompressed_size);
+    TEST_ASSERT_EQUAL_MEMORY(input, decompressed, input_size);
+}
+
+void test_find_best_match_window_edge(void) {
+    // Best match ("WXYZ" at index 252) ends exactly at the last window byte;
+    // the trailing "!!" forces the extension loop against the window boundary.
+    unsigned char dictionary[1 << 8];
+    memset(dictionary, 'a', sizeof(dictionary));
+    memcpy(&dictionary[250], "UVWXYZ", 6);
+    static const unsigned char expected[] = {0x1c, 0x47, 0xe4, 0x86, 0x42};
+    run_match_finder_case(dictionary, (const unsigned char *)"WXYZ!!", 6, expected, sizeof(expected));
+}
+
+void test_find_best_match_alignment_phases(void) {
+    // Progressively better matches at indices 3, 13, 26, 40 — one for each
+    // word-alignment phase — so the first-byte scan must find candidates at
+    // every alignment and update the best match each time.
+    unsigned char dictionary[1 << 8];
+    memset(dictionary, 0xFF, sizeof(dictionary));
+    memcpy(&dictionary[3], "Qa", 2);
+    memcpy(&dictionary[13], "Qab", 3);
+    memcpy(&dictionary[26], "Qabc", 4);
+    memcpy(&dictionary[40], "Qabcd", 5);
+    static const unsigned char expected[] = {0x1c, 0x59, 0x40};
+    run_match_finder_case(dictionary, (const unsigned char *)"Qabcd", 5, expected, sizeof(expected));
+}
+
+void test_find_best_match_swar_byte_patterns(void) {
+    // Byte values that stress word-at-a-time (SWAR) zero-byte detection:
+    // first byte 0x00, plus 0x00/0x7F/0x80 sequences that trigger the
+    // borrow-propagation false-positive paths.
+    unsigned char dictionary[1 << 8];
+    memset(dictionary, 0x01, sizeof(dictionary));
+    memcpy(&dictionary[10], "\x00\x7f", 2);
+    memcpy(&dictionary[50], "\x80\x00\x80", 3);
+    memcpy(&dictionary[100], "\x00\x00\x00", 3);
+    memcpy(&dictionary[200], "\x00\x80\x7f\x01\xff", 5);
+    static const unsigned char expected[] = {0x1c, 0x5e, 0x40};
+    run_match_finder_case(dictionary, (const unsigned char *)"\x00\x80\x7f\x01\xff", 5, expected, sizeof(expected));
+}
+
+void test_find_best_match_max_pattern_early_exit(void) {
+    // A full max_pattern_size (15-byte) match at index 30 triggers the
+    // early-exit path; the 16th input byte is emitted as a literal.
+    unsigned char dictionary[1 << 8];
+    memset(dictionary, 'z', sizeof(dictionary));
+    memcpy(&dictionary[30], "ABCDEFGHIJKLMNOP", 16);
+    static const unsigned char expected[] = {0x1c, 0x4e, 0x3d, 0x50};
+    run_match_finder_case(dictionary, (const unsigned char *)"ABCDEFGHIJKLMNOP", 16, expected, sizeof(expected));
+}
