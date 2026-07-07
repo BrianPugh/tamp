@@ -121,8 +121,29 @@ static TAMP_NOINLINE void find_best_match(TampCompressor* compressor, uint16_t* 
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
     const unsigned char* window = compressor->window;
 
+#if defined(__GNUC__)
+    // Word-at-a-time skip over bytes that can't start a match: ~3 cycles/byte
+    // instead of ~9 on Cortex-M0+, and the scan dominates compression time.
+    const uint32_t first_broadcast = first_byte * 0x01010101u;
+#endif
+
     for (uint32_t window_index = 0; window_index < window_size_minus_1; window_index++) {
         if (TAMP_LIKELY(window[window_index] != first_byte)) {
+#if defined(__GNUC__)
+            uint32_t wi = window_index + 1;
+            if (TAMP_LIKELY(((uintptr_t)(window + wi) & 3) == 0)) {
+                // Aligned: skip 4 bytes per iteration until a word may hold
+                // first_byte (zero-byte detect on the XOR; false positives
+                // are fine, the byte loop re-checks).
+                typedef uint32_t __attribute__((may_alias)) tamp_word_alias;
+                while (wi + 4 <= window_size_minus_1) {
+                    uint32_t word = *(const tamp_word_alias*)(window + wi) ^ first_broadcast;
+                    if ((word - 0x01010101u) & ~word & 0x80808080u) break;
+                    wi += 4;
+                }
+            }
+            window_index = wi - 1;  // loop increment advances to wi
+#endif
             continue;
         }
         if (TAMP_LIKELY(window[window_index + 1] != second_byte)) {
