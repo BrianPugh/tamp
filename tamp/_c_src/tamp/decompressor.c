@@ -2,6 +2,29 @@
 
 #include "common.h"
 
+/* Copy primitives for the hot paths. Platform-specific implementations live
+ * with their platform component; TAMP_ESP32 builds already require the espidf
+ * component sources on the include path (same contract as the extern
+ * find_best_match in compressor.c). On generic targets the macros expand to
+ * the plain byte loops / tamp_window_copy call they replaced (macros, not
+ * inline functions: Cortex-M0+ codegen is sensitive to function boundaries). */
+#if TAMP_ESP32
+#include "private/tamp_copy.h"
+#else
+
+/* Copy count bytes from src to the output cursor and advance it. */
+#define TAMP_COPY_TO_OUTPUT(out, src, count)                      \
+    do {                                                          \
+        for (uint8_t _tamp_i = 0; _tamp_i < (count); _tamp_i++) { \
+            *(out)++ = (src)[_tamp_i];                            \
+        }                                                         \
+    } while (0)
+
+#define TAMP_WINDOW_COPY(window, window_pos, window_offset, match_size, window_mask) \
+    tamp_window_copy((window), (window_pos), (window_offset), (match_size), (window_mask))
+
+#endif /* TAMP_ESP32 */
+
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -233,9 +256,7 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
 
     /* Copy from window to output */
     uint16_t src_offset = window_offset + skip;
-    for (uint8_t i = 0; i < to_write; i++) {
-        *(*output)++ = d->window[src_offset + i];
-    }
+    TAMP_COPY_TO_OUTPUT(*output, d->window + src_offset, to_write);
     *output_written_size += to_write;
 
     /* Update window only on complete decode.
@@ -244,7 +265,7 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
         uint16_t wp = d->window_pos;
         uint16_t remaining = window_size - wp;
         uint8_t window_write = (match_size < remaining) ? match_size : remaining;
-        tamp_window_copy(d->window, &wp, window_offset, window_write, window_size - 1);
+        TAMP_WINDOW_COPY(d->window, &wp, window_offset, window_write, window_size - 1);
         d->window_pos = wp;
     }
 
@@ -541,14 +562,12 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             }
 
             // Copy pattern to output
-            for (uint8_t i = 0; i < match_size_skip; i++) {
-                *output++ = decompressor->window[window_offset_skip + i];
-            }
+            TAMP_COPY_TO_OUTPUT(output, decompressor->window + window_offset_skip, match_size_skip);
             (*output_written_size) += match_size_skip;
 
             if (TAMP_LIKELY(decompressor->skip_bytes == 0)) {
                 uint16_t wp = decompressor->window_pos;
-                tamp_window_copy(decompressor->window, &wp, window_offset, match_size, window_mask);
+                TAMP_WINDOW_COPY(decompressor->window, &wp, window_offset, match_size, window_mask);
                 decompressor->window_pos = wp;
             }
         }
