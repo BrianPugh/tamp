@@ -1,0 +1,2 @@
+recursive-include tamp *.pyx *.pxd
+recursive-include tamp/_c_src *.c *.h

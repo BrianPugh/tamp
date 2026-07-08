@@ -6,7 +6,8 @@ on:
     paths:
       - 'tamp/**'
       - 'pyproject.toml'
-      - 'build.py'
+      - 'setup.py'
+      - 'MANIFEST.in'
       - '.github/workflows/build_wheels.yaml'
   push:
     tags:
@@ -14,7 +15,8 @@ on:
     paths:
       - 'tamp/**'
       - 'pyproject.toml'
-      - 'build.py'
+      - 'setup.py'
+      - 'MANIFEST.in'
       - '.github/workflows/build_wheels.yaml'
 
 concurrency:
@@ -29,48 +31,21 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-    env:
-      PYTHON: 3.12
-      POETRY_HOME: '~/poetry'
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Set up python ${{ env.PYTHON }}
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ env.PYTHON }}
-
-      - name: Cache Poetry Install
-        uses: actions/cache@v4
-        id: cached-poetry
-        with:
-          path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ env.PYTHON }}-${{ hashFiles('.github/workflows/build_wheels.yaml') }}
-
-      - name: Install poetry
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.8.5
-
-      - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
-        run: |
-          echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry # Needs to be separate from install-poetry because cache.
-        run: |
-          poetry self add poetry-dynamic-versioning[plugin]
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
+          python-version: '3.12'
+          enable-cache: true
 
       - name: Build sdist
-        run: |
-          poetry self add "poetry-dynamic-versioning[plugin]"
-          poetry build --format=sdist
+        run: uv build --sdist
 
       - uses: actions/upload-artifact@v4
         with:

@@ -42,47 +42,48 @@ different platforms:
 **Environment Setup:**
 
 ```bash
-poetry install              # Install dependencies
-poetry shell               # Activate virtual environment
+uv sync                    # Install dependencies (also builds the Cython extensions)
+source .venv/bin/activate  # Activate virtual environment
 ```
 
 **Build and Test:**
 
 ```bash
-# Build Cython extensions
-poetry run python build.py build_ext --inplace
+# Build/rebuild Cython extensions (uv sync recompiles when C/Cython sources change)
+uv sync
 
 # Run tests
-poetry run pytest                    # All tests
-poetry run pytest tests/test_compressor.py  # Specific test file
+uv run pytest                    # All tests
+uv run pytest tests/test_compressor.py  # Specific test file
 
 # Run both Python and MicroPython tests
 make test
 
 # CLI usage
-poetry run tamp compress input.txt -o output.tamp
-poetry run tamp decompress output.tamp -o restored.txt
+uv run tamp compress input.txt -o output.tamp
+uv run tamp decompress output.tamp -o restored.txt
 ```
 
 **Code Quality:**
 
 ```bash
-poetry run ruff check              # Linting
-poetry run ruff format             # Formatting
-poetry run pyright                 # Type checking
+uv run ruff check              # Linting
+uv run ruff format             # Formatting
+uv run pyright                 # Type checking
 ```
 
 **Testing with AddressSanitizer (Linux only):**
 
 ```bash
-# Build with sanitizers enabled
-TAMP_SANITIZE=1 poetry run python build.py build_ext --inplace
+# Build with sanitizers enabled (--reinstall-package forces a rebuild since the
+# env var changed but the sources did not)
+TAMP_SANITIZE=1 uv sync --reinstall-package tamp
 
 # Run tests with AddressSanitizer (requires LD_PRELOAD on Linux)
 LD_PRELOAD=$(gcc -print-file-name=libasan.so) \
 ASAN_OPTIONS=detect_leaks=0 \
 UBSAN_OPTIONS=print_stacktrace=1 \
-poetry run pytest
+uv run pytest
 
 # Note: AddressSanitizer is only supported on Linux due to security
 # restrictions on macOS that prevent LD_PRELOAD/DYLD_INSERT_LIBRARIES
@@ -160,8 +161,10 @@ make website-clean         # Clean website build artifacts
 
 **Python Build Process:**
 
-1. `pyproject.toml` defines Poetry configuration with dynamic versioning
-2. `build.py` handles Cython extension compilation with optimization flags
+1. `pyproject.toml` defines the project (PEP 621) with `setuptools-scm` dynamic
+   versioning and the `setuptools.build_meta` backend; `uv` manages the
+   environment and lockfile
+2. `setup.py` handles Cython extension compilation with optimization flags
 3. Extensions link against shared C source in `tamp/_c_src/tamp/`
 
 **WebAssembly Build Process:**
@@ -174,7 +177,7 @@ make website-clean         # Clean website build artifacts
 **Configuration Flags (compile-time `-D` defines):**
 
 - `TAMP_LAZY_MATCHING=1` - Enable lazy matching optimization (default in
-  build.py)
+  setup.py)
 - `TAMP_ESP32=1` - ESP32-specific optimizations (uses `uint32_t` instead of
   narrower types for hot struct fields, avoiding costly narrow-type conversions)
 - `TAMP_COMPRESSOR`/`TAMP_DECOMPRESSOR` - Include/exclude components
@@ -259,7 +262,7 @@ backends (memory, stdio, LittleFS, FatFS).
 
    ```bash
    # Python
-   poetry run python build.py build_ext --inplace
+   uv sync
 
    # WebAssembly
    cd wasm && npm run build
@@ -267,7 +270,7 @@ backends (memory, stdio, LittleFS, FatFS).
 
 4. **Run comprehensive tests:**
    ```bash
-   poetry run pytest      # Python tests
+   uv run pytest      # Python tests
    make c-test            # C unit tests with sanitizers
    make c-test-embedded   # C tests with embedded match finding
    cd wasm && npm test    # WebAssembly
@@ -296,7 +299,8 @@ backends (memory, stdio, LittleFS, FatFS).
 
 ### Release Process
 
-1. **Version is automatically managed** via `poetry-dynamic-versioning`
+1. **Version is automatically managed** via `setuptools-scm` (derived from git
+   tags)
 2. **Build artifacts include:**
    - Python wheels with compiled extensions
    - MicroPython `.mpy` files for multiple architectures

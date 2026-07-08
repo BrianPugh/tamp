@@ -1,4 +1,13 @@
-__version__ = "0.0.0"
+try:
+    # Version is derived from git tags by setuptools-scm at build-time.
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        __version__ = version("tamp")
+    except PackageNotFoundError:
+        __version__ = "0.0.0"
+except ImportError:  # MicroPython lacks importlib.metadata
+    __version__ = "0.0.0"
 
 
 class ExcessBitsError(Exception):

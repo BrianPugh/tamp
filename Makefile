@@ -208,14 +208,14 @@ v1-compressed-datasets: datasets/enwik8 datasets/silesia
 		[ -f "$$f" ] || continue; \
 		base=$$(basename "$$f"); \
 		echo "Compressing $$f -> datasets/v1-compressed/$$base.tamp"; \
-		poetry run tamp compress --no-extended "$$f" -o "datasets/v1-compressed/$$base.tamp"; \
+		uv run tamp compress --no-extended "$$f" -o "datasets/v1-compressed/$$base.tamp"; \
 	done
 	@mkdir -p datasets/v1-compressed/silesia
 	@for f in datasets/silesia/*; do \
 		[ -f "$$f" ] || continue; \
 		base=$$(basename "$$f"); \
 		echo "Compressing $$f -> datasets/v1-compressed/silesia/$$base.tamp"; \
-		poetry run tamp compress --no-extended "$$f" -o "datasets/v1-compressed/silesia/$$base.tamp"; \
+		uv run tamp compress --no-extended "$$f" -o "datasets/v1-compressed/silesia/$$base.tamp"; \
 	done
 
 extended-compressed-datasets: datasets/enwik8 datasets/silesia
@@ -224,7 +224,7 @@ extended-compressed-datasets: datasets/enwik8 datasets/silesia
 		[ -f "$$f" ] || continue; \
 		base=$$(basename "$$f"); \
 		echo "Compressing $$f -> datasets/extended-compressed/$$base.tamp"; \
-		poetry run tamp compress --extended "$$f" -o "datasets/extended-compressed/$$base.tamp"; \
+		uv run tamp compress --extended "$$f" -o "datasets/extended-compressed/$$base.tamp"; \
 	done
 
 # Derived test files (OK to be in build/, quick to regenerate)
@@ -234,7 +234,7 @@ build/enwik8-100kb: download-enwik8
 
 build/enwik8-100kb.tamp: build/enwik8-100kb
 	@# Use Python implementation for extended format compression
-	@poetry run tamp compress --implementation=python build/enwik8-100kb -o build/enwik8-100kb.tamp
+	@uv run tamp compress --implementation=python build/enwik8-100kb -o build/enwik8-100kb.tamp
 
 download-micropython:
 	mkdir -p datasets
@@ -249,8 +249,8 @@ download: download-enwik8 download-silesia download-sms download-tweets download
 .PHONY: test collect-data
 
 test: venv
-	@poetry run python build.py build_ext --inplace && python -m pytest
-	@poetry run belay run micropython -m unittest tests/*.py
+	@uv sync && uv run python -m pytest
+	@uv run belay run micropython -m unittest tests/*.py
 	@echo "All Tests Passed!"
 
 collect-data: venv download-enwik8
@@ -264,7 +264,7 @@ collect-data: venv download-enwik8
 #######################
 .PHONY: on-device-compression-benchmark on-device-decompression-benchmark on-device-deflate-compression-benchmark on-device-deflate-decompression-benchmark mpy-viper-size mpy-native-size mpy-compression-benchmark
 
-MPREMOTE := poetry run mpremote
+MPREMOTE := uv run mpremote
 
 # Helper to sync a file only if hash differs: $(call mpremote-sync,local,remote)
 define mpremote-sync
@@ -289,7 +289,7 @@ on-device-compression-benchmark: mpy build/enwik8-100kb
 	$(MPREMOTE) soft-reset
 	$(MPREMOTE) run tools/on-device-compression-benchmark.py
 	$(MPREMOTE) cp :enwik8-100kb.tamp build/on-device-enwik8-100kb.tamp
-	poetry run tamp decompress build/on-device-enwik8-100kb.tamp -o build/on-device-enwik8-100kb-decompressed
+	uv run tamp decompress build/on-device-enwik8-100kb.tamp -o build/on-device-enwik8-100kb-decompressed
 	cmp build/enwik8-100kb build/on-device-enwik8-100kb-decompressed
 	@echo "Success!"
 

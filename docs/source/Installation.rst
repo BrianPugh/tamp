@@ -24,13 +24,13 @@ To install directly from github, you can run:
 
    python -m pip install git+https://github.com/BrianPugh/tamp.git
 
-For development, its recommended to use Poetry:
+For development, its recommended to use uv:
 
 .. code-block:: bash
 
    git clone https://github.com/BrianPugh/tamp.git
    cd tamp
-   poetry install
+   uv sync
 
 MicroPython
 ^^^^^^^^^^^

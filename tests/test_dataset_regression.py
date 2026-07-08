@@ -111,7 +111,7 @@ DATASETS = [
 
 def _check(rel_path, expected_compressed_sha256, *, extended):
     if c_compress is None or c_decompress is None:
-        raise unittest.SkipTest("C extensions not built (run `poetry run python build.py build_ext --inplace`)")
+        raise unittest.SkipTest("C extensions not built (run `uv sync`)")
 
     source = PROJECT_DIR / rel_path
     if not source.is_file():
