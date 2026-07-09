@@ -48,7 +48,7 @@ jobs:
           sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" mpy_bindings/bindings_common.py
 
       - name: Build tamp (compressor + decompressor)
-        uses: BrianPugh/build-mpy-native-module@mpy-binary-version-centric
+        uses: BrianPugh/build-mpy-native-module@v1
         with:
           mpy-version: 6.1, 6.2, 6.3
           architecture: all
@@ -57,7 +57,7 @@ jobs:
           static-const-workaround: true
 
       - name: Build tamp[compressor]
-        uses: BrianPugh/build-mpy-native-module@mpy-binary-version-centric
+        uses: BrianPugh/build-mpy-native-module@v1
         with:
           mpy-version: 6.1, 6.2, 6.3
           architecture: all
@@ -67,7 +67,7 @@ jobs:
           static-const-workaround: true
 
       - name: Build tamp[decompressor]
-        uses: BrianPugh/build-mpy-native-module@mpy-binary-version-centric
+        uses: BrianPugh/build-mpy-native-module@v1
         with:
           mpy-version: 6.1, 6.2, 6.3
           architecture: all
