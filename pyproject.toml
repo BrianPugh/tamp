@@ -78,6 +78,13 @@ include = ["tamp*"]
 [tool.setuptools.package-data]
 tamp = ["py.typed", "*.pyi", "*.pyx", "*.pxd"]
 
+# Binary wheels ship the compiled *.so; the Cython/C sources they were built
+# from are dead weight there (~60% of the wheel). Strip them from the wheel.
+# The sdist is unaffected: its file list comes from setuptools-scm + MANIFEST.in,
+# not package-data, so it keeps the full source needed to build from scratch.
+[tool.setuptools.exclude-package-data]
+tamp = ["*.pyx", "*.pxd", "*.c", "*.h"]
+
 [tool.belay]
 name = "tamp"
 ignore = [
