@@ -84,6 +84,10 @@ tamp = ["py.typed", "*.pyi", "*.pyx", "*.pxd"]
 # not package-data, so it keeps the full source needed to build from scratch.
 [tool.setuptools.exclude-package-data]
 tamp = ["*.pyx", "*.pxd", "*.c", "*.h"]
+# setuptools files the hand-written sources under an auto-created
+# "tamp._c_src.tamp" package (named after the directory), so the "tamp" key above
+# misses them and ~130KB of C/H stayed in every wheel. Key them explicitly.
+"tamp._c_src.tamp" = ["*.c", "*.h"]
 
 [tool.belay]
 name = "tamp"
