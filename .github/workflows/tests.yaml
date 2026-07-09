@@ -34,57 +34,27 @@ jobs:
     name: 'Lint & Pre-commit'
     timeout-minutes: 15
     runs-on: ubuntu-latest
-    env:
-      POETRY_HOME: '~/poetry'
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
-      - name: Set up python 3.13
-        id: setup-python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.13'
-
-      - name: Cache Poetry Install
-        uses: actions/cache@v4
-        id: cached-poetry
-        with:
-          path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
-
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        with:
-          version: 1.8.5
-
-      - name: Add Poetry to PATH
-        run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry
-        run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
-
-      - name: Cache venv
-        uses: actions/cache@v4
-        id: cached-venv
-        with:
-          path: .venv/
-          key: venv-lint-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml') }}
+          enable-cache: true
 
       - name: Install library
-        run: poetry install --extras cli --no-interaction
+        run: uv sync --extra cli --locked
 
       - name: Cache pre-commit
         uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit/
-          key: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Install cppcheck
         run: sudo apt-get update && sudo apt-get install -y cppcheck
@@ -103,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Cache corpora
         uses: actions/cache@v4
@@ -124,12 +94,10 @@ jobs:
     needs: fetch-corpora
     timeout-minutes: 30
     runs-on: ubuntu-latest
-    env:
-      POETRY_HOME: '~/poetry'
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -144,42 +112,14 @@ jobs:
         if: steps.cached-corpora.outputs.cache-hit != 'true'
         run: make download-enwik8 download-silesia download-micropython
 
-      - name: Set up python 3.13
-        id: setup-python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.13'
-
-      - name: Cache Poetry Install
-        uses: actions/cache@v4
-        id: cached-poetry
-        with:
-          path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
-
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        with:
-          version: 1.8.5
-
-      - name: Add Poetry to PATH
-        run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry
-        run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
-
-      - name: Cache venv
-        uses: actions/cache@v4
-        id: cached-venv
-        with:
-          path: .venv/
-          key: venv-dataset-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'build.py', 'tamp/_c_src/**', 'tamp/*.pyx') }}
+          enable-cache: true
 
       - name: Install library
-        run: poetry install --extras cli --no-interaction
+        run: uv sync --extra cli --locked
 
       - name: Run dataset regression tests
         run: |
@@ -195,53 +135,19 @@ jobs:
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
     env:
-      POETRY_HOME: '~/poetry'
+      PYTHON: ${{ matrix.python-version }}
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
-      - name: Set up python 3.13 (for Poetry)
-        id: setup-python-system
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Cache Poetry Install
-        uses: actions/cache@v4
-        id: cached-poetry
-        with:
-          path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ steps.setup-python-system.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
-
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        with:
-          version: 1.8.5
-
-      - name: Add Poetry to PATH
-        run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry
-        run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
-
-      - name: Set up python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        id: setup-python-project
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Cache venv
-        uses: actions/cache@v4
-        id: cached-venv
-        with:
-          path: .venv/
-          key: venv-test-${{ runner.os }}-${{ steps.setup-python-project.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'build.py', 'tamp/_c_src/**', 'tamp/*.pyx') }}
+          enable-cache: true
 
       - name: Install MicroPython
         uses: BrianPugh/install-micropython@v2
@@ -250,8 +156,7 @@ jobs:
 
       - name: Install library with sanitizers
         run: |
-          poetry env use "${{ steps.setup-python-project.outputs.python-path }}"
-          TAMP_SANITIZE=1 poetry install --extras cli --no-interaction
+          TAMP_SANITIZE=1 uv sync --extra cli --reinstall-package tamp
           echo "ASAN_OPTIONS=detect_leaks=0" >> $GITHUB_ENV
           echo "UBSAN_OPTIONS=print_stacktrace=1" >> $GITHUB_ENV
 
@@ -312,57 +217,27 @@ jobs:
       matrix:
         implementation: [desktop, embedded]
     env:
-      POETRY_HOME: '~/poetry'
       EXPECTED_COMPRESSED_HASH: 'd9d804c91b4dc5e81856db074760037040421cfa84e1ea211e16dde8c295ce6d'
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
-      - name: Set up python 3.13
-        id: setup-python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.13'
-
-      - name: Cache Poetry Install
-        uses: actions/cache@v4
-        id: cached-poetry
-        with:
-          path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('.github/workflows/tests.yaml') }}
-
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        with:
-          version: 1.8.5
-
-      - name: Add Poetry to PATH
-        run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry
-        run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
-
-      - name: Cache venv
-        uses: actions/cache@v4
-        id: cached-venv
-        with:
-          path: .venv/
-          key: venv-integrity-${{ matrix.implementation }}-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'build.py', 'tamp/_c_src/**', 'tamp/*.pyx') }}
+          enable-cache: true
 
       - name: Install library with sanitizers
         run: |
           if [ "${{ matrix.implementation }}" = "embedded" ]; then
-            # Full install (not --only main): the embedded leg also runs the
-            # pytest dataset regression suite below.
-            TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 poetry install --extras cli --no-interaction
+            # Full install: the embedded leg also runs the pytest dataset regression suite below.
+            TAMP_SANITIZE=1 TAMP_USE_EMBEDDED_MATCH=1 uv sync --extra cli --reinstall-package tamp
           else
-            TAMP_SANITIZE=1 poetry install --only main --extras cli --no-interaction
+            TAMP_SANITIZE=1 uv sync --no-default-groups --extra cli --reinstall-package tamp
           fi
 
       - name: Set sanitizer environment variables

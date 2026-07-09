@@ -1,12 +1,16 @@
-import os
-import shutil
-from pathlib import Path
+"""Builds the Cython extensions; all other packaging configuration is in pyproject.toml."""
 
+import os
+import sys
+
+from setuptools import setup
+
+# Don't allow failure if cibuildwheel is running.
 allowed_to_fail = os.environ.get("CIBUILDWHEEL", "0") != "1"
 
 profile = os.environ.get("TAMP_PROFILE", "0") == "1"
 
-# Enable sanitizers by default for development builds, disable for CI/production
+# Enable sanitizers only when explicitly requested; disable for CI/production.
 in_ci = os.environ.get("CI", "false").lower() == "true"
 building_wheel = os.environ.get("CIBUILDWHEEL", "0") == "1"
 is_production_build = in_ci or building_wheel
@@ -20,18 +24,16 @@ if profile and sanitize:
         "Please choose either TAMP_PROFILE=1 or TAMP_SANITIZE=1, not both."
     )
 
-# Sanitizer flags below are UNIX-only; previously this path crashed with a
-# NameError (extra_link_args unbound) instead of a clear message.
+# Sanitizer flags below are UNIX-only.
 if sanitize and os.name == "nt":
     raise ValueError("TAMP_SANITIZE=1 is not supported on Windows.")
 
 
-def build_cython_extensions():
+def build_extensions():
     import Cython.Compiler.Options
-    from Cython.Build import build_ext, cythonize
+    from Cython.Build import cythonize
     from Cython.Compiler.Options import get_directive_defaults
     from setuptools import Extension
-    from setuptools.dist import Distribution
 
     Cython.Compiler.Options.annotate = True
 
@@ -59,6 +61,7 @@ def build_cython_extensions():
 
         define_macros.append(("CYTHON_TRACE", "1"))
 
+    extra_link_args = []
     if os.name == "nt":  # Windows
         if profile:  # noqa: SIM108
             extra_compile_args = [
@@ -93,7 +96,6 @@ def build_cython_extensions():
                 "-Wno-parentheses-equality",
                 "-Wno-unreachable-code",
             ]
-            extra_link_args = []
         else:
             extra_compile_args = [
                 "-O3",
@@ -105,18 +107,22 @@ def build_cython_extensions():
                 "-Wno-unreachable-code",  # TODO: This should no longer be necessary with Cython>=3.0.3
                 # https://github.com/cython/cython/issues/5681
             ]
-            extra_link_args = []
+            # GCC leaves the symbol table + debug info in the .so, bloating the
+            # Linux wheel ~7x (2.0MB vs 0.27MB). macOS keeps debug info in a
+            # separate .dSYM (and its ld rejects -s); Windows uses a .pdb. So
+            # strip only on Linux. The sanitize/profile branches keep -g.
+            if sys.platform.startswith("linux"):
+                extra_link_args = ["-Wl,--strip-all"]
     include_dirs = ["tamp/_c_src/", "tamp/"]
 
     extension_kwargs = {
         "include_dirs": include_dirs,
         "extra_compile_args": extra_compile_args,
+        "extra_link_args": extra_link_args,
         "language": "c",
         "define_macros": define_macros,
+        "optional": allowed_to_fail,
     }
-
-    if sanitize:
-        extension_kwargs["extra_link_args"] = extra_link_args
 
     extensions = [
         Extension(
@@ -153,11 +159,6 @@ def build_cython_extensions():
         ),
     ]
 
-    include_dirs = set()
-    for extension in extensions:
-        include_dirs.update(extension.include_dirs)
-    include_dirs = list(include_dirs)
-
     # Configure cythonize options for profiling
     cythonize_kwargs = {
         "include_path": include_dirs,
@@ -170,21 +171,10 @@ def build_cython_extensions():
         cythonize_kwargs["gdb_debug"] = True
         cythonize_kwargs["emit_linenums"] = True
 
-    ext_modules = cythonize(extensions, **cythonize_kwargs)
-    dist = Distribution({"ext_modules": ext_modules})
-    cmd = build_ext(dist)
-    cmd.ensure_finalized()
-    cmd.run()
-
-    for output in cmd.get_outputs():
-        output = Path(output)
-        relative_extension = output.relative_to(cmd.build_lib)
-        shutil.copyfile(output, relative_extension)
+    return cythonize(extensions, **cythonize_kwargs)
 
 
 if os.environ.get("TAMP_BUILD_C_EXTENSIONS", "1") == "1":
-    try:
-        build_cython_extensions()
-    except Exception:
-        if not allowed_to_fail:
-            raise
+    setup(ext_modules=build_extensions())
+else:
+    setup()

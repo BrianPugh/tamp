@@ -1,0 +1,47 @@
+recursive-include tamp *.pyx *.pxd
+recursive-include tamp/_c_src *.c *.h
+
+# setuptools-scm seeds the sdist with every git-tracked file. Prune the dev-only
+# and other-platform trees that a `pip install` never builds or runs. `tests/`
+# is intentionally kept so downstream packagers can run the suite. The Python
+# package (tamp/, incl. the .pyx/.pxd and hand-written _c_src/*.c) and build
+# files are retained.
+prune ctests
+prune wasm
+prune website
+prune assets
+prune espidf
+prune mpy_bindings
+prune fuzz
+prune tools
+prune .github
+prune .belay
+exclude uv.lock
+
+# Dev/CI tooling config and orphaned JS package files (the wasm/website trees
+# they configure are pruned above). None affect building or using the package.
+exclude .pre-commit-config.yaml
+exclude .readthedocs.yaml
+exclude .bumpversion.cfg
+exclude .codecov.yml
+exclude .clang-format
+exclude .eslintrc.json
+exclude .eslintignore
+exclude .prettierrc.json
+exclude .gitmodules
+exclude package.json
+exclude package-compressor.json
+exclude package-decompressor.json
+
+# Dev-workflow docs and the Makefile: useful in the repo, but a consumer
+# building/installing from the sdist never invokes them.
+exclude Makefile
+exclude CLAUDE.md
+exclude MICROPYTHON_TESTING.rst
+
+# The top-level tamp/_c_*.c are Cython output, regenerated from the .pyx on
+# every build (cython is a hard build requirement). Never consumed; drop them.
+exclude tamp/_c_compressor.c
+exclude tamp/_c_decompressor.c
+exclude tamp/_c_build_dictionary.c
+exclude tamp/_c_common.c

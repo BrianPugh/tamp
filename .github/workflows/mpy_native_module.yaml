@@ -43,7 +43,6 @@ jobs:
           - 'xtensawin'
     env:
       ARCH: ${{ matrix.ARCH }}
-      POETRY_HOME: '~/poetry'
 
     steps:
       - name: Check out repository
@@ -141,35 +140,20 @@ jobs:
         with:
           reference: v${{ matrix.micropython_version }}
 
-      - name: Cache Poetry Install
-        uses: actions/cache@v4
-        id: cached-poetry
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          path: ${{ env.POETRY_HOME }}
-          key: poetry-cache-${{ runner.os }}-${{ hashFiles('.github/workflows/mpy_native_module.yaml') }}
-
-      - name: Install poetry
-        uses: snok/install-poetry@v1
-        if: steps.cached-poetry.outputs.cache-hit != 'true'
-        with:
-          version: 1.8.5
-
-      - name: Add Poetry to PATH # Needs to be separate from install-poetry because cache.
-        run: |
-          echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry # Needs to be separate from install-poetry because cache.
-        run: |
-          poetry self add "poetry-dynamic-versioning[plugin]"
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
+          enable-cache: true
 
       - name: Get Tag or Commit Hash
         run: |
-          poetry dynamic-versioning  # in-place updates files with correct version string
-          VERSION=$(poetry version | sed 's/tamp //; s/\x1b\[[0-9;]*m//g')
+          # setuptools-scm derives the version from git tags; bake it into the
+          # native module source so it's compiled into the .mpy (drop-in for the
+          # old poetry-dynamic-versioning substitution).
+          VERSION=$(uvx --from setuptools-scm python -m setuptools_scm)
           echo "Detected version is: $VERSION"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" mpy_bindings/bindings_common.py
 
           export MICROPYTHON_VERSION=${{ matrix.micropython_version }}
           export MICROPYTHON_VERSION_MAJOR_MINOR=${MICROPYTHON_VERSION%.*}
@@ -178,7 +162,7 @@ jobs:
 
       - name: Install library
         if: env.ARCH == 'x64'
-        run: poetry install --no-interaction
+        run: uv sync --locked
 
       - name: Build MicroPython Native Module
         run: |
@@ -187,7 +171,7 @@ jobs:
           make mpy ARCH=$ARCH
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
-            poetry run belay run micropython -X heapsize=200M -m unittest $(find tests -name "test_*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py" ! -name "test_build_dictionary.py")
+            uv run belay run micropython -X heapsize=200M -m unittest $(find tests -name "test_*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py" ! -name "test_build_dictionary.py")
             rm tamp_native.mpy
           fi
           mv tamp.mpy tamp-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
@@ -198,7 +182,7 @@ jobs:
           make mpy ARCH=$ARCH TAMP_DECOMPRESSOR=0
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
-            poetry run belay run micropython -X heapsize=200M -m unittest tests/test_compressor.py
+            uv run belay run micropython -X heapsize=200M -m unittest tests/test_compressor.py
             rm tamp_native.mpy
           fi
           mv tamp.mpy tamp[compressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
@@ -209,7 +193,7 @@ jobs:
           make mpy ARCH=$ARCH TAMP_COMPRESSOR=0
           if [[ "$ARCH" == "x64" ]]; then
             cp tamp.mpy tamp_native.mpy
-            poetry run belay run micropython -X heapsize=200M -m unittest tests/test_decompressor.py
+            uv run belay run micropython -X heapsize=200M -m unittest tests/test_decompressor.py
             rm tamp_native.mpy
           fi
           mv tamp.mpy tamp[decompressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy

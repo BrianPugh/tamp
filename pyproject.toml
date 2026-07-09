@@ -1,76 +1,93 @@
 [build-system]
-requires = ["poetry-core (>=1.0.0, <2.0.0)", "poetry-dynamic-versioning>=0.21.5", "cython>=3.0.0", "setuptools>=74.1.2"]
-build-backend = "poetry_dynamic_versioning.backend"
+requires = ["setuptools>=77", "setuptools-scm>=8", "cython>=3.0.0"]
+build-backend = "setuptools.build_meta"
 
-[tool.poetry-dynamic-versioning]
-enable = true
-vcs = "git"
-style = "semver"
-
-[tool.poetry]
+[project]
 name = "tamp"
-version = "0.0.0"  # Do not change, let poetry-dynamic-versioning handle it.
-homepage = "https://github.com/BrianPugh/tamp"
-repository = "https://github.com/BrianPugh/tamp"
-license = "Apache-2.0"
+dynamic = ["version"]
 description = ""
-authors = ["Brian Pugh"]
+authors = [{name = "Brian Pugh"}]
+license = "Apache-2.0"
 readme = "README.md"
-packages = [{include = "tamp"}]
-include = ["tamp/*.so", "tamp/*.dll", "tamp/*.pyd"]
+requires-python = ">=3.9"
+# Be as loose as possible if writing a library.
+dependencies = []
 
-[tool.poetry-dynamic-versioning.substitution]
-files = [
-    "tamp/__init__.py",
-    "mpy_bindings/bindings_common.py"
+[project.optional-dependencies]
+cli = [
+    "cyclopts>=1.0.0",
+    "rich>=15.0.0",
 ]
 
-[tool.poetry.build]
-generate-setup-file = false
-script = 'build.py'
+[project.urls]
+homepage = "https://github.com/BrianPugh/tamp"
+repository = "https://github.com/BrianPugh/tamp"
 
-[tool.poetry.scripts]
+[project.scripts]
 tamp = "tamp.cli.main:run_app"
 
-[tool.poetry.dependencies]
-# Be as loose as possible if writing a library.
-python = "^3.9"
-cyclopts = {version = ">=1.0.0", optional = true}
-rich = {version = ">=15.0.0", optional = true}
+[dependency-groups]
+dev = [
+    "coverage[toml]>=5.1",
+    "pre-commit>=2.16.0",
+    "pytest>=7.1.2",
+    "pytest-cov>=3.0.0",
+    "pytest-mock>=3.7.0",
+    "black>=23.1.0",
+    "belay>=0.21.3",
+    "tqdm>=4.68.2",
+    "matplotlib>=3.7.4",
+    "ipdb>=0.13.13",
+    "packaging>=26.1",
+    "mpremote>=1.20.0",
+    "cython>=3.2.8",
+    "pytest-subtests>=0.10.0",
+    "numpy>=1.24",
+    "pyelftools>=0.32,<0.33",
+]
+docs = [
+    "sphinx>=4.5.0",
+    "sphinx-rtd-theme>=3.0.0",
+    "gitpython>=3.1.50",
+    "sphinx-copybutton>=0.5.2",
+    "myst-parser[linkify]>=3.0.1,<4",
+]
+profile = [
+    "line-profiler<5.0.0",
+]
 
-[tool.poetry.extras]
-cli = ["cyclopts", "rich"]
+[tool.uv]
+default-groups = ["dev", "docs"]
+# Rebuild the Cython extensions whenever their sources change.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "setup.py" },
+    { file = "tamp/*.pyx" },
+    { file = "tamp/*.pxd" },
+    { file = "tamp/_c_src/**/*" },
+]
 
-[tool.poetry.group.docs.dependencies]
-sphinx = ">=4.5.0"
-sphinx_rtd_theme = ">=3.0.0"
-gitpython = ">=3.1.50"
-sphinx-copybutton = ">=0.5.2"
-myst-parser = {extras = ["linkify"], version = "^3.0.1"}
+[tool.setuptools_scm]
 
-[tool.poetry.group.dev.dependencies]
-coverage = {extras = ["toml"], version = ">=5.1"}
-pre_commit = ">=2.16.0"
-pytest = ">=7.1.2"
-pytest-cov = ">=3.0.0"
-pytest-mock = ">=3.7.0"
-black = ">=23.1.0"
-belay = ">=0.21.3"
-tqdm = ">=4.68.2"
-matplotlib = ">=3.7.4"
-ipdb = ">=0.13.13"
-packaging = ">=26.1"
-mpremote = ">=1.20.0"
-cython = ">=3.2.8"
-pytest-subtests = ">=0.10.0"
-numpy = ">=1.24"
-pyelftools = "^0.32"
+[tool.setuptools.packages.find]
+include = ["tamp*"]
 
-[tool.poetry.group.profile]
-optional = true
+# Compiled extensions (*.so/*.pyd) are emitted by the ext_modules build and
+# included automatically; listing them here would also sweep in stale build
+# artifacts, so only source stubs are declared as package data.
+[tool.setuptools.package-data]
+tamp = ["py.typed", "*.pyi", "*.pyx", "*.pxd"]
 
-[tool.poetry.group.profile.dependencies]
-line-profiler = "<5.0.0"
+# Binary wheels ship the compiled *.so; the Cython/C sources they were built
+# from are dead weight there (~60% of the wheel). Strip them from the wheel.
+# The sdist is unaffected: its file list comes from setuptools-scm + MANIFEST.in,
+# not package-data, so it keeps the full source needed to build from scratch.
+[tool.setuptools.exclude-package-data]
+tamp = ["*.pyx", "*.pxd", "*.c", "*.h"]
+# setuptools files the hand-written sources under an auto-created
+# "tamp._c_src.tamp" package (named after the directory), so the "tamp" key above
+# misses them and ~130KB of C/H stayed in every wheel. Key them explicitly.
+"tamp._c_src.tamp" = ["*.c", "*.h"]
 
 [tool.belay]
 name = "tamp"
@@ -246,7 +263,7 @@ staticmethod-decorators = [
  venvs=[".venv"]
  paths=["tamp"]
  deps-file="pyproject.toml"
- sections=["tool.poetry.dependencies"]
+ sections=["project.dependencies", "project.optional-dependencies"]
  exclude-deps =[
    "rich",
  ]

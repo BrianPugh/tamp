@@ -37,10 +37,7 @@ def get_compress_implementation(impl_name: Optional[str]):
 
             return compress
         except ImportError:
-            raise ImportError(
-                "C implementation not available. Please ensure the C extensions are compiled "
-                "by running: poetry run python build.py build_ext --inplace"
-            )
+            raise ImportError("C implementation not available.")
     elif impl_name == "python":
         from tamp.compressor import compress
 
@@ -74,10 +71,7 @@ def get_decompress_implementation(impl_name: Optional[str]):
 
             return decompress
         except ImportError:
-            raise ImportError(
-                "C implementation not available. Please ensure the C extensions are compiled "
-                "by running: poetry run python build.py build_ext --inplace"
-            )
+            raise ImportError("C implementation not available.")
     elif impl_name == "python":
         from tamp.decompressor import decompress
 
