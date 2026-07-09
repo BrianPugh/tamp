@@ -1,6 +1,7 @@
 """Builds the Cython extensions; all other packaging configuration is in pyproject.toml."""
 
 import os
+import sys
 
 from setuptools import setup
 
@@ -106,6 +107,12 @@ def build_extensions():
                 "-Wno-unreachable-code",  # TODO: This should no longer be necessary with Cython>=3.0.3
                 # https://github.com/cython/cython/issues/5681
             ]
+            # GCC leaves the symbol table + debug info in the .so, bloating the
+            # Linux wheel ~7x (2.0MB vs 0.27MB). macOS keeps debug info in a
+            # separate .dSYM (and its ld rejects -s); Windows uses a .pdb. So
+            # strip only on Linux. The sanitize/profile branches keep -g.
+            if sys.platform.startswith("linux"):
+                extra_link_args = ["-Wl,--strip-all"]
     include_dirs = ["tamp/_c_src/", "tamp/"]
 
     extension_kwargs = {
