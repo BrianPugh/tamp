@@ -31,3 +31,9 @@ exclude .gitmodules
 exclude package.json
 exclude package-compressor.json
 exclude package-decompressor.json
+
+# Dev-workflow docs and the Makefile: useful in the repo, but a consumer
+# building/installing from the sdist never invokes them.
+exclude Makefile
+exclude CLAUDE.md
+exclude MICROPYTHON_TESTING.rst
