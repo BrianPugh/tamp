@@ -1,2 +1,18 @@
 recursive-include tamp *.pyx *.pxd
 recursive-include tamp/_c_src *.c *.h
+
+# setuptools-scm seeds the sdist with every git-tracked file. Prune the dev-only
+# and other-platform trees that a `pip install` never builds or runs. `tests/`
+# is intentionally kept so downstream packagers can run the suite. The Python
+# package (tamp/, incl. the Cython-generated *.c) and build files are retained.
+prune ctests
+prune wasm
+prune website
+prune assets
+prune espidf
+prune mpy_bindings
+prune fuzz
+prune tools
+prune .github
+prune .belay
+exclude uv.lock
