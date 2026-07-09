@@ -16,3 +16,18 @@ prune tools
 prune .github
 prune .belay
 exclude uv.lock
+
+# Dev/CI tooling config and orphaned JS package files (the wasm/website trees
+# they configure are pruned above). None affect building or using the package.
+exclude .pre-commit-config.yaml
+exclude .readthedocs.yaml
+exclude .bumpversion.cfg
+exclude .codecov.yml
+exclude .clang-format
+exclude .eslintrc.json
+exclude .eslintignore
+exclude .prettierrc.json
+exclude .gitmodules
+exclude package.json
+exclude package-compressor.json
+exclude package-decompressor.json
