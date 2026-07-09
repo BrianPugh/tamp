@@ -25,120 +25,13 @@ concurrency:
 
 jobs:
   build:
-    name: 'MPY ${{ matrix.micropython_version }} ${{ matrix.ARCH }}'
+    name: 'Build all architectures and mpy versions'
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        # On PRs, test oldest and newest MPY versions; on main/tags, test all versions
-        micropython_version: ${{ github.event_name == 'pull_request' && fromJSON('["1.21.0", "1.25.0"]') || fromJSON('["1.21.0", "1.22.2", "1.23.0", "1.24.1", "1.25.0"]') }}
-        ARCH:
-          - 'x86'
-          - 'x64'
-          - 'armv6m'
-          - 'armv7m'
-          - 'armv7emsp'
-          - 'armv7emdp'
-          - 'xtensa'
-          - 'xtensawin'
-    env:
-      ARCH: ${{ matrix.ARCH }}
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # Fixes some bugs on some platforms?
-      - name: Replace "static const uint8_t" with "const uint8_t"
-        run: |
-          find . -type f -name "*.c" -exec sed -i 's/static const uint8_t/const uint8_t/g' {} +
-
-      - name: Set up python
-        if: env.ARCH != 'xtensa'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Xtensa dependencies
-        if: env.ARCH == 'xtensa'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gperf \
-            help2man \
-            libtool-bin \
-            python3 \
-            python3-dev
-
-      - name: arm-none-eabi-gcc GNU Arm Embedded Toolchain
-        if: startsWith(env.ARCH, 'arm')
-        uses: carlosperate/arm-none-eabi-gcc-action@v1.12.0
-
-      - name: Install Micropython Build Dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install gcc-multilib
-          pip install pyelftools --break-system-packages
-
-      - name: Cache Setup Xtensa Toolchain (ESP8266)
-        if: env.ARCH == 'xtensa'
-        uses: actions/cache@v4
-        with:
-          path: |
-            esp-open-sdk/xtensa-lx106-elf
-          key: xtensa-toolchain-${{ hashFiles('**/Makefile') }}
-          restore-keys: |
-            xtensa-toolchain-
-
-      - name: Clone and build Xtensa toolchain
-        if: env.ARCH == 'xtensa'
-        run: |
-          if [ ! -d "esp-open-sdk" ]; then
-            git clone --branch fix-ubuntu-21.10-build --recursive https://github.com/BrianPugh/esp-open-sdk.git
-            cd esp-open-sdk
-            unset LD_LIBRARY_PATH
-            make
-            cd ..
-          fi
-          echo "$PWD/esp-open-sdk/xtensa-lx106-elf/bin" >> $GITHUB_PATH
-
-      - name: Cache Setup ESP-IDF (ESP32)
-        if: env.ARCH == 'xtensawin'
-        uses: actions/cache@v4
-        with:
-          path: |
-            esp-idf
-            ~/.espressif
-            !esp-idf/.git
-          key: esp-idf-${{ hashFiles('**/Makefile') }}
-          restore-keys: |
-            esp-idf-
-
-      - name: Setup ESP-IDF (ESP32)
-        if: env.ARCH == 'xtensawin'
-        run: |
-          if [ ! -d "esp-idf" ]; then
-            git clone -b v5.0.6 --recursive https://github.com/espressif/esp-idf.git
-            cd esp-idf
-            git submodule update --init --recursive
-            ./install.sh
-            cd ..
-          fi
-          cd esp-idf
-          ENV_BEFORE=$(env)
-          source export.sh
-          ENV_AFTER=$(env)
-          echo "$ENV_AFTER" | grep -vxF "$ENV_BEFORE" | grep '=' | while IFS='=' read -r name value
-          do
-            echo "exporting to GITHUB_ENV: ${name}=${value}"
-            echo "${name}=${value}" >> $GITHUB_ENV
-          done
-
-      - name: Install MicroPython
-        uses: BrianPugh/install-micropython@v2
-        with:
-          reference: v${{ matrix.micropython_version }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -148,83 +41,129 @@ jobs:
       - name: Get Tag or Commit Hash
         run: |
           # setuptools-scm derives the version from git tags; bake it into the
-          # native module source so it's compiled into the .mpy (drop-in for the
-          # old poetry-dynamic-versioning substitution).
+          # native module source so it's compiled into the .mpy.
           VERSION=$(uvx --from setuptools-scm python -m setuptools_scm)
           echo "Detected version is: $VERSION"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" mpy_bindings/bindings_common.py
 
-          export MICROPYTHON_VERSION=${{ matrix.micropython_version }}
-          export MICROPYTHON_VERSION_MAJOR_MINOR=${MICROPYTHON_VERSION%.*}
-          echo "Detected Micropython Major.Minor: $MICROPYTHON_VERSION_MAJOR_MINOR"
-          echo "MICROPYTHON_VERSION_MAJOR_MINOR=$MICROPYTHON_VERSION_MAJOR_MINOR" >> $GITHUB_ENV
+      - name: Build tamp (compressor + decompressor)
+        uses: BrianPugh/build-mpy-native-module@mpy-binary-version-centric
+        with:
+          mpy-version: 6.1, 6.2, 6.3
+          architecture: all
+          make-target: mpy
+          output-name: tamp-${{ env.VERSION }}
+          static-const-workaround: true
 
-      - name: Install library
-        if: env.ARCH == 'x64'
-        run: uv sync --locked
+      - name: Build tamp[compressor]
+        uses: BrianPugh/build-mpy-native-module@mpy-binary-version-centric
+        with:
+          mpy-version: 6.1, 6.2, 6.3
+          architecture: all
+          make-target: mpy
+          make-args: TAMP_DECOMPRESSOR=0
+          output-name: tamp[compressor]-${{ env.VERSION }}
+          static-const-workaround: true
 
-      - name: Build MicroPython Native Module
-        run: |
-          echo "Building architecture $ARCH Complete"
-          make clean
-          make mpy ARCH=$ARCH
-          if [[ "$ARCH" == "x64" ]]; then
-            cp tamp.mpy tamp_native.mpy
-            uv run belay run micropython -X heapsize=200M -m unittest $(find tests -name "test_*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py" ! -name "test_build_dictionary.py")
-            rm tamp_native.mpy
-          fi
-          mv tamp.mpy tamp-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
-          make clean
+      - name: Build tamp[decompressor]
+        uses: BrianPugh/build-mpy-native-module@mpy-binary-version-centric
+        with:
+          mpy-version: 6.1, 6.2, 6.3
+          architecture: all
+          make-target: mpy
+          make-args: TAMP_COMPRESSOR=0
+          output-name: tamp[decompressor]-${{ env.VERSION }}
+          static-const-workaround: true
 
-          echo "Building architecture $ARCH Compressor"
-          make clean
-          make mpy ARCH=$ARCH TAMP_DECOMPRESSOR=0
-          if [[ "$ARCH" == "x64" ]]; then
-            cp tamp.mpy tamp_native.mpy
-            uv run belay run micropython -X heapsize=200M -m unittest tests/test_compressor.py
-            rm tamp_native.mpy
-          fi
-          mv tamp.mpy tamp[compressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
-          make clean
-
-          echo "Building architecture $ARCH Decompressor"
-          make clean
-          make mpy ARCH=$ARCH TAMP_COMPRESSOR=0
-          if [[ "$ARCH" == "x64" ]]; then
-            cp tamp.mpy tamp_native.mpy
-            uv run belay run micropython -X heapsize=200M -m unittest tests/test_decompressor.py
-            rm tamp_native.mpy
-          fi
-          mv tamp.mpy tamp[decompressor]-${VERSION}-mpy${MICROPYTHON_VERSION_MAJOR_MINOR}-${ARCH}.mpy
-          make clean
+      - name: Display built artifacts
+        run: ls -alh dist/*.mpy
 
       - name: Upload Native Module MPY Files
         uses: actions/upload-artifact@v4
         with:
-          name: mpy-native-module-tamp-${{ env.VERSION }}-mpy${{ env.MICROPYTHON_VERSION_MAJOR_MINOR }}-${{ env.ARCH }}
-          path: '*.mpy'
+          name: mpy-native-module-all
+          path: 'dist/*.mpy'
+
+  test:
+    name: 'Test x64 mpy ${{ matrix.mpy_version }}'
+    runs-on: ubuntu-24.04
+    needs:
+      - build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Runtime must match the mpy subversion to load native modules
+          - mpy_version: '6.1'
+            micropython_version: 'v1.21.0'
+          - mpy_version: '6.2'
+            micropython_version: 'v1.22.2'
+          - mpy_version: '6.3'
+            micropython_version: 'v1.27.0'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Native Module Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mpy-native-module-all
+          path: dist
+
+      - name: Install MicroPython
+        uses: BrianPugh/install-micropython@v2
+        with:
+          reference: ${{ matrix.micropython_version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Get Tag or Commit Hash
+        run: |
+          VERSION=$(uvx --from setuptools-scm python -m setuptools_scm)
+          echo "Detected version is: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Install library
+        run: uv sync --locked
+
+      - name: Test full module
+        run: |
+          cp "dist/tamp-${VERSION}-mpy${{ matrix.mpy_version }}-x64.mpy" tamp_native.mpy
+          uv run belay run micropython -X heapsize=200M -m unittest $(find tests -name "test_*.py" ! -name "test_cli.py" ! -name "test_dataset_regression.py" ! -name "test_build_dictionary.py")
+          rm tamp_native.mpy
+
+      - name: Test compressor-only module
+        run: |
+          cp "dist/tamp[compressor]-${VERSION}-mpy${{ matrix.mpy_version }}-x64.mpy" tamp_native.mpy
+          uv run belay run micropython -X heapsize=200M -m unittest tests/test_compressor.py
+          rm tamp_native.mpy
+
+      - name: Test decompressor-only module
+        run: |
+          cp "dist/tamp[decompressor]-${VERSION}-mpy${{ matrix.mpy_version }}-x64.mpy" tamp_native.mpy
+          uv run belay run micropython -X heapsize=200M -m unittest tests/test_decompressor.py
+          rm tamp_native.mpy
 
   release_upload:
     runs-on: ubuntu-latest
     needs:
       - build
+      - test
     steps:
       - name: Download All Native Module Artifacts
         uses: actions/download-artifact@v4
         with:
+          name: mpy-native-module-all
           path: mpy-native-modules
-          pattern: mpy-native-module-*
-          merge-multiple: true
 
       - name: Display All Native Module Artifacts
         run: ls -alh mpy-native-modules
-
-      - name: Upload Single Native Module MPY Archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: mpy-native-module-all
-          path: 'mpy-native-modules/*.mpy'
 
       - name: Release
         uses: softprops/action-gh-release@v2
