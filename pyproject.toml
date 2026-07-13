@@ -43,7 +43,7 @@ dev = [
     "cython>=3.2.8",
     "pytest-subtests>=0.10.0",
     "numpy>=1.24",
-    "pyelftools>=0.32,<0.33",
+    "pyelftools>=0.33,<0.34",
 ]
 docs = [
     "sphinx>=4.5.0",
