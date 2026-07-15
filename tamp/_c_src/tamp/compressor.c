@@ -92,12 +92,19 @@ inline bool tamp_compressor_full(const TampCompressor* compressor) {
  *
  * Set TAMP_USE_EMBEDDED_MATCH=1 to force the embedded implementation on desktop
  * (useful for testing the embedded code path on CI).
+ * Set TAMP_USE_DESKTOP_MATCH=1 to force the desktop implementation on other
+ * targets (requires little-endian and cheap unaligned loads, e.g. Cortex-M7).
  */
 
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor* compressor, uint16_t* match_index, uint8_t* match_size);
 
-#elif (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)) && !TAMP_USE_EMBEDDED_MATCH
+#elif TAMP_USE_SWAR32_MATCH && !TAMP_USE_EMBEDDED_MATCH
+#include "compressor_find_match_swar32.c"
+
+#elif (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64) || \
+       TAMP_USE_DESKTOP_MATCH) &&                                                             \
+    !TAMP_USE_EMBEDDED_MATCH
 #include "compressor_find_match_desktop.c"
 
 #else

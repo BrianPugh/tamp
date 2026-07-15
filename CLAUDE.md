@@ -236,6 +236,12 @@ make website-clean         # Clean website build artifacts
   `TAMP_STREAM_FATFS` - Enable built-in I/O handlers for specific backends
 - `TAMP_USE_EMBEDDED_MATCH=1` - Force embedded `find_best_match` implementation
   on desktop (for testing)
+- `TAMP_USE_DESKTOP_MATCH=1` - Force the 64-bit desktop `find_best_match` on
+  other targets (needs little-endian + cheap unaligned loads; ~1.11x compression
+  speed on Cortex-M7)
+- `TAMP_USE_SWAR32_MATCH=1` - Experimental 32-bit SWAR `find_best_match` (slower
+  than both alternatives on Cortex-M7; candidate for single-issue cores like
+  Cortex-M33)
 - `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
   environments without libc (e.g. MicroPython native modules).
 

@@ -28,6 +28,11 @@ make stm32h7b0-device-benchmark # Same, plus a BENCH/INFO summary block at the e
 
 No port variable is needed; OpenOCD auto-detects the ST-Link.
 
+Compile-time experiments can be passed through `EXTRA_CFLAGS`, e.g.
+`make stm32h7b0-device-benchmark EXTRA_CFLAGS=-DTAMP_USE_DESKTOP_MATCH=1` for
+the 64-bit SWAR match finder (~1.11x compression speed on enwik8; see
+`devices/BENCHMARKS.md`).
+
 The firmware configures the chip itself: LDO supply + VOS0, 280 MHz from PLL1
 (25 MHz HSE, M=5 N=112 P=2), flash latency 7, I+D caches, and a 1 MHz TIM2
 timebase. It prints `INFO` lines with register readbacks plus a DWT-vs-TIM2

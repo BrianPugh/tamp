@@ -25,11 +25,14 @@ CMSIS_HEADERS := \
 CC := arm-none-eabi-gcc
 TAMP_SRC := ../../tamp/_c_src
 
+# EXTRA_CFLAGS: pass experiment defines from the command line, e.g.
+#   make stm32h7b0-device-benchmark EXTRA_CFLAGS=-DTAMP_USE_DESKTOP_MATCH=1
 CFLAGS := -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 \
 	-O3 -ggdb -ffunction-sections -fdata-sections \
 	-Wall -Wextra \
 	-DSTM32H7B0xx \
-	-I$(CMSIS) -I. -I../common -I$(TAMP_SRC)
+	-I$(CMSIS) -I. -I../common -I$(TAMP_SRC) \
+	$(EXTRA_CFLAGS)
 
 # Full newlib (not nano): the harness prints %llu timings, which newlib-nano's
 # printf does not support. 128K of flash has plenty of room.
@@ -54,11 +57,18 @@ $(CMSIS)/core_cm7.h $(CMSIS)/cmsis_compiler.h $(CMSIS)/cmsis_gcc.h $(CMSIS)/cmsi
 	@mkdir -p $(CMSIS)
 	curl -fsSL $(CMSIS_CORE_URL)/$(notdir $@) -o $@
 
-$(ELF): $(SRCS) linker.ld $(CMSIS_HEADERS) Makefile
+# Rebuild when the flags change (the whole firmware is one compile+link, so
+# there are no per-object dependencies to catch this).
+FLAGSTAMP := $(BUILD)/cflags.stamp
+$(FLAGSTAMP): force
+	@mkdir -p $(BUILD)
+	@echo '$(CFLAGS)' | cmp -s - $(FLAGSTAMP) || echo '$(CFLAGS)' > $(FLAGSTAMP)
+
+$(ELF): $(SRCS) linker.ld $(CMSIS_HEADERS) Makefile $(FLAGSTAMP)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $@
 	arm-none-eabi-size $@
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean
+.PHONY: all clean force
