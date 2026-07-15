@@ -356,19 +356,12 @@ tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* 
  */
 static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end,
                                      size_t* input_consumed_size) {
-#if defined(__ARM_ARCH_6M__)
-    /* Cortex-M0/M0+: the locals variant below spills on the 8-register file,
-     * costing ~324 bytes of code without a measured win; keep the compact form. */
-    while (*input != input_end && d->bit_buffer_pos <= 24) {
-        d->bit_buffer_pos += 8;
-        d->bit_buffer |= (uint32_t) * (*input) << (32 - d->bit_buffer_pos);
-        (*input)++;
-        (*input_consumed_size)++;
-    }
-#else
+#if defined(__ARM_ARCH_7EM__)
     /* Work on locals with a single writeback: the unsigned char loads may
      * alias anything, so operating through the pointers directly forces a
-     * reload/store per byte (+5% decompression speed on Cortex-M7). */
+     * reload/store per byte. Only enabled where measured to win (+5%
+     * decompression, Cortex-M7): it spills on Cortex-M0/M0+'s 8-register
+     * file (~324 bytes of code) and measured -3% on Xtensa LX7. */
     const unsigned char* in = *input;
     uint32_t bit_buffer = d->bit_buffer;
     uint8_t bit_buffer_pos = d->bit_buffer_pos;
@@ -382,6 +375,13 @@ static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** 
     d->bit_buffer_pos = bit_buffer_pos;
     *input = in;
     *input_consumed_size += consumed;
+#else
+    while (*input != input_end && d->bit_buffer_pos <= 24) {
+        d->bit_buffer_pos += 8;
+        d->bit_buffer |= (uint32_t) * (*input) << (32 - d->bit_buffer_pos);
+        (*input)++;
+        (*input_consumed_size)++;
+    }
 #endif
 }
 

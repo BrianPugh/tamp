@@ -78,10 +78,10 @@ void tamp_window_copy(unsigned char *window, uint16_t *window_pos, uint16_t wind
             window[(pos + i) & window_mask] = window[window_offset + i];
         }
         pos = (pos + match_size) & window_mask;
-#if !defined(__ARM_ARCH_6M__)
-        /* This fast path costs ~160 bytes on Cortex-M0/M0+ where flash is the
-         * scarce resource and its speed is unvalidated; everywhere else it
-         * avoids the per-byte masking below (+14% decompression, Cortex-M7). */
+#if defined(__ARM_ARCH_7EM__)
+        /* Skipping the per-byte masking below measured +14% decompression on
+         * Cortex-M7, but -3% on Xtensa LX7 and ~160 bytes on Cortex-M0/M0+,
+         * so this fast path is only enabled where it is a measured win. */
     } else if (TAMP_LIKELY((uint32_t)pos + match_size <= (uint32_t)window_mask + 1)) {
         /* Common case: destination run doesn't wrap (source is pre-validated
          * and never wraps), so no per-byte masking is needed. */
