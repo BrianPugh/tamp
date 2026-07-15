@@ -12,7 +12,13 @@ extern "C" {
  * decompress the first 100 KB of enwik8 with a 10-bit window, verify against
  * a v1 (non-extended) reference, replay packed regression vectors, and run
  * seeded PRNG round-trip stress. Each device implements tamp_bench_time_us()
- * and calls tamp_bench_run() from a thin platform main. */
+ * and calls tamp_bench_run() from a thin platform main.
+ *
+ * Fixed assumptions (not configurable via TampBenchData): input_size <=
+ * 100000 (static buffer ceiling, ~164 KB total RAM), enwik8 window = 10 bits,
+ * stress windows {8,10,12} on 8 KB blocks, and the synthetic/repetitive
+ * blocks always process their full fixed sizes. Vector container is
+ * little-endian (all supported targets are LE). */
 
 typedef struct {
     const uint8_t *input; /* original data (first 100 KB of enwik8) */

@@ -125,6 +125,9 @@ int tamp_bench_run(const TampBenchData *data) {
         printf("INFO compressed_size=%u compress_bytes_per_sec=%llu\n", (unsigned)output_written_size,
                elapsed ? (unsigned long long)((uint64_t)data->input_size * 1000000 / elapsed) : 0);
         REPORT(res == TAMP_OK, "compress enwik8 (res=%d)", res);
+        if (res == TAMP_OUTPUT_FULL)
+            printf("  compressed_buffer (%u bytes) too small for this input's compressed size\n",
+                   (unsigned)sizeof(compressed_buffer));
 
         bool ok = (output_written_size == data->reference_size) &&
                   (memcmp(compressed_buffer, data->reference, data->reference_size) == 0);
@@ -224,8 +227,11 @@ int tamp_bench_run(const TampBenchData *data) {
 
     if (data->vectors) {
         /* Vector replay: feed each embedded regression vector to a fresh
-         * decompressor. Any tamp_res is acceptable; we only require no crash/hang. */
+         * decompressor. Any tamp_res is acceptable; we only require no crash/hang.
+         * The container itself is trusted data (packed at build time), but parse
+         * it defensively anyway: a truncated embed must not walk off the blob. */
         const uint8_t *vp = data->vectors;
+        const uint8_t *vend = data->vectors + data->vectors_size;
         uint32_t count = 0;
         if (data->vectors_size >= sizeof(count)) {
             memcpy(&count, vp, sizeof(count));
@@ -233,8 +239,17 @@ int tamp_bench_run(const TampBenchData *data) {
         }
         for (uint32_t i = 0; i < count; i++) {
             uint32_t len = 0;
+            if ((size_t)(vend - vp) < sizeof(len)) {
+                REPORT(false, "vectors truncated at %lu of %lu (header)", (unsigned long)i, (unsigned long)count);
+                break;
+            }
             memcpy(&len, vp, sizeof(len));
             vp += sizeof(len);
+            if ((size_t)(vend - vp) < len) {
+                REPORT(false, "vectors truncated at %lu of %lu (len=%lu)", (unsigned long)i, (unsigned long)count,
+                       (unsigned long)len);
+                break;
+            }
             const uint8_t *vdata = vp;
             vp += len;
 

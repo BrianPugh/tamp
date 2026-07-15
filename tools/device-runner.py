@@ -22,12 +22,20 @@ ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def reset_device(port):
-    """Perform the esptool reset dance to boot into the normal application."""
+    """Perform the esptool reset dance to boot into the normal application.
+
+    A no-op on boards without DTR/RTS reset wiring (e.g. RP2040 USB-CDC),
+    where the harness's run-forever loop provides a fresh run instead.
+    """
     # Assert RTS (EN low) with DTR low to reset into normal boot, then release.
     port.setDTR(False)
     port.setRTS(True)
     time.sleep(0.1)
     port.setRTS(False)
+    time.sleep(0.2)
+    # Drop any output buffered from before the reset so a stale sentinel from a
+    # previous run can't be mistaken for this run's result.
+    port.reset_input_buffer()
 
 
 def main():

@@ -361,8 +361,10 @@ GitHub Actions workflows (`.github/workflows/`):
 - `mpy_native_module.yaml` - MicroPython native module builds for ARM
   architectures
 - `esp_upload_component.yml` - ESP-IDF component registry upload
-- `espidf_build.yaml` - Build-only check of the `devices/espidf/` harness
-  (esp32/esp32s3/esp32c3 × TAMP_ESP32 on/off, ESP-IDF v6.0.2)
+- `espidf_build.yaml` - Build-only check of the `devices/espidf/` harness (opt
+  legs for esp32/esp32s3/esp32c3 + one noopt leg, ESP-IDF v6.0.2; placeholder
+  embed data, no enwik8/uv). PRs trigger it only for `espidf/`/`devices/`
+  changes; `tamp/_c_src/` coverage runs on push to main.
 
 ## Documentation Style
 
