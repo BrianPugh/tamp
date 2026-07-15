@@ -1,0 +1,72 @@
+name: ESP-IDF Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'espidf/**'
+      - 'tamp/_c_src/**'
+      - 'devices/espidf/**'
+      - 'tools/pack-device-vectors.py'
+      - '.github/workflows/espidf_build.yaml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'espidf/**'
+      - 'tamp/_c_src/**'
+      - 'devices/espidf/**'
+      - 'tools/pack-device-vectors.py'
+      - '.github/workflows/espidf_build.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 'Build (${{ matrix.target }}, TAMP_ESP32=${{ matrix.tamp_esp32 }})'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32, esp32s3, esp32c3]
+        tamp_esp32: [opt, noopt]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache enwik8 dataset
+        uses: actions/cache@v4
+        with:
+          path: datasets/enwik8.zip
+          key: enwik8-zip-v1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.13'
+          enable-cache: true
+
+      - name: Stage tamp component
+        run: make -C espidf/tamp stage
+
+      - name: Generate device data
+        run: make esp32-device-data
+
+      - name: Build (opt)
+        if: matrix.tamp_esp32 == 'opt'
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0.2
+          target: ${{ matrix.target }}
+          path: devices/espidf
+
+      - name: Build (noopt)
+        if: matrix.tamp_esp32 == 'noopt'
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0.2
+          target: ${{ matrix.target }}
+          path: devices/espidf
+          command: idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.noopt" build

@@ -19,6 +19,17 @@ help:
 	@echo "  make on-device-deflate-compression-benchmark   Run MicroPython deflate compression benchmark"
 	@echo "  make on-device-deflate-decompression-benchmark Run MicroPython deflate decompression benchmark"
 	@echo ""
+	@echo "ESP32 on-device harness (requires esp-idf environment):"
+	@echo "  make esp32-device-data       Stage embedded data (enwik8 blocks + packed vectors)"
+	@echo "  make esp32-device-build      Build the IDF harness (ESP32_TARGET=esp32s3, TAMP_ESP32_OPT=y)"
+	@echo "  make esp32-device-test       Build, flash, and run the harness (needs ESP32_PORT)"
+	@echo "  make esp32-device-benchmark  Same as test, plus a BENCH summary (needs ESP32_PORT)"
+	@echo ""
+	@echo "RP2040 on-device benchmark (requires PICO_SDK_PATH):"
+	@echo "  make rp2040-device-build      Build the pico-sdk benchmark UF2"
+	@echo "  make rp2040-device-flash      Copy UF2 to a BOOTSEL-mounted Pico"
+	@echo "  make rp2040-device-benchmark  Capture a benchmark run (needs RP2040_PORT)"
+	@echo ""
 	@echo "Fuzzing (requires LLVM clang; on macOS: brew install llvm):"
 	@echo "  make fuzz-decompressor  Fuzz decompressor with random input"
 	@echo "  make fuzz-round-trip    Fuzz compress->decompress round-trip"
@@ -364,6 +375,89 @@ endif
 
 mpy-compression-benchmark:
 	@time belay run micropython -X heapsize=300M tools/micropython-compression-benchmark.py
+
+
+###################
+# ESP32 On-Device
+###################
+# Build, flash, and run the ESP-IDF benchmark/test harness in devices/espidf/.
+#
+# Variables:
+#     ESP32_PORT      Serial port (required for flash/test/benchmark; no default)
+#     ESP32_TARGET    Chip target (default: esp32s3; e.g. esp32, esp32c3)
+#     TAMP_ESP32_OPT  y (default) uses TAMP_ESP32 optimizations; n builds the
+#                     TAMP_ESP32=n variant into a separate build dir
+.PHONY: esp32-device-data esp32-device-build esp32-device-test esp32-device-benchmark
+
+ESP32_TARGET ?= esp32s3
+TAMP_ESP32_OPT ?= y
+
+ifeq ($(TAMP_ESP32_OPT),n)
+ESP32_BUILD_NAME := build-$(ESP32_TARGET)-noopt
+ESP32_SDKCONFIG_ARG := -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.noopt"
+else
+ESP32_BUILD_NAME := build-$(ESP32_TARGET)
+ESP32_SDKCONFIG_ARG :=
+endif
+# idf.py resolves -B relative to the CWD but SDKCONFIG relative to the project dir.
+ESP32_BUILD_DIR := devices/espidf/$(ESP32_BUILD_NAME)
+
+# Reference for the on-device byte-equality check. Must be v1 (non-extended)
+# format because the harness compresses with a default TampConf, and must use
+# the python implementation because the espidf component builds without
+# TAMP_LAZY_MATCHING (the Cython build's lazy matching produces different bytes).
+build/enwik8-100kb-v1.tamp: build/enwik8-100kb
+	@uv run tamp compress --implementation=python --no-extended build/enwik8-100kb -o build/enwik8-100kb-v1.tamp
+
+# Stage embedded data (enwik8 blocks + packed regression vectors). Does NOT
+# require idf.py, so CI can generate data before invoking the IDF build action.
+esp32-device-data: build/enwik8-100kb build/enwik8-100kb-v1.tamp
+	@mkdir -p devices/espidf/main/data
+	cp build/enwik8-100kb devices/espidf/main/data/enwik8-100kb
+	cp build/enwik8-100kb-v1.tamp devices/espidf/main/data/enwik8-100kb.tamp
+	uv run python tools/pack-device-vectors.py devices/espidf/vectors -o devices/espidf/main/data/vectors.bin
+
+esp32-device-build: esp32-device-data
+	@command -v idf.py >/dev/null 2>&1 || { echo "Error: idf.py not found - activate your esp-idf environment."; exit 1; }
+	$(MAKE) -C espidf/tamp stage
+	@# Per-variant SDKCONFIG: the default (project-dir sdkconfig) is shared across
+	@# build dirs, which would make the opt/noopt toggle silently ineffective.
+	idf.py -C devices/espidf -B $(ESP32_BUILD_DIR) -DIDF_TARGET=$(ESP32_TARGET) \
+		-D SDKCONFIG=$(ESP32_BUILD_NAME)/sdkconfig $(ESP32_SDKCONFIG_ARG) build
+
+esp32-device-test: esp32-device-build
+	@[ -n "$(ESP32_PORT)" ] || { echo "Error: ESP32_PORT is not set (e.g. ESP32_PORT=/dev/ttyUSB0)."; exit 1; }
+	idf.py -C devices/espidf -B $(ESP32_BUILD_DIR) -p $(ESP32_PORT) flash
+	uv run python tools/device-runner.py --port $(ESP32_PORT)
+
+esp32-device-benchmark: esp32-device-build
+	@[ -n "$(ESP32_PORT)" ] || { echo "Error: ESP32_PORT is not set (e.g. ESP32_PORT=/dev/ttyUSB0)."; exit 1; }
+	idf.py -C devices/espidf -B $(ESP32_BUILD_DIR) -p $(ESP32_PORT) flash
+	uv run python tools/device-runner.py --port $(ESP32_PORT) --benchmark
+
+
+###################
+# RP2040 On-Device
+###################
+# Build and run the pico-sdk C benchmark in devices/rp2040/. Flashing is manual
+# (BOOTSEL); see devices/rp2040/README.md.
+#
+# Variables:
+#     RP2040_PORT   Serial port of the running benchmark (required for benchmark)
+.PHONY: rp2040-device-build rp2040-device-flash rp2040-device-benchmark
+
+rp2040-device-build: build/enwik8-100kb build/enwik8-100kb-v1.tamp
+	@[ -n "$$PICO_SDK_PATH" ] || { echo "Error: PICO_SDK_PATH is not set."; exit 1; }
+	cmake -B devices/rp2040/build -S devices/rp2040
+	$(MAKE) -C devices/rp2040/build tamp_benchmark
+
+rp2040-device-flash: rp2040-device-build
+	@[ -d /Volumes/RPI-RP2 ] || { echo "Error: /Volumes/RPI-RP2 not mounted - hold BOOTSEL while plugging in the Pico."; exit 1; }
+	cp devices/rp2040/build/tamp_benchmark.uf2 /Volumes/RPI-RP2/
+
+rp2040-device-benchmark:
+	@[ -n "$(RP2040_PORT)" ] || { echo "Error: RP2040_PORT is not set (e.g. RP2040_PORT=/dev/tty.usbmodem...)."; exit 1; }
+	uv run python tools/device-runner.py --port $(RP2040_PORT) --benchmark
 
 
 ##########

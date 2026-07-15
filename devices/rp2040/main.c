@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "enwik8.h"
 #include "enwik8_compressed.h"
@@ -13,31 +14,28 @@ TampProfilingStats tamp_profiling_stats;
 static unsigned char window_buffer[1024];
 static unsigned char output_buffer[100 << 10];
 
-int benchmark_compressor() {
-    size_t compressed_size = 0;
-
+static int benchmark_compressor(size_t *compressed_size) {
     TampCompressor compressor;
     TampConf compressor_conf = {.literal = 8, .window = 10, .use_custom_dictionary = false};
 
     if (TAMP_OK != tamp_compressor_init(&compressor, &compressor_conf, window_buffer)) return -1;
 
     if (TAMP_OK != tamp_compressor_compress_and_flush(&compressor, output_buffer, sizeof(output_buffer),
-                                                      &compressed_size, ENWIK8, sizeof(ENWIK8), NULL, false))
+                                                      compressed_size, ENWIK8, sizeof(ENWIK8), NULL, false))
         return -2;
-    return compressed_size;
+    return 0;
 }
 
-int benchmark_decompressor() {
+static int benchmark_decompressor(size_t *output_written_size) {
     TampDecompressor decompressor;
-    int output_written_size;
 
     if (TAMP_OK != tamp_decompressor_init(&decompressor, NULL, window_buffer, 10)) return -1;
 
-    if (0 > tamp_decompressor_decompress(&decompressor, output_buffer, sizeof(output_buffer), &output_written_size,
+    if (0 > tamp_decompressor_decompress(&decompressor, output_buffer, sizeof(output_buffer), output_written_size,
                                          ENWIK8_COMPRESSED, sizeof(ENWIK8_COMPRESSED), NULL))
         return -2;
 
-    return output_written_size;
+    return 0;
 }
 
 static void print_profiling_stats(void) {
@@ -60,39 +58,66 @@ static void print_profiling_stats(void) {
 }
 
 int main() {
-    // Initialise I/O
     stdio_init_all();
 
     while (true) {
-        int output_size;
+        int failures = 0;
+        int res;
+        size_t output_size;
         absolute_time_t start_time, end_time;
         int64_t elapsed_us;
         uint32_t bytes_per_sec;
 
         {
             start_time = get_absolute_time();
-            output_size = benchmark_compressor();
+            res = benchmark_compressor(&output_size);
             end_time = get_absolute_time();
 
             elapsed_us = absolute_time_diff_us(start_time, end_time);
             bytes_per_sec = (uint32_t)((uint64_t)sizeof(ENWIK8) * 1000000 / elapsed_us);
-            printf("compression: %lld us, %lu bytes/s\n", elapsed_us, bytes_per_sec);
+            printf("BENCH compress_enwik8_us=%lld\n", elapsed_us);
+            printf("INFO compressed_size=%u compress_bytes_per_sec=%lu\n", (unsigned)output_size, bytes_per_sec);
+            if (res != 0) {
+                printf("FAIL: compress enwik8 (res=%d)\n", res);
+                failures++;
+            } else if (output_size != sizeof(ENWIK8_COMPRESSED) ||
+                       memcmp(output_buffer, ENWIK8_COMPRESSED, sizeof(ENWIK8_COMPRESSED))) {
+                printf("FAIL: compress enwik8 matches reference (expected %u bytes, got %u)\n",
+                       (unsigned)sizeof(ENWIK8_COMPRESSED), (unsigned)output_size);
+                failures++;
+            } else {
+                printf("PASS: compress enwik8 matches reference\n");
+            }
         }
-        if (output_size != sizeof(ENWIK8_COMPRESSED)) printf("Unexpected compressed size: %d\n", output_size);
 
         {
             tamp_profiling_reset();
             start_time = get_absolute_time();
-            output_size = benchmark_decompressor();
+            res = benchmark_decompressor(&output_size);
             end_time = get_absolute_time();
 
             elapsed_us = absolute_time_diff_us(start_time, end_time);
             bytes_per_sec = (uint32_t)((uint64_t)sizeof(ENWIK8) * 1000000 / elapsed_us);
-            printf("decompression: %lld us, %lu bytes/s\n", elapsed_us, bytes_per_sec);
+            printf("BENCH decompress_enwik8_us=%lld\n", elapsed_us);
+            printf("INFO decompress_bytes_per_sec=%lu\n", bytes_per_sec);
+            if (res != 0) {
+                printf("FAIL: decompress enwik8 (res=%d)\n", res);
+                failures++;
+            } else if (output_size != sizeof(ENWIK8) || memcmp(output_buffer, ENWIK8, sizeof(ENWIK8))) {
+                printf("FAIL: decompress reference matches original (expected %u bytes, got %u)\n",
+                       (unsigned)sizeof(ENWIK8), (unsigned)output_size);
+                failures++;
+            } else {
+                printf("PASS: decompress reference matches original\n");
+            }
             print_profiling_stats();
         }
-        if (output_size != sizeof(ENWIK8)) printf("Unexpected decompressed size: %d\n", output_size);
 
-        sleep_ms(1000);
+        if (failures == 0)
+            printf("TAMP-DEVICE-RESULT: PASS\n");
+        else
+            printf("TAMP-DEVICE-RESULT: FAIL failures=%d\n", failures);
+
+        sleep_ms(2000);
     }
 }

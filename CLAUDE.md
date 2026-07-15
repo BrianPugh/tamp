@@ -145,6 +145,35 @@ make tamp-c-library        # Creates build/tamp.a
 make c-test               # Unit tests using Unity framework
 ```
 
+### On-Device Testing (`devices/`)
+
+Per-device benchmark/test harnesses; results tables live in
+`devices/BENCHMARKS.md` (standard workload: first 100 KB of enwik8, 10-bit
+window).
+
+`devices/espidf/` — ESP-IDF harness that benchmarks and correctness-tests tamp
+on real ESP32 hardware using the local `espidf/tamp/` component. Requires an
+activated esp-idf environment.
+
+```bash
+make esp32-device-build                          # Build (ESP32_TARGET=esp32s3 default)
+make esp32-device-test ESP32_PORT=/dev/ttyUSB0   # Build, flash, run; nonzero exit on failure
+make esp32-device-benchmark ESP32_PORT=...      # Same, plus BENCH summary
+```
+
+`TAMP_ESP32_OPT=n` builds the `TAMP_ESP32=n` variant into a separate build dir
+for A/B comparison. Regression vectors in `devices/espidf/vectors/` (e.g.
+host-fuzzer crash files) are replayed through the on-device decompressor.
+
+`devices/rp2040/` — pico-sdk C benchmark (`make rp2040-device-build`, manual
+BOOTSEL flash via `make rp2040-device-flash`, capture with
+`make rp2040-device-benchmark RP2040_PORT=...`). Requires `PICO_SDK_PATH`.
+
+On-device byte-equality references must be v1 (non-extended) format generated
+with `--implementation=python` — these builds compress classic format without
+`TAMP_LAZY_MATCHING`, so Cython (lazy-matching) or extended-format output
+differs. See each device directory's README.
+
 ### Website Development
 
 **Build and Serve Website:**
@@ -329,6 +358,8 @@ GitHub Actions workflows (`.github/workflows/`):
 - `mpy_native_module.yaml` - MicroPython native module builds for ARM
   architectures
 - `esp_upload_component.yml` - ESP-IDF component registry upload
+- `espidf_build.yaml` - Build-only check of the `devices/espidf/` harness
+  (esp32/esp32s3/esp32c3 × TAMP_ESP32 on/off, ESP-IDF v6.0.2)
 
 ## Documentation Style
 

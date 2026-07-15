@@ -16,12 +16,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -ggdb -ffunction-sections -fdata-sections")
 
 add_library(tamp
-    ../../../tamp/_c_src/tamp/common.c
-    ../../../tamp/_c_src/tamp/compressor.c
-    ../../../tamp/_c_src/tamp/decompressor.c
+    ../../tamp/_c_src/tamp/common.c
+    ../../tamp/_c_src/tamp/compressor.c
+    ../../tamp/_c_src/tamp/decompressor.c
 )
 # Note: compressor_find_match_desktop.c is #include'd by compressor.c, not compiled separately
-target_include_directories(tamp PUBLIC ../../../tamp/_c_src/)
+target_include_directories(tamp PUBLIC ../../tamp/_c_src/)
 target_include_directories(tamp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(tamp PUBLIC pico_time)
 
@@ -62,5 +62,7 @@ function(embed_resource resource_file_name source_file_name variable_name)
 
 endfunction()
 
-embed_resource("../../../build/enwik8-100kb" "enwik8.h" "ENWIK8")
-embed_resource("../../../build/enwik8-100kb.tamp" "enwik8_compressed.h" "ENWIK8_COMPRESSED")
+embed_resource("../../build/enwik8-100kb" "enwik8.h" "ENWIK8")
+# v1 (non-extended) reference: this build compresses in classic format,
+# so byte-equality only holds against a non-extended, non-lazy-matching stream.
+embed_resource("../../build/enwik8-100kb-v1.tamp" "enwik8_compressed.h" "ENWIK8_COMPRESSED")

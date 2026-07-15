@@ -1,42 +1,28 @@
-# Pi Pico Benchmark
+# RP2040 On-Device Benchmark
 
-Benchmarks Tamp compression and decompression on the RP2040 (Raspberry Pi Pico).
+Pico-sdk application that benchmarks tamp C compression/decompression of the
+first 100 KB of enwik8 on an RP2040 (Raspberry Pi Pico), compiled `-O3` with no
+filesystem or dynamic allocation. Output byte-compared against the embedded v1
+(non-extended) reference. Run everything from the repo root.
 
 ## Prerequisites
 
-- [Pico SDK](https://github.com/raspberrypi/pico-sdk) installed
-- `PICO_SDK_PATH` environment variable set
+- [Pico SDK](https://github.com/raspberrypi/pico-sdk) with `PICO_SDK_PATH` set
 - ARM toolchain (`arm-none-eabi-gcc`)
-- Test data files in `build/`:
-  - `build/enwik8-100kb` (raw test data)
-  - `build/enwik8-100kb.tamp` (compressed test data)
 
-## Building
+## Usage
 
 ```bash
-cd tools/pi_pico/benchmark
-mkdir -p build && cd build
-cmake ..
-make
+make rp2040-device-build       # Build devices/rp2040/build/tamp_benchmark.uf2
+make rp2040-device-flash       # Copy UF2 to a BOOTSEL-mounted Pico (/Volumes/RPI-RP2)
+make rp2040-device-benchmark RP2040_PORT=/dev/tty.usbmodem...   # Capture a run
 ```
 
-This produces `tamp_benchmark.uf2`.
-
-## Flashing
-
-1. Hold the BOOTSEL button on your Pico
-2. Connect USB while holding BOOTSEL
-3. Run `make flash` from the build directory
-
-## Output
-
-Monitor via USB serial using `make monitor PORT=/dev/ttyACM0` (adjust port as
-needed):
-
-```
-compression: 3510255 us, 28487 bytes/s
-decompression: 165429 us, 604488 bytes/s
-```
+To flash: hold BOOTSEL while connecting USB, then `make rp2040-device-flash`.
+The Pico reboots into the benchmark, which loops forever printing `BENCH`/`INFO`
+lines, `PASS:`/`FAIL:` checks, and a `TAMP-DEVICE-RESULT:` sentinel each
+iteration; `make rp2040-device-benchmark` captures one iteration and exits
+nonzero on failure.
 
 ## Profiling
 
