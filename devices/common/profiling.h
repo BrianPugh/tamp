@@ -3,7 +3,12 @@
 
 #include <stdint.h>
 
-#include "pico/time.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Timestamp source implemented by each device port (see tamp_bench.h). */
+uint64_t tamp_bench_time_us(void);
 
 typedef struct {
     // Counters
@@ -37,11 +42,15 @@ static inline void tamp_profiling_reset(void) {
 }
 
 // Timing macros
-#define TAMP_PROFILE_START() uint64_t _prof_start = time_us_64()
-#define TAMP_PROFILE_END(accumulator) (accumulator) += (time_us_64() - _prof_start)
+#define TAMP_PROFILE_START() uint64_t _prof_start = tamp_bench_time_us()
+#define TAMP_PROFILE_END(accumulator) (accumulator) += (tamp_bench_time_us() - _prof_start)
 
 // For nested timing (when we need multiple timers)
-#define TAMP_PROFILE_START_NAMED(name) uint64_t _prof_start_##name = time_us_64()
-#define TAMP_PROFILE_END_NAMED(name, accumulator) (accumulator) += (time_us_64() - _prof_start_##name)
+#define TAMP_PROFILE_START_NAMED(name) uint64_t _prof_start_##name = tamp_bench_time_us()
+#define TAMP_PROFILE_END_NAMED(name, accumulator) (accumulator) += (tamp_bench_time_us() - _prof_start_##name)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

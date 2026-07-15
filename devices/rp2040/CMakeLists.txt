@@ -23,9 +23,10 @@ add_library(tamp
 # Note: compressor_find_match_desktop.c is #include'd by compressor.c, not compiled separately
 target_include_directories(tamp PUBLIC ../../tamp/_c_src/)
 target_include_directories(tamp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(tamp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 target_link_libraries(tamp PUBLIC pico_time)
 
-add_executable(tamp_benchmark main.c)
+add_executable(tamp_benchmark main.c ../common/tamp_bench.c)
 target_link_libraries(tamp_benchmark tamp)
 
 # Add pico_stdlib library which aggregates commonly used features
@@ -66,3 +67,4 @@ embed_resource("../../build/enwik8-100kb" "enwik8.h" "ENWIK8")
 # v1 (non-extended) reference: this build compresses in classic format,
 # so byte-equality only holds against a non-extended, non-lazy-matching stream.
 embed_resource("../../build/enwik8-100kb-v1.tamp" "enwik8_compressed.h" "ENWIK8_COMPRESSED")
+embed_resource("../../build/device-vectors.bin" "vectors.h" "VECTORS")

@@ -1,9 +1,11 @@
-# RP2040 On-Device Benchmark
+# RP2040 On-Device Harness
 
-Pico-sdk application that benchmarks tamp C compression/decompression of the
-first 100 KB of enwik8 on an RP2040 (Raspberry Pi Pico), compiled `-O3` with no
-filesystem or dynamic allocation. Output byte-compared against the embedded v1
-(non-extended) reference. Run everything from the repo root.
+Pico-sdk application that runs the shared device harness
+(`../common/tamp_bench.c`) on an RP2040 (Raspberry Pi Pico), compiled `-O3` with
+no filesystem or dynamic allocation: enwik8-100 KB benchmarks with
+byte-verification against the embedded v1 (non-extended) reference, replay of
+the shared regression vectors (`../vectors/`), and seeded PRNG round-trip
+stress. Run everything from the repo root.
 
 ## Prerequisites
 
@@ -26,9 +28,9 @@ nonzero on failure.
 
 ## Profiling
 
-The benchmark includes profiling infrastructure via `profiling.h`. Stats are
-always printed after decompression (showing zeros if no instrumentation is
-added).
+The harness includes profiling infrastructure via `../common/profiling.h`
+(available on every device port). Stats are always printed after decompression
+(showing zeros if no instrumentation is added).
 
 To profile specific sections, temporarily add instrumentation to
 `tamp/_c_src/tamp/*.c`:

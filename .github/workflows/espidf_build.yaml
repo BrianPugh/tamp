@@ -7,6 +7,8 @@ on:
       - 'espidf/**'
       - 'tamp/_c_src/**'
       - 'devices/espidf/**'
+      - 'devices/common/**'
+      - 'devices/vectors/**'
       - 'tools/pack-device-vectors.py'
       - '.github/workflows/espidf_build.yaml'
   push:
@@ -16,6 +18,8 @@ on:
       - 'espidf/**'
       - 'tamp/_c_src/**'
       - 'devices/espidf/**'
+      - 'devices/common/**'
+      - 'devices/vectors/**'
       - 'tools/pack-device-vectors.py'
       - '.github/workflows/espidf_build.yaml'
 

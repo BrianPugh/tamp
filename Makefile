@@ -387,7 +387,7 @@ mpy-compression-benchmark:
 #     ESP32_TARGET    Chip target (default: esp32s3; e.g. esp32, esp32c3)
 #     TAMP_ESP32_OPT  y (default) uses TAMP_ESP32 optimizations; n builds the
 #                     TAMP_ESP32=n variant into a separate build dir
-.PHONY: esp32-device-data esp32-device-build esp32-device-test esp32-device-benchmark
+.PHONY: device-vectors esp32-device-data esp32-device-build esp32-device-test esp32-device-benchmark
 
 ESP32_TARGET ?= esp32s3
 TAMP_ESP32_OPT ?= y
@@ -411,11 +411,16 @@ build/enwik8-100kb-v1.tamp: build/enwik8-100kb
 
 # Stage embedded data (enwik8 blocks + packed regression vectors). Does NOT
 # require idf.py, so CI can generate data before invoking the IDF build action.
-esp32-device-data: build/enwik8-100kb build/enwik8-100kb-v1.tamp
+# Pack the shared regression vectors (devices/vectors/) for embedding.
+device-vectors:
+	@mkdir -p build
+	uv run python tools/pack-device-vectors.py devices/vectors -o build/device-vectors.bin
+
+esp32-device-data: build/enwik8-100kb build/enwik8-100kb-v1.tamp device-vectors
 	@mkdir -p devices/espidf/main/data
 	cp build/enwik8-100kb devices/espidf/main/data/enwik8-100kb
 	cp build/enwik8-100kb-v1.tamp devices/espidf/main/data/enwik8-100kb.tamp
-	uv run python tools/pack-device-vectors.py devices/espidf/vectors -o devices/espidf/main/data/vectors.bin
+	cp build/device-vectors.bin devices/espidf/main/data/vectors.bin
 
 esp32-device-build: esp32-device-data
 	@command -v idf.py >/dev/null 2>&1 || { echo "Error: idf.py not found - activate your esp-idf environment."; exit 1; }
@@ -446,7 +451,7 @@ esp32-device-benchmark: esp32-device-build
 #     RP2040_PORT   Serial port of the running benchmark (required for benchmark)
 .PHONY: rp2040-device-build rp2040-device-flash rp2040-device-benchmark
 
-rp2040-device-build: build/enwik8-100kb build/enwik8-100kb-v1.tamp
+rp2040-device-build: build/enwik8-100kb build/enwik8-100kb-v1.tamp device-vectors
 	@[ -n "$$PICO_SDK_PATH" ] || { echo "Error: PICO_SDK_PATH is not set."; exit 1; }
 	cmake -B devices/rp2040/build -S devices/rp2040
 	$(MAKE) -C devices/rp2040/build tamp_benchmark

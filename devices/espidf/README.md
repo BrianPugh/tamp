@@ -1,8 +1,9 @@
 # ESP32 On-Device Harness
 
 Benchmarks and correctness-tests tamp on real ESP32 silicon, consuming the local
-`espidf/tamp/` component (not the registry version). Run everything from the
-repo root via the top-level `Makefile`.
+`espidf/tamp/` component (not the registry version). The harness logic is shared
+across devices in `../common/tamp_bench.c`; `main/main.c` is a thin platform
+shell. Run everything from the repo root via the top-level `Makefile`.
 
 ## Prerequisites
 
@@ -48,8 +49,9 @@ and exits 0 on PASS, 1 on FAIL, 2 on timeout.
 
 ## Regression vectors
 
-`vectors/` holds committed byte streams that are packed into
-`main/data/vectors.bin` and replayed through a fresh decompressor on device (any
-result is acceptable; the check is that decoding does not crash or hang). To add
-a case — for instance a host-fuzzer crash file from `fuzz/corpus_*/crashes/` —
-drop the raw file into `vectors/` and rebuild. Keep seed vectors small.
+`../vectors/` holds committed byte streams (shared by all device harnesses) that
+are packed into `main/data/vectors.bin` and replayed through a fresh
+decompressor on device (any result is acceptable; the check is that decoding
+does not crash or hang). To add a case — for instance a host-fuzzer crash file
+from `fuzz/corpus_*/crashes/` — drop the raw file into `devices/vectors/` and
+rebuild. Keep seed vectors small.

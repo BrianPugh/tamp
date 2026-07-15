@@ -149,7 +149,10 @@ make c-test               # Unit tests using Unity framework
 
 Per-device benchmark/test harnesses; results tables live in
 `devices/BENCHMARKS.md` (standard workload: first 100 KB of enwik8, 10-bit
-window).
+window). The harness logic (benchmarks, reference verification,
+regression-vector replay, PRNG stress, `TAMP-DEVICE-RESULT:` sentinel) is shared
+in `devices/common/tamp_bench.c`; each device provides a thin `main` plus
+`tamp_bench_time_us()`. Regression vectors are shared in `devices/vectors/`.
 
 `devices/espidf/` — ESP-IDF harness that benchmarks and correctness-tests tamp
 on real ESP32 hardware using the local `espidf/tamp/` component. Requires an
@@ -162,8 +165,8 @@ make esp32-device-benchmark ESP32_PORT=...      # Same, plus BENCH summary
 ```
 
 `TAMP_ESP32_OPT=n` builds the `TAMP_ESP32=n` variant into a separate build dir
-for A/B comparison. Regression vectors in `devices/espidf/vectors/` (e.g.
-host-fuzzer crash files) are replayed through the on-device decompressor.
+for A/B comparison. Regression vectors in `devices/vectors/` (e.g. host-fuzzer
+crash files) are replayed through the on-device decompressor.
 
 `devices/rp2040/` — pico-sdk C benchmark (`make rp2040-device-build`, manual
 BOOTSEL flash via `make rp2040-device-flash`, capture with

@@ -4,6 +4,3 @@ sdkconfig.old
 dependencies.lock
 managed_components/
 main/data/
-
-# Committed regression vectors (override the repo-wide *.bin ignore).
-!vectors/*.bin

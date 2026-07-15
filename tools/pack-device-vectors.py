@@ -21,7 +21,7 @@ def collect_files(inputs):
     for item in inputs:
         path = Path(item)
         if path.is_dir():
-            files.extend(sorted(p for p in path.iterdir() if p.is_file()))
+            files.extend(sorted(p for p in path.iterdir() if p.is_file() and not p.name.startswith(".")))
         elif path.is_file():
             files.append(path)
         else:
