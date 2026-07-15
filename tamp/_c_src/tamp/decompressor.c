@@ -346,22 +346,44 @@ tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* 
     return res;
 }
 
-/*
- * refill_bit_buffer (consume input bytes until bit_buffer holds at least 25
- * bits or input is exhausted) variants, included rather than compiled
- * separately: fast works on locals with one writeback (default); compact
- * operates through the pointers. Cortex-M0/M0+ keeps compact because the
- * locals spill on its 8-register file (~324 bytes of code) without a
- * measured win.
+/**
+ * @brief Refill bit buffer from input stream.
+ *
+ * Consumes bytes from input until bit_buffer has at least 25 bits or input is exhausted.
  *
  * NOTE: NOINLINE saves ~192 bytes on armv6m but causes ~10% decompression
  * speed regression. Keep this inlined for performance.
  */
+static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end,
+                                     size_t* input_consumed_size) {
 #if defined(__ARM_ARCH_6M__)
-#include "decompressor_refill_compact.c"
+    /* Cortex-M0/M0+: the locals variant below spills on the 8-register file,
+     * costing ~324 bytes of code without a measured win; keep the compact form. */
+    while (*input != input_end && d->bit_buffer_pos <= 24) {
+        d->bit_buffer_pos += 8;
+        d->bit_buffer |= (uint32_t) * (*input) << (32 - d->bit_buffer_pos);
+        (*input)++;
+        (*input_consumed_size)++;
+    }
 #else
-#include "decompressor_refill_fast.c"
+    /* Work on locals with a single writeback: the unsigned char loads may
+     * alias anything, so operating through the pointers directly forces a
+     * reload/store per byte (+5% decompression speed on Cortex-M7). */
+    const unsigned char* in = *input;
+    uint32_t bit_buffer = d->bit_buffer;
+    uint8_t bit_buffer_pos = d->bit_buffer_pos;
+    size_t consumed = 0;
+    while (in != input_end && bit_buffer_pos <= 24) {
+        bit_buffer_pos += 8;
+        bit_buffer |= (uint32_t)*in++ << (32 - bit_buffer_pos);
+        consumed++;
+    }
+    d->bit_buffer = bit_buffer;
+    d->bit_buffer_pos = bit_buffer_pos;
+    *input = in;
+    *input_consumed_size += consumed;
 #endif
+}
 
 #if TAMP_HAS_GCC_OPTIMIZE
 #pragma GCC push_options
