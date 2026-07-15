@@ -238,17 +238,21 @@ make website-clean         # Clean website build artifacts
   (default: 32 bytes, 256+ recommended for performance)
 - `TAMP_STREAM_MEMORY` / `TAMP_STREAM_STDIO` / `TAMP_STREAM_LITTLEFS` /
   `TAMP_STREAM_FATFS` - Enable built-in I/O handlers for specific backends
-- `TAMP_USE_EMBEDDED_MATCH=1` - Force embedded `find_best_match` implementation
-  on desktop (for testing)
-- `TAMP_USE_PREFILTER_MATCH=1` - First-byte-prefilter `find_best_match`; default
-  on ARMv7E-M (GCC, little-endian, unaligned-capable), where it measured 1.36x
-  compression speed on Cortex-M7. Slower than the desktop implementation on
-  64-bit hosts.
-- `TAMP_USE_DESKTOP_MATCH=1` - Force the 64-bit desktop `find_best_match` on
-  other targets (needs little-endian + cheap unaligned loads)
-- `TAMP_USE_SWAR32_MATCH=1` - Experimental 32-bit SWAR `find_best_match` (slower
-  than the alternatives on Cortex-M7; candidate for single-issue cores like
-  Cortex-M33)
+- Platform tuning flags: defaults are computed per-architecture in `common.h`'s
+  "Platform performance tuning" section (all architecture detection lives there;
+  the `.c` files reference only these semantic flags). Override any with
+  `-D<flag>=0/1`:
+  - `TAMP_USE_EMBEDDED_MATCH` - portable `find_best_match`; set to 1 to force it
+    anywhere
+  - `TAMP_USE_PREFILTER_MATCH` - first-byte prefilter; default on ARMv7E-M
+    (1.36x compression on Cortex-M7; slower on 64-bit hosts)
+  - `TAMP_USE_DESKTOP_MATCH` - 64-bit SWAR; default on `x86_64`/`aarch64`
+  - `TAMP_USE_SWAR32_MATCH` - experimental 32-bit SWAR (opt-in; candidate for
+    single-issue cores like Cortex-M33)
+  - `TAMP_FAST_WINDOW_COPY` - no-wrap fast path in `tamp_window_copy`; default
+    on ARMv7E-M (+14% decompression on M7; -3% Xtensa LX7, +160B Cortex-M0+)
+  - `TAMP_FAST_BIT_REFILL` - locals-based `refill_bit_buffer`; default on
+    ARMv7E-M (+5% decompression on M7; -3% Xtensa LX7, +324B Cortex-M0+)
 - `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
   environments without libc (e.g. MicroPython native modules).
 

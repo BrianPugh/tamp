@@ -69,6 +69,68 @@ extern "C" {
 #define TAMP_OPTIMIZE_SIZE
 #endif
 
+/*******************************************************************************
+ * Platform performance tuning
+ *
+ * All architecture detection for speed/size variant selection lives here; the
+ * .c files reference only these semantic flags, each overridable with
+ * -D<flag>=0/1. Measured numbers below are from devices/BENCHMARKS.md
+ * workloads; when enabling a flag on an unlisted core, benchmark it.
+ ******************************************************************************/
+
+/* find_best_match implementation (see compressor.c). At most one of these
+ * should be 1; TAMP_USE_EMBEDDED_MATCH=1 forces the portable scan.
+ *   embedded:  portable single-byte-first scan, the default.
+ *   swar32:    experimental 32-bit SWAR (candidate for single-issue cores;
+ *              measured 0.93x on Cortex-M7 - opt-in only).
+ *   desktop:   64-bit SWAR, default on 64-bit hosts.
+ *   prefilter: first-byte prefilter, default on ARMv7E-M (1.36x compression
+ *              on Cortex-M7; ~0.5x on out-of-order 64-bit hosts). */
+#ifndef TAMP_USE_EMBEDDED_MATCH
+#define TAMP_USE_EMBEDDED_MATCH 0
+#endif
+#ifndef TAMP_USE_SWAR32_MATCH
+#define TAMP_USE_SWAR32_MATCH 0
+#endif
+#ifndef TAMP_USE_DESKTOP_MATCH
+#if (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)) && \
+    !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_SWAR32_MATCH
+#define TAMP_USE_DESKTOP_MATCH 1
+#else
+#define TAMP_USE_DESKTOP_MATCH 0
+#endif
+#endif
+#ifndef TAMP_USE_PREFILTER_MATCH
+#if defined(__ARM_ARCH_7EM__) && defined(__GNUC__) && defined(__ARM_FEATURE_UNALIGNED) && \
+    !defined(__ARM_BIG_ENDIAN) && !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_SWAR32_MATCH && !TAMP_USE_DESKTOP_MATCH
+#define TAMP_USE_PREFILTER_MATCH 1
+#else
+#define TAMP_USE_PREFILTER_MATCH 0
+#endif
+#endif
+
+/* tamp_window_copy variant with a no-wrap fast path (see common.c).
+ * Measured: +14% decompression on Cortex-M7; -3% on Xtensa LX7; ~+160 bytes
+ * on Cortex-M0/M0+ where flash is the scarce resource. */
+#ifndef TAMP_FAST_WINDOW_COPY
+#if defined(__ARM_ARCH_7EM__)
+#define TAMP_FAST_WINDOW_COPY 1
+#else
+#define TAMP_FAST_WINDOW_COPY 0
+#endif
+#endif
+
+/* refill_bit_buffer on locals with a single writeback (see decompressor.c).
+ * Measured: +5% decompression on Cortex-M7; -3% on Xtensa LX7; +324 bytes on
+ * Cortex-M0/M0+ (register spills on the 8-register file). */
+#ifndef TAMP_FAST_BIT_REFILL
+#if defined(__ARM_ARCH_7EM__)
+#define TAMP_FAST_BIT_REFILL 1
+#else
+#define TAMP_FAST_BIT_REFILL 0
+#endif
+#endif
+
 /* TAMP_USE_MEMSET: Use libc memset (default: 1).
  * Set to 0 for environments without libc (e.g. MicroPython native modules).
  * When disabled, uses a volatile loop that prevents GCC from emitting a

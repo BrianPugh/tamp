@@ -92,26 +92,17 @@ inline bool tamp_compressor_full(const TampCompressor* compressor) {
  * 4. Embedded/Default (Cortex-M0/M0+, other 32-bit): defined below -
  *    single-byte-first comparison, safe for all architectures.
  *
- * Implementations reachable on embedded targets are defined inline so that
+ * The TAMP_USE_*_MATCH selection flags (and their per-architecture defaults)
+ * are defined in common.h's platform tuning section. Implementations
+ * reachable on embedded targets are defined inline so that
  * common.c/compressor.c/decompressor.c compile standalone with only the
  * headers; only desktop/experimental variants live in #include'd files.
- *
- * Set TAMP_USE_EMBEDDED_MATCH=1 to force the embedded implementation on desktop
- * (useful for testing the embedded code path on CI).
- * Set TAMP_USE_DESKTOP_MATCH=1 to force the desktop implementation on other
- * targets (requires little-endian and cheap unaligned loads, e.g. Cortex-M7).
  */
 
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor* compressor, uint16_t* match_index, uint8_t* match_size);
 
-/* ARMv7E-M (Cortex-M4/M7) default: in-order cores with cheap unaligned loads
- * favor the first-byte prefilter (measured 1.36x compression speed on
- * Cortex-M7 vs the embedded implementation; see devices/BENCHMARKS.md).
- * Escape hatch: TAMP_USE_EMBEDDED_MATCH=1 restores the embedded scan. */
-#elif (TAMP_USE_PREFILTER_MATCH || (defined(__ARM_ARCH_7EM__) && defined(__ARM_FEATURE_UNALIGNED) && \
-                                    defined(__GNUC__) && !defined(__ARM_BIG_ENDIAN))) &&             \
-    !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_DESKTOP_MATCH
+#elif TAMP_USE_PREFILTER_MATCH
 /* First-byte prefilter: SWAR-detect candidate positions holding the first
  * input byte with one 64-bit load per 8 window positions, then verify the
  * 2-byte seed with a 16-bit load per hit. Kept inline so compressor.c
@@ -260,12 +251,10 @@ static inline void find_best_match(TampCompressor* compressor, uint16_t* match_i
 #undef tamp_ctzll
 #endif
 
-#elif TAMP_USE_SWAR32_MATCH && !TAMP_USE_EMBEDDED_MATCH
+#elif TAMP_USE_SWAR32_MATCH
 #include "compressor_find_match_swar32.c"
 
-#elif (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64) || \
-       TAMP_USE_DESKTOP_MATCH) &&                                                             \
-    !TAMP_USE_EMBEDDED_MATCH
+#elif TAMP_USE_DESKTOP_MATCH
 #include "compressor_find_match_desktop.c"
 
 #else
