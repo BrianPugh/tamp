@@ -127,8 +127,15 @@ static inline int tamp_ctzll(uint64_t value) {
 // Note: Can have false positives when a zero byte is followed by 0x01-0x7F due to borrow propagation
 #define HAS_ZERO_BYTE(v) (((v)-0x0101010101010101ULL) & ~(v) & 0x8080808080808080ULL)
 
-// Helper macro to extend a match and update best match
-// Uses pre-computed input_word_ext and input_bytes to avoid repeated read_input() calls
+// Helper macro to extend a match and update best match.
+// Uses pre-computed input_word_ext and input_bytes to avoid repeated read_input() calls.
+//
+// A macro rather than a static inline function deliberately: three function
+// shapes (by-pointer outputs, pure value return, always_inline) all measured
+// 3.4-4.3% slower compression on Cortex-M7 - the function boundary changes
+// GCC's optimization order and register allocation in this pressure-critical
+// loop, even though the body inlines either way. Same trade in
+// compressor_find_match_desktop.c.
 #define EXTEND_MATCH(idx)                                                                        \
     do {                                                                                         \
         uint8_t match_len = 2;                                                                   \
