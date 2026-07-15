@@ -1,4 +1,4 @@
-exclude: ^(uv.lock|package-lock.json|.idea/|.belay/|ctests/littlefs/|ctests/fatfs/)
+exclude: ^(uv.lock|package-lock.json|.idea/|.belay/|ctests/littlefs/|ctests/fatfs/|devices/vectors/)
 repos:
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: '0.11.26'
@@ -69,7 +69,7 @@ repos:
         entry: cppcheck
         language: system
         files: \.(c|h|cpp|hpp)$
-        exclude: ^(espidf|mpy_bindings|ctests|tools)/
+        exclude: ^(espidf|mpy_bindings|ctests|tools|devices)/
         args: [
             '-Itamp/_c_src',
             '-DTAMP_LAZY_MATCHING=1',

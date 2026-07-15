@@ -1,0 +1,80 @@
+name: ESP-IDF Build
+
+on:
+  workflow_dispatch:
+  # PRs only run this when device/component files change directly; tamp/_c_src
+  # coverage runs post-merge (below), which still precedes any tagged registry
+  # upload.
+  pull_request:
+    paths:
+      - 'espidf/**'
+      - 'devices/**'
+      - 'tools/pack-device-vectors.py'
+      - '.github/workflows/espidf_build.yaml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'espidf/**'
+      - 'tamp/_c_src/**'
+      - 'devices/**'
+      - 'tools/pack-device-vectors.py'
+      - '.github/workflows/espidf_build.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 'Build (${{ matrix.target }}, TAMP_ESP32=${{ matrix.tamp_esp32 }})'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The opt legs each compile a unique code path (LX6 scalar asm, S3 PIE
+        # SIMD, RISC-V); a single noopt leg covers the TAMP_ESP32=n wiring,
+        # which is otherwise target-independent plain C.
+        include:
+          - target: esp32
+            tamp_esp32: opt
+          - target: esp32s3
+            tamp_esp32: opt
+          - target: esp32c3
+            tamp_esp32: opt
+          - target: esp32s3
+            tamp_esp32: noopt
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage tamp component
+        run: make -C espidf/tamp stage
+
+      # Build-only check: EMBED_FILES just needs files to exist and nothing
+      # executes, so placeholder bytes replace the enwik8 download and the
+      # uv/tamp reference generation (use `make esp32-device-data` locally for
+      # real data).
+      - name: Generate placeholder device data
+        run: |
+          mkdir -p devices/espidf/main/data
+          python3 -c "import os; open('devices/espidf/main/data/enwik8-100kb','wb').write(os.urandom(100000))"
+          python3 -c "open('devices/espidf/main/data/enwik8-100kb.tamp','wb').write(bytes(64))"
+          python3 tools/pack-device-vectors.py devices/vectors -o devices/espidf/main/data/vectors.bin
+
+      - name: Build (opt)
+        if: matrix.tamp_esp32 == 'opt'
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0.2
+          target: ${{ matrix.target }}
+          path: devices/espidf
+
+      - name: Build (noopt)
+        if: matrix.tamp_esp32 == 'noopt'
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.0.2
+          target: ${{ matrix.target }}
+          path: devices/espidf
+          command: idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.noopt" build

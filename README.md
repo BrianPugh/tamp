@@ -336,6 +336,9 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 Tamp resulted in a **50841** byte archive, while Micropython's builtin `deflate`
 resulted in a larger, **59442** byte archive.
 
+See [devices/BENCHMARKS.md](devices/BENCHMARKS.md) for this benchmark across
+various hardware.
+
 ## Binary Size
 
 To give an idea on the resulting binary sizes, Tamp and other libraries were

@@ -124,6 +124,10 @@ npm run type-check         # TypeScript checking
 make ARCH=armv6m           # Build for specific architecture
 ```
 
+Changing `ARCH` alone does not trigger a rebuild (stale objects are reused; make
+reports "Nothing to be done"). Remove `build/mpy_bindings/` and `build/tamp/`
+when switching architectures.
+
 **Testing on Device:**
 
 ```bash
@@ -144,6 +148,38 @@ make tamp-c-library        # Creates build/tamp.a
 ```bash
 make c-test               # Unit tests using Unity framework
 ```
+
+### On-Device Testing (`devices/`)
+
+Per-device benchmark/test harnesses; results tables live in
+`devices/BENCHMARKS.md` (standard workload: first 100 KB of enwik8, 10-bit
+window). The harness logic (benchmarks, reference verification,
+regression-vector replay, PRNG stress, `TAMP-DEVICE-RESULT:` sentinel) is shared
+in `devices/common/tamp_bench.c`; each device provides a thin `main` plus
+`tamp_bench_time_us()`. Regression vectors are shared in `devices/vectors/`.
+
+`devices/espidf/` — ESP-IDF harness that benchmarks and correctness-tests tamp
+on real ESP32 hardware using the local `espidf/tamp/` component. Requires an
+activated esp-idf environment.
+
+```bash
+make esp32-device-build                          # Build (ESP32_TARGET=esp32s3 default)
+make esp32-device-test ESP32_PORT=/dev/ttyUSB0   # Build, flash, run; nonzero exit on failure
+make esp32-device-benchmark ESP32_PORT=...      # Same, plus BENCH summary
+```
+
+`TAMP_ESP32_OPT=n` builds the `TAMP_ESP32=n` variant into a separate build dir
+for A/B comparison. Regression vectors in `devices/vectors/` (e.g. host-fuzzer
+crash files) are replayed through the on-device decompressor.
+
+`devices/rp2040/` — pico-sdk C benchmark (`make rp2040-device-build`, manual
+BOOTSEL flash via `make rp2040-device-flash`, capture with
+`make rp2040-device-benchmark RP2040_PORT=...`). Requires `PICO_SDK_PATH`.
+
+On-device byte-equality references must be v1 (non-extended) format generated
+with `--implementation=python` — these builds compress classic format without
+`TAMP_LAZY_MATCHING`, so Cython (lazy-matching) or extended-format output
+differs. See each device directory's README.
 
 ### Website Development
 
@@ -329,6 +365,10 @@ GitHub Actions workflows (`.github/workflows/`):
 - `mpy_native_module.yaml` - MicroPython native module builds for ARM
   architectures
 - `esp_upload_component.yml` - ESP-IDF component registry upload
+- `espidf_build.yaml` - Build-only check of the `devices/espidf/` harness (opt
+  legs for esp32/esp32s3/esp32c3 + one noopt leg, ESP-IDF v6.0.2; placeholder
+  embed data, no enwik8/uv). PRs trigger it only for `espidf/`/`devices/`
+  changes; `tamp/_c_src/` coverage runs on push to main.
 
 ## Documentation Style
 

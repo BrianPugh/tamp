@@ -7,8 +7,10 @@ TAMP_C_FILES := \
 	decompressor.c \
 	decompressor.h
 
-component:
+stage:
 	cp ../../README.md .
 	mkdir -p tamp
 	$(foreach f,$(TAMP_C_FILES),cp ../../tamp/_c_src/tamp/$(f) tamp/;)
+
+component: stage
 	compote component pack --name=tamp --version=0.0.0
