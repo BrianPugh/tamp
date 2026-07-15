@@ -176,6 +176,14 @@ crash files) are replayed through the on-device decompressor.
 BOOTSEL flash via `make rp2040-device-flash`, capture with
 `make rp2040-device-benchmark RP2040_PORT=...`). Requires `PICO_SDK_PATH`.
 
+`devices/stm32h7b0/` — bare-metal harness (no HAL/Cube; pinned CMSIS headers
+fetched at build) flashed and run over an ST-Link via OpenOCD with semihosting
+output, so no port variable or UART is needed (`make stm32h7b0-device-build` /
+`-test` / `-benchmark`). Requires `arm-none-eabi-gcc` + `openocd`. The 128K
+flash can't embed the benchmark data; `run.tcl` loads a packed blob
+(`tools/pack-device-blob.py`) into AXI SRAM over SWD before resume. The firmware
+self-configures 280 MHz/VOS0/caches and prints readback INFO lines.
+
 On-device byte-equality references must be v1 (non-extended) format generated
 with `--implementation=python` — these builds compress classic format without
 `TAMP_LAZY_MATCHING`, so Cython (lazy-matching) or extended-format output
