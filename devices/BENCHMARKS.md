@@ -16,6 +16,14 @@ compression and output bytes per second for decompression. Reproduce with the
 | ESP32-S3                                                                              | Xtensa LX7     | 160 MHz | ESP-IDF v6.0.2, `-O2`             | `TAMP_ESP32` (PIE SIMD) | 0.255           | 392,600               | 0.050             | 1,987,000               |
 | ESP32-C3                                                                              | RISC-V RV32IMC | 160 MHz | ESP-IDF v6.0.2, `-O2`             | —                       | 1.413           | 70,800                | 0.040             | 2,500,000               |
 | ESP32-C3                                                                              | RISC-V RV32IMC | 160 MHz | ESP-IDF v6.0.2, `-O2`             | `TAMP_ESP32`            | 0.961           | 104,100               | 0.036             | 2,777,800               |
+| STM32H7B0 [^sram]                                                                     | Cortex-M7      | 280 MHz | C, `-O3`, I+D cache               | —                       | 0.518           | 192,900               | 0.017             | 5,907,000               |
+
+[^sram]:
+    The STM32H7B0's benchmark input/reference data resides in internal SRAM (the
+    128 KB flash cannot embed it; the runner loads it over SWD), whereas the
+    other devices read it from cached external/XiP flash. Code still runs from
+    internal flash. This makes the data-read path somewhat faster than a
+    flash-resident workload would be.
 
 New device targets (e.g. RP2350, STM32H7) should add rows here using the same
 100 KB enwik8 workload and a 10-bit window.

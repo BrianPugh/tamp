@@ -257,7 +257,7 @@ staticmethod-decorators = [
 ]
 
 [tool.codespell]
-"ignore-words-list" = "ans,fo"
+"ignore-words-list" = "ans,fo,hsi"
 
 [tool.creosote]
  venvs=[".venv"]
