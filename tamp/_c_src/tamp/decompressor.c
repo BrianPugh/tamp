@@ -356,12 +356,33 @@ tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* 
  */
 static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end,
                                      size_t* input_consumed_size) {
+#if defined(__ARM_ARCH_6M__)
+    /* Cortex-M0/M0+: the locals variant below spills on the 8-register file,
+     * costing ~324 bytes of code without a measured win. Keep the compact form. */
     while (*input != input_end && d->bit_buffer_pos <= 24) {
         d->bit_buffer_pos += 8;
         d->bit_buffer |= (uint32_t) * (*input) << (32 - d->bit_buffer_pos);
         (*input)++;
         (*input_consumed_size)++;
     }
+#else
+    /* Work on locals: the unsigned char loads may alias anything, so operating
+     * through the pointers directly forces a reload/store per byte
+     * (measured +5% decompression speed on Cortex-M7). */
+    const unsigned char* in = *input;
+    uint32_t bit_buffer = d->bit_buffer;
+    uint8_t bit_buffer_pos = d->bit_buffer_pos;
+    size_t consumed = 0;
+    while (in != input_end && bit_buffer_pos <= 24) {
+        bit_buffer_pos += 8;
+        bit_buffer |= (uint32_t)*in++ << (32 - bit_buffer_pos);
+        consumed++;
+    }
+    d->bit_buffer = bit_buffer;
+    d->bit_buffer_pos = bit_buffer_pos;
+    *input = in;
+    *input_consumed_size += consumed;
+#endif
 }
 
 #if TAMP_HAS_GCC_OPTIMIZE
