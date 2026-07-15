@@ -93,7 +93,7 @@ extern "C" {
 #endif
 
 /* find_best_match implementation (see compressor.c). At most one of these
- * should be 1; TAMP_USE_EMBEDDED_MATCH=1 forces the portable scan.
+ * may be 1 (enforced below); with none set, the portable scan is used.
  *   embedded:  portable single-byte-first scan, the default.
  *   swar32:    experimental 32-bit SWAR (candidate for single-issue cores;
  *              measured 0.93x on Cortex-M7 - opt-in only).
@@ -115,16 +115,10 @@ extern "C" {
     (TAMP_ARMV7EM && !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_SWAR32_MATCH && !TAMP_USE_DESKTOP_MATCH)
 #endif
 
-/* TAMP_USE_EMBEDDED_MATCH=1 forces the portable scan even when another
- * selection is also defined (e.g. a build system's default plus a test
- * override on the command line). */
-#if TAMP_USE_EMBEDDED_MATCH
-#undef TAMP_USE_SWAR32_MATCH
-#undef TAMP_USE_DESKTOP_MATCH
-#undef TAMP_USE_PREFILTER_MATCH
-#define TAMP_USE_SWAR32_MATCH 0
-#define TAMP_USE_DESKTOP_MATCH 0
-#define TAMP_USE_PREFILTER_MATCH 0
+/* The selections are mutually exclusive; reject conflicting configurations
+ * loudly rather than silently picking one. */
+#if (TAMP_USE_EMBEDDED_MATCH + TAMP_USE_SWAR32_MATCH + TAMP_USE_DESKTOP_MATCH + TAMP_USE_PREFILTER_MATCH) > 1
+#error "At most one TAMP_USE_*_MATCH find_best_match selection may be enabled"
 #endif
 
 /* tamp_window_copy variant with a no-wrap fast path (see common.c).

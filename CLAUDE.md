@@ -247,8 +247,8 @@ make website-clean         # Clean website build artifacts
   - `TAMP_ARMV7EM=1` - profile for Cortex-M4/M7: enables the prefilter match
     finder plus both fast paths below (measured on M7: 1.36x compression, +14%
     decompression; M4 unmeasured)
-  - `TAMP_USE_EMBEDDED_MATCH=1` - force the portable `find_best_match`
-    (overrides any other selection)
+  - `TAMP_USE_EMBEDDED_MATCH=1` - the portable `find_best_match` (selections are
+    mutually exclusive; conflicts are a compile error)
   - `TAMP_USE_PREFILTER_MATCH` - first-byte prefilter (slower on 64-bit hosts)
   - `TAMP_USE_DESKTOP_MATCH` - 64-bit SWAR for 64-bit hosts
   - `TAMP_USE_SWAR32_MATCH` - experimental 32-bit SWAR (candidate for
