@@ -41,6 +41,11 @@ def reset_device(port):
     time.sleep(0.1)
     port.setRTS(False)
     time.sleep(0.2)
+    # Re-assert DTR: pico-sdk USB-CDC stdio only transmits while the host
+    # asserts DTR (tud_cdc_connected()), and it stays low after the ESP32
+    # dance above. Harmless for ESP32 targets while they are running.
+    port.setDTR(True)
+    time.sleep(0.1)
     # Drop any output buffered from before the reset so a stale sentinel from a
     # previous run can't be mistaken for this run's result.
     port.reset_input_buffer()
