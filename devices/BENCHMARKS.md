@@ -6,10 +6,11 @@ window (`window=10`, `literal=8`). Throughput is input bytes per second for
 compression and output bytes per second for decompression. Reproduce with the
 `*-device-benchmark` Makefile targets (see the per-device directories here).
 
-In the "Tamp options" column, `—` is the platform's default build (Tamp selects
-the best measured configuration per architecture; see the platform tuning
-section in `tamp/_c_src/tamp/common.h`); other rows state the explicit options
-that deviate from it.
+In the "Tamp options" column, `—` is the device harness's default build. The
+core C sources always default to portable code; each harness/build system opts
+into its platform's measured configuration (see the platform tuning section in
+`tamp/_c_src/tamp/common.h`). Other rows state the explicit options that deviate
+from that default.
 
 | Device                                                                                | Core           | Clock   | Runtime / build                   | Tamp options               | Compression (s) | Compression (bytes/s) | Decompression (s) | Decompression (bytes/s) |
 | ------------------------------------------------------------------------------------- | -------------- | ------- | --------------------------------- | -------------------------- | --------------- | --------------------- | ----------------- | ----------------------- |
