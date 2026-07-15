@@ -25,12 +25,16 @@ CMSIS_HEADERS := \
 CC := arm-none-eabi-gcc
 TAMP_SRC := ../../tamp/_c_src
 
-# EXTRA_CFLAGS: pass experiment defines from the command line, e.g.
-#   make stm32h7b0-device-benchmark EXTRA_CFLAGS=-DTAMP_USE_DESKTOP_MATCH=1
+# TAMP_ARMV7EM=1: opt into the measured Cortex-M7 configuration (the core C
+# sources default to portable code; see the platform tuning section in
+# common.h). EXTRA_CFLAGS passes experiment defines from the command line and
+# wins over earlier defines, e.g.
+#   make stm32h7b0-device-benchmark EXTRA_CFLAGS=-DTAMP_ARMV7EM=0
 CFLAGS := -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 \
 	-O3 -ggdb -ffunction-sections -fdata-sections \
 	-Wall -Wextra \
 	-DSTM32H7B0xx \
+	-DTAMP_ARMV7EM=1 \
 	-I$(CMSIS) -I. -I../common -I$(TAMP_SRC) \
 	$(EXTRA_CFLAGS)
 

@@ -72,20 +72,35 @@ extern "C" {
 /*******************************************************************************
  * Platform performance tuning
  *
- * All architecture detection for speed/size variant selection lives here; the
- * .c files reference only these semantic flags, each overridable with
- * -D<flag>=0/1. Measured numbers below are from devices/BENCHMARKS.md
- * workloads; when enabling a flag on an unlisted core, benchmark it.
+ * The core sources never select architecture-specific code on their own:
+ * every flag below defaults to the portable implementation. Build systems opt
+ * in to the measured configuration for their platform, mirroring TAMP_ESP32:
+ *
+ *   pip/Cython (setup.py):      TAMP_USE_DESKTOP_MATCH=1 on 64-bit hosts
+ *   espidf component (Kconfig): TAMP_ESP32 (default y)
+ *   ARMv7E-M (Cortex-M4/M7):    TAMP_ARMV7EM=1 (profile flag, see below)
+ *
+ * Individual flags can still be set/overridden with -D<flag>=0/1. Measured
+ * numbers below are from devices/BENCHMARKS.md workloads; when enabling a
+ * flag on an unmeasured core, benchmark it.
  ******************************************************************************/
+
+/* Profile for ARMv7E-M cores (Cortex-M4/M7): little-endian with cheap
+ * unaligned loads. Enables the prefilter match finder and both fast paths
+ * (measured on Cortex-M7: 1.36x compression, +14% decompression). */
+#ifndef TAMP_ARMV7EM
+#define TAMP_ARMV7EM 0
+#endif
 
 /* find_best_match implementation (see compressor.c). At most one of these
  * should be 1; TAMP_USE_EMBEDDED_MATCH=1 forces the portable scan.
  *   embedded:  portable single-byte-first scan, the default.
  *   swar32:    experimental 32-bit SWAR (candidate for single-issue cores;
  *              measured 0.93x on Cortex-M7 - opt-in only).
- *   desktop:   64-bit SWAR, default on 64-bit hosts.
- *   prefilter: first-byte prefilter, default on ARMv7E-M (1.36x compression
- *              on Cortex-M7; ~0.5x on out-of-order 64-bit hosts). */
+ *   desktop:   64-bit SWAR for 64-bit hosts (little-endian, cheap unaligned
+ *              loads; measured ~2x the prefilter there).
+ *   prefilter: first-byte prefilter (1.36x compression on Cortex-M7;
+ *              ~0.5x on out-of-order 64-bit hosts). */
 #ifndef TAMP_USE_EMBEDDED_MATCH
 #define TAMP_USE_EMBEDDED_MATCH 0
 #endif
@@ -93,42 +108,37 @@ extern "C" {
 #define TAMP_USE_SWAR32_MATCH 0
 #endif
 #ifndef TAMP_USE_DESKTOP_MATCH
-#if (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)) && \
-    !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_SWAR32_MATCH
-#define TAMP_USE_DESKTOP_MATCH 1
-#else
 #define TAMP_USE_DESKTOP_MATCH 0
 #endif
-#endif
 #ifndef TAMP_USE_PREFILTER_MATCH
-#if defined(__ARM_ARCH_7EM__) && defined(__GNUC__) && defined(__ARM_FEATURE_UNALIGNED) && \
-    !defined(__ARM_BIG_ENDIAN) && !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_SWAR32_MATCH && !TAMP_USE_DESKTOP_MATCH
-#define TAMP_USE_PREFILTER_MATCH 1
-#else
-#define TAMP_USE_PREFILTER_MATCH 0
+#define TAMP_USE_PREFILTER_MATCH \
+    (TAMP_ARMV7EM && !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_SWAR32_MATCH && !TAMP_USE_DESKTOP_MATCH)
 #endif
+
+/* TAMP_USE_EMBEDDED_MATCH=1 forces the portable scan even when another
+ * selection is also defined (e.g. a build system's default plus a test
+ * override on the command line). */
+#if TAMP_USE_EMBEDDED_MATCH
+#undef TAMP_USE_SWAR32_MATCH
+#undef TAMP_USE_DESKTOP_MATCH
+#undef TAMP_USE_PREFILTER_MATCH
+#define TAMP_USE_SWAR32_MATCH 0
+#define TAMP_USE_DESKTOP_MATCH 0
+#define TAMP_USE_PREFILTER_MATCH 0
 #endif
 
 /* tamp_window_copy variant with a no-wrap fast path (see common.c).
  * Measured: +14% decompression on Cortex-M7; -3% on Xtensa LX7; ~+160 bytes
  * on Cortex-M0/M0+ where flash is the scarce resource. */
 #ifndef TAMP_FAST_WINDOW_COPY
-#if defined(__ARM_ARCH_7EM__)
-#define TAMP_FAST_WINDOW_COPY 1
-#else
-#define TAMP_FAST_WINDOW_COPY 0
-#endif
+#define TAMP_FAST_WINDOW_COPY TAMP_ARMV7EM
 #endif
 
 /* refill_bit_buffer on locals with a single writeback (see decompressor.c).
  * Measured: +5% decompression on Cortex-M7; -3% on Xtensa LX7; +324 bytes on
  * Cortex-M0/M0+ (register spills on the 8-register file). */
 #ifndef TAMP_FAST_BIT_REFILL
-#if defined(__ARM_ARCH_7EM__)
-#define TAMP_FAST_BIT_REFILL 1
-#else
-#define TAMP_FAST_BIT_REFILL 0
-#endif
+#define TAMP_FAST_BIT_REFILL TAMP_ARMV7EM
 #endif
 
 /* TAMP_USE_MEMSET: Use libc memset (default: 1).

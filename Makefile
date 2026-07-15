@@ -403,10 +403,14 @@ device-vectors:
 CTEST_CC = gcc
 CTEST_SANITIZER_FLAGS = -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g -O0
 CTEST_INCLUDES = -Ictests/Unity/src -Itamp/_c_src -Ictests -Ictests/littlefs -Ictests/fatfs/source
+# TAMP_USE_DESKTOP_MATCH: cover the same match finder the pip/Cython build
+# opts into on 64-bit hosts (the core defaults to the portable one);
+# c-test-embedded covers the portable path.
 CTEST_DEFINES = -DTAMP_STREAM_STDIO=1 -DTAMP_STREAM_MEMORY=1 \
 	-DTAMP_STREAM_LITTLEFS=1 -DTEST_LITTLEFS=1 \
 	-DTAMP_STREAM_FATFS=1 -DTEST_FATFS=1 \
 	-DTAMP_LAZY_MATCHING=1 \
+	-DTAMP_USE_DESKTOP_MATCH=1 \
 	-DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR
 CTEST_CFLAGS = $(CTEST_INCLUDES) $(CTEST_SANITIZER_FLAGS) $(CTEST_DEFINES)
 # Strict warnings applied only to first-party tamp sources, not third-party (Unity/LittleFS/FatFs)

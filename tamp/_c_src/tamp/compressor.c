@@ -79,22 +79,23 @@ inline bool tamp_compressor_full(const TampCompressor* compressor) {
 }
 
 /*
- * Platform-specific find_best_match implementations:
+ * find_best_match implementations, selected by the flags from common.h's
+ * platform tuning section (the default is the portable embedded scan; build
+ * systems opt into their platform's measured configuration):
  *
  * 1. TAMP_ESP32: External implementation in espidf/tamp/compressor_esp32.cpp
  *
- * 2. Desktop 64-bit (x86_64, aarch64, Windows 64-bit):
- *    Included from compressor_find_match_desktop.c - uses bit manipulation
- *    and 64-bit loads for parallel match detection
+ * 2. TAMP_USE_PREFILTER_MATCH (via TAMP_ARMV7EM, Cortex-M4/M7): first-byte
+ *    prefilter, defined below.
  *
- * 3. ARMv7E-M (Cortex-M4/M7) default: first-byte prefilter, defined below.
+ * 3. TAMP_USE_DESKTOP_MATCH (64-bit hosts): included from
+ *    compressor_find_match_desktop.c - uses bit manipulation and 64-bit
+ *    loads for parallel match detection.
  *
- * 4. Embedded/Default (Cortex-M0/M0+, other 32-bit): defined below -
- *    single-byte-first comparison, safe for all architectures.
+ * 4. Default: defined below - portable single-byte-first comparison, safe
+ *    for all architectures.
  *
- * The TAMP_USE_*_MATCH selection flags (and their per-architecture defaults)
- * are defined in common.h's platform tuning section. Implementations
- * reachable on embedded targets are defined inline so that
+ * Implementations reachable on embedded targets are defined inline so that
  * common.c/compressor.c/decompressor.c compile standalone with only the
  * headers; only desktop/experimental variants live in #include'd files.
  */
