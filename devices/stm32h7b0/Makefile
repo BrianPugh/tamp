@@ -45,6 +45,9 @@ SRCS := startup.c system.c syscalls.c main.c \
 	$(TAMP_SRC)/tamp/compressor.c \
 	$(TAMP_SRC)/tamp/decompressor.c
 
+# #include'd by compressor.c, not compiled separately - deps only.
+MATCH_VARIANTS := $(wildcard $(TAMP_SRC)/tamp/compressor_find_match_*.c)
+
 ELF := $(BUILD)/tamp_benchmark.elf
 
 all: $(ELF)
@@ -64,7 +67,7 @@ $(FLAGSTAMP): force
 	@mkdir -p $(BUILD)
 	@echo '$(CFLAGS)' | cmp -s - $(FLAGSTAMP) || echo '$(CFLAGS)' > $(FLAGSTAMP)
 
-$(ELF): $(SRCS) linker.ld $(CMSIS_HEADERS) Makefile $(FLAGSTAMP)
+$(ELF): $(SRCS) $(MATCH_VARIANTS) linker.ld $(CMSIS_HEADERS) Makefile $(FLAGSTAMP)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $@
 	arm-none-eabi-size $@
 

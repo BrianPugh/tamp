@@ -1,16 +1,23 @@
 /**
- * @file compressor_find_match_desktop.c
- * @brief Desktop/64-bit optimized find_best_match implementation.
+ * @file compressor_find_match_prefilter.c
+ * @brief First-byte-prefilter find_best_match (default on ARMv7E-M; opt-in
+ * elsewhere via TAMP_USE_PREFILTER_MATCH=1).
  *
  * NOTE: This file is #include'd by compressor.c, not compiled separately.
  *
- * This file is included by compressor.c when compiling for desktop 64-bit platforms
- * (x86_64, aarch64, Windows 64-bit). It uses bit manipulation and 64-bit loads
- * for parallel match detection.
+ * Variant of compressor_find_match_desktop.c that scans for the first input
+ * byte only: one 64-bit load and one zero-byte detect per 8 window positions,
+ * verifying the 2-byte seed with a 16-bit load per candidate hit. Compared to
+ * the desktop implementation this halves the per-word SWAR work (and the
+ * live broadcast constants, easing register pressure on 32-bit cores); the
+ * trade-off is more per-hit work when the first byte is frequent.
+ * Produces byte-identical output to the other implementations (ascending
+ * scan, strictly-longer replacement).
  *
  * Requirements:
  *   - Little-endian byte order
- *   - 64-bit compiler intrinsics (__builtin_ctzll or _BitScanForward64)
+ *   - Efficient unaligned loads (memcpy must lower to plain loads)
+ *   - __builtin_ctzll or _BitScanForward64
  */
 
 #include <string.h>  // for memcpy (portable unaligned loads)
@@ -78,8 +85,8 @@ static inline int tamp_ctzll(uint64_t value) {
 /**
  * @brief Find the best match for the current input buffer.
  *
- * Desktop/64-bit implementation: uses bit manipulation to detect multiple 2-byte matches
- * simultaneously within 64-bit words.
+ * First-byte prefilter: SWAR-detect candidate positions holding the first
+ * input byte, then verify the 2-byte seed with a 16-bit load per hit.
  *
  * @param[in,out] compressor TampCompressor object to perform search on.
  * @param[out] match_index  If match_size is 0, this value is undefined.
@@ -96,9 +103,7 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
     // Pre-load input bytes into linear array to avoid repeated modular arithmetic.
     // Zero-initialized: entries at max_pattern_size and beyond are read when
-    // assembling input_word_ext below. Their values never affect the result (the
-    // max_pattern_size >= 10 guard in EXTEND_MATCH sees to that), but reading
-    // indeterminate bytes is UB (MSan finding, -Werror=maybe-uninitialized).
+    // assembling input_word_ext below; their values never affect the result.
     uint8_t input_bytes[16] = {0};
     for (uint8_t i = 0; i < max_pattern_size && i < 16; i++) {
         input_bytes[i] = read_input(i);
@@ -107,9 +112,8 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
     // Little-endian format to match direct memory loads
     const uint16_t first_second = input_bytes[0] | (input_bytes[1] << 8);
 
-    // Broadcast patterns for detecting first_byte and second_byte in parallel
+    // Broadcast pattern for detecting first_byte in parallel
     const uint64_t first_pattern = 0x0101010101010101ULL * input_bytes[0];
-    const uint64_t second_pattern = 0x0101010101010101ULL * input_bytes[1];
 
     // Pre-compute 64-bit input word for extension (bytes 2-9)
     const uint64_t input_word_ext = (uint64_t)input_bytes[2] | ((uint64_t)input_bytes[3] << 8) |
@@ -119,45 +123,26 @@ static inline void find_best_match(TampCompressor *compressor, uint16_t *match_i
 
     uint16_t window_index = 0;
 
-    // Main loop: check 14 positions per iteration using two 64-bit loads
-    // Uses bit manipulation to find all 2-byte matches simultaneously
-    for (; window_index + 15 < window_size_minus_1; window_index += 14) {
-        uint64_t word1, word2;
-        memcpy(&word1, window + window_index, sizeof(uint64_t));
-        memcpy(&word2, window + window_index + 7, sizeof(uint64_t));
+    // Main loop: scan 8 positions per iteration with one 64-bit load. A hit
+    // at byte 7 verifies its pair byte via the unaligned 16-bit candidate
+    // load, so no overlapping second word is needed.
+    for (; window_index + 8 <= window_size_minus_1; window_index += 8) {
+        uint64_t word;
+        memcpy(&word, window + window_index, sizeof(uint64_t));
 
-        // Find 2-byte matches in word1 (positions 0-6)
-        // XOR with broadcast patterns to find matching bytes, then detect zeros
-        uint64_t first_zeros1 = HAS_ZERO_BYTE(word1 ^ first_pattern);
-        uint64_t second_zeros1 = HAS_ZERO_BYTE(word1 ^ second_pattern);
-        // A 2-byte match at position i requires first_byte at i AND second_byte at i+1
-        uint64_t matches1 = first_zeros1 & (second_zeros1 >> 8);
+        // Positions whose byte may equal the first input byte.
+        // Note: HAS_ZERO_BYTE can have false positives; the 16-bit candidate
+        // check below re-verifies every hit.
+        uint64_t hits = HAS_ZERO_BYTE(word ^ first_pattern);
 
-        // Process all matches found in word1
-        // Note: HAS_ZERO_BYTE can have false positives, so verify before extending
-        while (matches1) {
-            int byte_pos = tamp_ctzll(matches1) >> 3;
+        while (hits) {
+            int byte_pos = tamp_ctzll(hits) >> 3;
             uint16_t candidate;
             memcpy(&candidate, window + window_index + byte_pos, sizeof(uint16_t));
             if (TAMP_UNLIKELY(candidate == first_second)) {
                 EXTEND_MATCH(window_index + byte_pos);
             }
-            matches1 &= matches1 - 1;  // Clear lowest set bit
-        }
-
-        // Find 2-byte matches in word2 (positions 7-13)
-        uint64_t first_zeros2 = HAS_ZERO_BYTE(word2 ^ first_pattern);
-        uint64_t second_zeros2 = HAS_ZERO_BYTE(word2 ^ second_pattern);
-        uint64_t matches2 = first_zeros2 & (second_zeros2 >> 8);
-
-        while (matches2) {
-            int byte_pos = tamp_ctzll(matches2) >> 3;
-            uint16_t candidate;
-            memcpy(&candidate, window + window_index + 7 + byte_pos, sizeof(uint16_t));
-            if (TAMP_UNLIKELY(candidate == first_second)) {
-                EXTEND_MATCH(window_index + 7 + byte_pos);
-            }
-            matches2 &= matches2 - 1;
+            hits &= hits - 1;  // Clear lowest set bit
         }
     }
 

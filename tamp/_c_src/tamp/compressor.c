@@ -99,6 +99,15 @@ inline bool tamp_compressor_full(const TampCompressor* compressor) {
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor* compressor, uint16_t* match_index, uint8_t* match_size);
 
+/* ARMv7E-M (Cortex-M4/M7) default: in-order cores with cheap unaligned loads
+ * favor the first-byte prefilter (measured 1.36x compression speed on
+ * Cortex-M7 vs the embedded implementation; see devices/BENCHMARKS.md).
+ * Escape hatch: TAMP_USE_EMBEDDED_MATCH=1 restores the embedded scan. */
+#elif (TAMP_USE_PREFILTER_MATCH || (defined(__ARM_ARCH_7EM__) && defined(__ARM_FEATURE_UNALIGNED) && \
+                                    defined(__GNUC__) && !defined(__ARM_BIG_ENDIAN))) &&             \
+    !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_DESKTOP_MATCH
+#include "compressor_find_match_prefilter.c"
+
 #elif TAMP_USE_SWAR32_MATCH && !TAMP_USE_EMBEDDED_MATCH
 #include "compressor_find_match_swar32.c"
 
