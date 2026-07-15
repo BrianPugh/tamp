@@ -31,9 +31,14 @@ different platforms:
 - `compressor.h/c` - Compression implementation (sink/poll low-level API and
   higher-level compress/flush API)
 - `decompressor.h/c` - Decompression implementation
-- `compressor_find_match_desktop.c` - Desktop-optimized match finding (included
-  by `compressor.c` on 64-bit targets: x86_64, aarch64, unless
-  `TAMP_USE_EMBEDDED_MATCH=1`)
+- Architecture-selected variants live in their own included-not-compiled files,
+  dispatched by `#if` blocks in their parent source:
+  `compressor_find_match_{embedded,desktop,prefilter,swar32}.c` (embedded is the
+  portable default; desktop on `x86_64`/`aarch64`; prefilter on ARMv7E-M),
+  `common_window_copy_{fast,compact}.c` and
+  `decompressor_refill_{fast,compact}.c` (compact on Cortex-M0/M0+, fast
+  elsewhere). New variant files must be added to `TAMP_C_FILES` in
+  `espidf/tamp/Makefile` if the espidf component can select them.
 
 ## Development Commands
 
