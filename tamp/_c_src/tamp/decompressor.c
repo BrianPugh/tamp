@@ -46,6 +46,87 @@
 
 #endif /* TAMP_ESP32 */
 
+/* Update the circular window from a linear, non-overlapping snapshot of the
+ * match bytes (the copy just written to output). Only DESTINATION wrap is
+ * possible (match_size <= 134 << window_size, so at most one wrap); a snapshot
+ * source cannot overlap the destination, so no reverse-copy path is needed.
+ * window_pos_var is a plain uint16_t variable (not a pointer) to avoid spilling
+ * it to the stack across a call. Guarded so a platform component may override. */
+#ifndef TAMP_WINDOW_WRITE_FROM_OUTPUT
+
+#if TAMP_FAST_WINDOW_COPY
+/* Word-at-a-time linear segment copy. The while(>=4)+byte-tail structure never
+ * writes past dst+n, so the second segment's start is never clobbered. */
+#define TAMP_WINDOW_SEG_COPY_(dst, src, n)            \
+    do {                                              \
+        unsigned char* _tamp_sd = (dst);              \
+        const unsigned char* _tamp_ss = (src);        \
+        uint8_t _tamp_sn = (n);                       \
+        while (_tamp_sn >= 4) {                       \
+            uint32_t _tamp_sw;                        \
+            __builtin_memcpy(&_tamp_sw, _tamp_ss, 4); \
+            __builtin_memcpy(_tamp_sd, &_tamp_sw, 4); \
+            _tamp_sd += 4;                            \
+            _tamp_ss += 4;                            \
+            _tamp_sn -= 4;                            \
+        }                                             \
+        while (_tamp_sn--) *_tamp_sd++ = *_tamp_ss++; \
+    } while (0)
+#else
+#define TAMP_WINDOW_SEG_COPY_(dst, src, n)                                                                   \
+    do {                                                                                                     \
+        unsigned char* _tamp_sd = (dst);                                                                     \
+        const unsigned char* _tamp_ss = (src);                                                               \
+        uint8_t _tamp_sn = (n);                                                                              \
+        for (uint8_t _tamp_si = 0; _tamp_si < _tamp_sn; _tamp_si++) _tamp_sd[_tamp_si] = _tamp_ss[_tamp_si]; \
+    } while (0)
+#endif /* TAMP_FAST_WINDOW_COPY */
+
+#define TAMP_WINDOW_WRITE_FROM_OUTPUT(window, window_pos_var, src, match_size, window_size, window_mask) \
+    do {                                                                                                 \
+        const unsigned char* _tamp_wsrc = (src);                                                         \
+        uint16_t _tamp_wpos = (window_pos_var);                                                          \
+        uint16_t _tamp_wrem = (uint16_t)((window_size)-_tamp_wpos);                                      \
+        uint8_t _tamp_wms = (match_size);                                                                \
+        if (TAMP_LIKELY(_tamp_wms <= _tamp_wrem)) {                                                      \
+            TAMP_WINDOW_SEG_COPY_((window) + _tamp_wpos, _tamp_wsrc, _tamp_wms);                         \
+            (window_pos_var) = (uint16_t)((_tamp_wpos + _tamp_wms) & (window_mask));                     \
+        } else {                                                                                         \
+            uint8_t _tamp_wr = (uint8_t)_tamp_wrem;                                                      \
+            TAMP_WINDOW_SEG_COPY_((window) + _tamp_wpos, _tamp_wsrc, _tamp_wr);                          \
+            TAMP_WINDOW_SEG_COPY_((window), _tamp_wsrc + _tamp_wr, (uint8_t)(_tamp_wms - _tamp_wr));     \
+            (window_pos_var) = (uint16_t)(_tamp_wms - _tamp_wr);                                         \
+        }                                                                                                \
+    } while (0)
+
+#endif /* TAMP_WINDOW_WRITE_FROM_OUTPUT */
+
+#if !TAMP_WINDOW_FROM_OUTPUT && !TAMP_ESP32
+/* Out-of-line linear window update from the just-written output snapshot, for
+ * portable builds that keep tamp_window_copy on the resume path. The snapshot
+ * source never overlaps the window destination, so no reverse-copy overlap
+ * check and no per-byte source masking are needed. NOINLINE is mandatory: at
+ * -O3 GCC inlines this regardless of cost heuristics, and the inlined update
+ * regresses Cortex-M0+ (register pressure) - the whole point is to keep it a
+ * call. n and mask are packed into one word to stay within 4 register args
+ * (Cortex-M0+). Returns the new window_pos. */
+static uint16_t TAMP_NOINLINE tamp_window_write_from_output_fn(unsigned char* window, const unsigned char* src,
+                                                               uint16_t pos, uint32_t n_and_mask) {
+    uint16_t mask = (uint16_t)n_and_mask;
+    uint8_t n = (uint8_t)(n_and_mask >> 16);
+    uint16_t rem = (uint16_t)((mask + 1) - pos);
+    if (TAMP_LIKELY(n <= rem)) {
+        for (uint8_t i = 0; i < n; i++) window[pos + i] = src[i];
+        return (uint16_t)((pos + n) & mask);
+    }
+    uint8_t r = (uint8_t)rem;
+    for (uint8_t i = 0; i < r; i++) window[pos + i] = src[i];
+    uint8_t tail = (uint8_t)(n - r);
+    for (uint8_t i = 0; i < tail; i++) window[i] = src[r + i];
+    return tail;
+}
+#endif
+
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -282,7 +363,26 @@ static tamp_res decode_extended_match(TampDecompressor* d, unsigned char** outpu
         uint16_t wp = d->window_pos;
         uint16_t remaining = window_size - wp;
         uint8_t window_write = (match_size < remaining) ? match_size : remaining;
+#if TAMP_WINDOW_FROM_OUTPUT
+        if (skip == 0) {
+            /* Single-call complete: output's last match_size bytes are the full
+             * match; window_write <= remaining so this never wraps. */
+            TAMP_WINDOW_WRITE_FROM_OUTPUT(d->window, wp, *output - match_size, window_write, window_size,
+                                          window_size - 1);
+        } else {
+            /* Resume completion: the match start is not in this output buffer. */
+            TAMP_WINDOW_COPY(d->window, &wp, window_offset, window_write, window_size - 1);
+        }
+#elif !TAMP_ESP32
+        if (skip == 0) {
+            wp = tamp_window_write_from_output_fn(d->window, *output - match_size, wp,
+                                                  ((uint32_t)window_write << 16) | (window_size - 1));
+        } else {
+            TAMP_WINDOW_COPY(d->window, &wp, window_offset, window_write, window_size - 1);
+        }
+#else
         TAMP_WINDOW_COPY(d->window, &wp, window_offset, window_write, window_size - 1);
+#endif
         d->window_pos = wp;
     }
 
@@ -376,33 +476,79 @@ tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* 
  * speed regression. Keep this inlined for performance.
  */
 #if TAMP_FAST_BIT_REFILL
-static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end,
-                                     size_t* input_consumed_size) {
+static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end) {
     const unsigned char* in = *input;
     uint32_t bit_buffer = d->bit_buffer;
     uint8_t bit_buffer_pos = d->bit_buffer_pos;
-    size_t consumed = 0;
     while (in != input_end && bit_buffer_pos <= 24) {
         bit_buffer_pos += 8;
         bit_buffer |= (uint32_t)*in++ << (32 - bit_buffer_pos);
-        consumed++;
     }
     d->bit_buffer = bit_buffer;
     d->bit_buffer_pos = bit_buffer_pos;
     *input = in;
-    *input_consumed_size += consumed;
 }
 #else
-static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end,
-                                     size_t* input_consumed_size) {
+static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** input, const unsigned char* input_end) {
     while (*input != input_end && d->bit_buffer_pos <= 24) {
         d->bit_buffer_pos += 8;
         d->bit_buffer |= (uint32_t) * (*input) << (32 - d->bit_buffer_pos);
         (*input)++;
-        (*input_consumed_size)++;
     }
 }
 #endif /* TAMP_FAST_BIT_REFILL */
+
+#if TAMP_FAST_DECODE_LOOP
+/**
+ * @brief Refill bit buffer without the per-byte input-end guard.
+ *
+ * The fast decode loop only calls this when at least 4 input bytes are
+ * available (its entry precondition), and the refill reads at most 4 bytes
+ * (pos<=24 tops up in 8-bit steps from >=0), so the `in != input_end` guard of
+ * refill_bit_buffer is provably dead here. Removing it is the branch-elimination
+ * the fast loop exists to exploit.
+ */
+static inline void refill_bit_buffer_unchecked(TampDecompressor* d, const unsigned char** input) {
+    const unsigned char* in = *input;
+    uint32_t bit_buffer = d->bit_buffer;
+    uint8_t bit_buffer_pos = d->bit_buffer_pos;
+    while (bit_buffer_pos <= 24) {
+        bit_buffer_pos += 8;
+        bit_buffer |= (uint32_t)*in++ << (32 - bit_buffer_pos);
+    }
+    d->bit_buffer = bit_buffer;
+    d->bit_buffer_pos = bit_buffer_pos;
+    *input = in;
+}
+
+/**
+ * @brief Decode a huffman symbol with no trailing bits and no exhaustion check.
+ *
+ * Classic token path only (trailing_bits == 0). The fast loop guarantees
+ * bit_buffer_pos >= 25 on entry and a classic token consumes at most 24 bits,
+ * so decode_huffman's two TAMP_INPUT_EXHAUSTED checks are provably dead. The
+ * symbol-0 branch and 7-bit table lookup are kept EXACTLY as decode_huffman
+ * (the symbol-0 branch beats an unconditional load).
+ */
+static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bit_buffer_pos) {
+    uint8_t huffman_value;
+    (*bit_buffer_pos)--;
+    if (TAMP_LIKELY((*bit_buffer >> 31) == 0)) {
+        /* Symbol 0: code "0" */
+        *bit_buffer <<= 1;
+        huffman_value = 0;
+    } else {
+        /* All other symbols: use 128-entry table indexed by next 7 bits */
+        *bit_buffer <<= 1;
+        uint8_t code = HUFFMAN_TABLE[*bit_buffer >> (32 - 7)];
+        uint8_t bit_len = code >> 4;
+        *bit_buffer <<= bit_len;
+        *bit_buffer_pos -= bit_len;
+        huffman_value = code & 0xF;
+    }
+    return huffman_value;
+}
+#endif /* TAMP_FAST_DECODE_LOOP */
 
 #if TAMP_HAS_GCC_OPTIMIZE
 #pragma GCC push_options
@@ -423,13 +569,16 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
     *input_consumed_size = 0;
     *output_written_size = 0;
 
-/* Every exit derives output progress from the cursor. The hot loop never
- * touches *output_written_size: the per-token RMW through a size_t pointer
- * may alias the decompressor fields (size_t == uint32_t on 32-bit targets),
- * costing a load/store per token plus forced field reloads. */
+/* Every exit derives input/output progress from the cursors. The hot loop
+ * never touches *output_written_size / *input_consumed_size: a per-token RMW
+ * through a size_t pointer may alias the decompressor fields (size_t ==
+ * uint32_t on 32-bit targets), costing a load/store per iteration plus forced
+ * field reloads. *input_consumed_size already holds the header bytes counted
+ * before input_start was snapshotted. */
 #define TAMP_DECOMP_RETURN(code)                                \
     do {                                                        \
         *output_written_size = (size_t)(output - output_start); \
+        *input_consumed_size += (size_t)(input - input_start);  \
         return (code);                                          \
     } while (0)
     const unsigned char* const output_start = output;
@@ -471,6 +620,12 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
         decompressor->skip_bytes = 0;  // Clear stale stashed_header_byte (shares union storage)
     }
 
+    /* Snapshot after header parsing: *input_consumed_size holds the header
+     * bytes, and every exit below adds (input - input_start) via
+     * TAMP_DECOMP_RETURN. Header-error returns above happen before this and
+     * account for their bytes directly. */
+    const unsigned char* const input_start = input;
+
     // Cache bitfield values in local variables for faster access
     const uint8_t conf_window = decompressor->conf_window;
     const uint8_t conf_literal = decompressor->conf_literal;
@@ -485,7 +640,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
         if (TAMP_UNLIKELY(output == output_end)) TAMP_DECOMP_RETURN(TAMP_OUTPUT_FULL);
 
         // Populate the bit buffer
-        refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
+        refill_bit_buffer(decompressor, &input, input_end);
 
 #if TAMP_EXTENDED_DECOMPRESS
         /* Handle extended tokens - either resuming or fresh from match_size detection below. */
@@ -498,7 +653,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             }
             if (res == TAMP_INPUT_EXHAUSTED) {
                 uint8_t old_bit_pos = decompressor->bit_buffer_pos;
-                refill_bit_buffer(decompressor, &input, input_end, input_consumed_size);
+                refill_bit_buffer(decompressor, &input, input_end);
                 /* If we couldn't get more bits and input is exhausted, stop.
                  * Otherwise the loop would run forever with token_state set. */
                 if (decompressor->bit_buffer_pos == old_bit_pos && input == input_end) {
@@ -512,6 +667,98 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
 #endif  // TAMP_EXTENDED_DECOMPRESS
 
         if (TAMP_UNLIKELY(decompressor->bit_buffer_pos == 0)) TAMP_DECOMP_RETURN(TAMP_INPUT_EXHAUSTED);
+
+#if TAMP_FAST_DECODE_LOOP
+        /* Checked-once fast inner loop. Entered only when no callback and no
+         * pending skip/extended/flush state; the per-iteration precondition
+         * (>=4 input bytes so the unguarded refill never reaches input_end,
+         * >=32 output bytes so no classic token can fill the buffer) makes
+         * every mid-token bounds/exhaustion check on the classic path dead:
+         *   - refill reaches bit_buffer_pos >= 25 (a classic token needs <= 24)
+         *   - literal (<= 1+conf_literal <= 9 bits) and match window offset
+         *     (<= conf_window <= 15 bits, after 1+huffman<=9) always present
+         *   - output has room for any single token (match_size <= 17, lit = 1)
+         * last_was_flush invariant: entry requires it 0; only FLUSH sets it and
+         * FLUSH breaks out, so no per-token clear is needed in the body. On a
+         * structural break (FLUSH sets last_was_flush, extended sets
+         * token_state) we continue the outer loop so its refill + extended
+         * dispatch / double-FLUSH handling own those cases; a precondition
+         * failure falls through to the careful body with clean state. */
+        if (callback == NULL && decompressor->skip_bytes == 0 && decompressor->token_state == 0 &&
+            decompressor->last_was_flush == 0) {
+            while ((size_t)(input_end - input) >= 4 && (size_t)(output_end - output) >= 32) {
+                if (TAMP_UNLIKELY(decompressor->bit_buffer >> 31)) {
+                    /* Literal: no exhaustion check, no last_was_flush clear. */
+                    uint32_t bit_buffer = decompressor->bit_buffer << 1;
+                    uint8_t literal = bit_buffer >> (32 - conf_literal);
+                    decompressor->bit_buffer = bit_buffer << conf_literal;
+                    decompressor->bit_buffer_pos -= (1 + conf_literal);
+                    uint16_t wp = decompressor->window_pos;
+                    decompressor->window_pos = (wp + 1) & window_mask;
+                    decompressor->window[wp] = literal;
+                    *output++ = literal;
+                } else {
+                    uint32_t bit_buffer = decompressor->bit_buffer;
+                    uint8_t bit_buffer_pos = decompressor->bit_buffer_pos;
+                    bit_buffer <<= 1;  // shift out the is_literal flag
+                    bit_buffer_pos--;
+                    uint8_t match_size = decode_huffman_unchecked(&bit_buffer, &bit_buffer_pos);
+
+                    if (TAMP_UNLIKELY(match_size == FLUSH)) {
+                        decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);
+                        decompressor->bit_buffer_pos = bit_buffer_pos & ~7;
+                        /* last_was_flush is 0 by fast-loop invariant, so the
+                         * double-FLUSH dictionary reset never fires here; the
+                         * outer/careful path owns a following FLUSH. */
+                        decompressor->last_was_flush = 1;
+                        break;
+                    }
+#if TAMP_EXTENDED_DECOMPRESS
+                    if (TAMP_UNLIKELY(extended_enabled && match_size >= TAMP_RLE_SYMBOL)) {
+                        decompressor->bit_buffer = bit_buffer;
+                        decompressor->bit_buffer_pos = bit_buffer_pos;
+                        decompressor->token_state = match_size - (TAMP_RLE_SYMBOL - 1);
+                        break;
+                    }
+#endif
+                    match_size += min_pattern_size;
+                    uint16_t window_offset = bit_buffer >> (32 - conf_window);
+
+                    const uint32_t window_size = (1u << conf_window);
+                    /* OOB security check (non-negotiable). */
+                    if (TAMP_UNLIKELY((uint32_t)window_offset > window_size - (uint32_t)match_size)) {
+                        TAMP_DECOMP_RETURN(TAMP_OOB);
+                    }
+
+                    decompressor->bit_buffer = bit_buffer << conf_window;
+                    decompressor->bit_buffer_pos = bit_buffer_pos - conf_window;
+
+                    TAMP_COPY_TO_OUTPUT(output, decompressor->window + window_offset, match_size);
+
+                    uint16_t wp = decompressor->window_pos;
+#if TAMP_WINDOW_FROM_OUTPUT
+                    TAMP_WINDOW_WRITE_FROM_OUTPUT(decompressor->window, wp, output - match_size, match_size,
+                                                  window_size, window_mask);
+#elif !TAMP_ESP32
+                    wp = tamp_window_write_from_output_fn(decompressor->window, output - match_size, wp,
+                                                          ((uint32_t)(uint8_t)match_size << 16) | window_mask);
+#else
+                    TAMP_WINDOW_COPY(decompressor->window, &wp, window_offset, match_size, window_mask);
+#endif
+                    decompressor->window_pos = wp;
+                }
+                /* Top up for the next iteration. Unguarded: input was not
+                 * touched during decode and the loop-top precondition kept
+                 * >=4 bytes available, so the refill (<=4 bytes) cannot reach
+                 * input_end. */
+                refill_bit_buffer_unchecked(decompressor, &input);
+            }
+            /* Structural break (FLUSH / extended): let the outer loop refill
+             * and dispatch. Precondition failure: fall through with clean
+             * state to the careful body. */
+            if (decompressor->token_state || decompressor->last_was_flush) continue;
+        }
+#endif /* TAMP_FAST_DECODE_LOOP */
 
         // Hint that patterns are more likely than literals
         if (TAMP_UNLIKELY(decompressor->bit_buffer >> 31)) {
@@ -536,10 +783,8 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             /* copy the bit buffers so that we can abort at any time */
             uint32_t bit_buffer = decompressor->bit_buffer;
             uint16_t window_offset;
-            uint16_t window_offset_skip;
             uint8_t bit_buffer_pos = decompressor->bit_buffer_pos;
             int8_t match_size;
-            int8_t match_size_skip;
 
             // shift out the is_literal flag
             bit_buffer <<= 1;
@@ -598,34 +843,65 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             }
 #endif
 
-            // Apply skip_bytes
-            match_size_skip = match_size - decompressor->skip_bytes;
-            window_offset_skip = window_offset + decompressor->skip_bytes;
-
-            // Check if we are output-buffer-limited, and if so to set skip_bytes.
-            // Next tamp_decompressor_decompress_cb we will re-decode the same
-            // token, and skip the first skip_bytes of it.
-            // Otherwise, update the decompressor buffers
-            size_t remaining = output_end - output;
-            if (TAMP_UNLIKELY((uint8_t)match_size_skip > remaining)) {
-                decompressor->skip_bytes += remaining;
-                match_size_skip = remaining;
-            } else {
-                decompressor->skip_bytes = 0;
-                decompressor->bit_buffer = bit_buffer << conf_window;
-                decompressor->bit_buffer_pos = bit_buffer_pos - conf_window;
+            // Apply skip_bytes. skip is nonzero only when resuming a token that
+            // was cut off by a full output buffer (at most once per call), so the
+            // common path uses match_size/window_offset directly and never
+            // touches decompressor->skip_bytes (it is already 0).
+            uint8_t skip = decompressor->skip_bytes;
+            uint16_t copy_offset = window_offset;
+            uint8_t copy_size = match_size;
+            if (TAMP_UNLIKELY(skip)) {
+                copy_offset = window_offset + skip;
+                copy_size = match_size - skip;
             }
 
-            // Copy pattern to output
-            TAMP_COPY_TO_OUTPUT(output, decompressor->window + window_offset_skip, match_size_skip);
+            // Check if we are output-buffer-limited, and if so set skip_bytes.
+            // Next tamp_decompressor_decompress_cb we will re-decode the same
+            // token, and skip the first skip_bytes of it.
+            // Otherwise, update the decompressor buffers.
+            size_t remaining = output_end - output;
+            if (TAMP_UNLIKELY(copy_size > remaining)) {
+                decompressor->skip_bytes = skip + remaining;
+                copy_size = remaining;
+                TAMP_COPY_TO_OUTPUT(output, decompressor->window + copy_offset, copy_size);
+            } else {
+                if (TAMP_UNLIKELY(skip)) decompressor->skip_bytes = 0;
+                decompressor->bit_buffer = bit_buffer << conf_window;
+                decompressor->bit_buffer_pos = bit_buffer_pos - conf_window;
 
-            if (TAMP_LIKELY(decompressor->skip_bytes == 0)) {
+                TAMP_COPY_TO_OUTPUT(output, decompressor->window + copy_offset, copy_size);
+
                 uint16_t wp = decompressor->window_pos;
+#if TAMP_WINDOW_FROM_OUTPUT
+                if (TAMP_LIKELY(skip == 0)) {
+                    /* output's last match_size bytes are the full match, a linear
+                     * non-overlapping snapshot of window[window_offset..]. */
+                    TAMP_WINDOW_WRITE_FROM_OUTPUT(decompressor->window, wp, output - match_size, match_size,
+                                                  window_size, window_mask);
+                } else {
+                    /* Resume completion: output only holds the match tail; the
+                     * window still holds the source. */
+                    TAMP_WINDOW_COPY(decompressor->window, &wp, window_offset, match_size, window_mask);
+                }
+#elif !TAMP_ESP32
+                if (TAMP_LIKELY(skip == 0)) {
+                    wp = tamp_window_write_from_output_fn(decompressor->window, output - match_size, wp,
+                                                          ((uint32_t)(uint8_t)match_size << 16) | window_mask);
+                } else {
+                    TAMP_WINDOW_COPY(decompressor->window, &wp, window_offset, match_size, window_mask);
+                }
+#else
                 TAMP_WINDOW_COPY(decompressor->window, &wp, window_offset, match_size, window_mask);
+#endif
                 decompressor->window_pos = wp;
             }
         }
-        if (TAMP_UNLIKELY(callback && (res = callback(user_data, *input_consumed_size, input_size))))
+        /* callback is rare; compute the live consumed count only when it fires
+         * (short-circuit keeps the callback==NULL fast path off the pointer).
+         * *input_consumed_size still holds only the header base here, so
+         * TAMP_DECOMP_RETURN's later add is not a double-count. */
+        if (TAMP_UNLIKELY(callback && (res = callback(user_data, *input_consumed_size + (size_t)(input - input_start),
+                                                      input_size))))
             TAMP_DECOMP_RETURN((tamp_res)res);
     }
     TAMP_DECOMP_RETURN(TAMP_INPUT_EXHAUSTED);

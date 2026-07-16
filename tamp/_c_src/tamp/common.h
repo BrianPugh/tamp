@@ -141,6 +141,26 @@ extern "C" {
 #define TAMP_FAST_OUTPUT_COPY TAMP_ARMV7EM
 #endif
 
+/* Source the window update from the just-written output snapshot instead of
+ * calling tamp_window_copy (see decompressor.c). Removes the call plus its
+ * reverse-copy overlap logic from the hot path. Measured: -4% (M7) / -6.7%
+ * (M4) core insns/byte, but +3% on Cortex-M0+ (inlining the update costs more
+ * than the call on the 8-register file), so it defaults off there. */
+#ifndef TAMP_WINDOW_FROM_OUTPUT
+#define TAMP_WINDOW_FROM_OUTPUT TAMP_ARMV7EM
+#endif
+
+/* Checked-once fast inner decode loop (see decompressor.c). Under a
+ * per-iteration precondition (>=4 input bytes, >=32 output bytes, no pending
+ * skip/extended/flush state, no callback) every mid-token bounds/exhaustion
+ * check on the classic token path is provably dead and removed. Duplicates the
+ * classic token path (a few hundred bytes of flash), so it defaults off on the
+ * portable/M0+ build and on where the platform profile already opts into the
+ * other fast paths. */
+#ifndef TAMP_FAST_DECODE_LOOP
+#define TAMP_FAST_DECODE_LOOP TAMP_ARMV7EM
+#endif
+
 /* TAMP_USE_MEMSET: Use libc memset (default: 1).
  * Set to 0 for environments without libc (e.g. MicroPython native modules).
  * When disabled, uses a volatile loop that prevents GCC from emitting a
