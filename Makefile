@@ -34,6 +34,7 @@ help-extra:
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make binary-size        Show binary sizes for README table"
+	@echo "  make benchmark-code-sizes  Reproduce the BENCHMARKS.md 'Code size (B)' column"
 	@echo "  make v1-compressed-datasets        Regenerate ground-truth v1 (--no-extended) .tamp binaries"
 	@echo "  make extended-compressed-datasets  Regenerate ground-truth extended .tamp binaries"
 	@echo "  make c-benchmark-stream Benchmark stream API with various temporary working buffer sizes"
@@ -849,6 +850,10 @@ binary-size:
 	@output=$$($(MAKE) -s mpy-viper-size 2>&1) && echo "$$output" || echo "Tamp (MicroPython Viper)           (requires mpy-cross)"
 	@output=$$($(MAKE) -s mpy-native-size 2>&1) && echo "$$output" || echo "Tamp (MicroPython Native)          (requires MPY_DIR)"
 	@output=$$($(MAKE) -s c-size 2>&1) && echo "$$output" || echo "Tamp (C)                           (requires arm-none-eabi-gcc)"
+
+.PHONY: benchmark-code-sizes
+benchmark-code-sizes:
+	@tools/benchmark-code-size.sh
 
 
 ##########
