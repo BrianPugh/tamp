@@ -33,7 +33,17 @@ python3 tools/qemu-profiler/profile.py --compare build/base.json build/exp.json
 
 # Per-instruction annotated disassembly of the most recent run:
 python3 tools/qemu-profiler/profile.py --cores m7 --annotate tamp_decompressor_decompress_cb
+
+# Replay a host fuzz corpus through the real ARM binaries on the emulated cores:
+python3 tools/qemu-profiler/profile.py --replay fuzz/corpus_decompressor
 ```
+
+`--replay` runs each corpus entry through `firmware/replay_main.c` (same
+config/chunk-byte scheme as `fuzz/fuzz_decompressor.c`) on every selected core.
+Host ASAN fuzzing proves the C paths; the replay catches ISA/ABI-specific
+defects it cannot — target codegen at `-O3`, unsigned plain `char`, 32-bit
+`size_t`. There is no sanitizer on bare metal, so the window/output buffers are
+canary-fenced (checked after every entry) and faults trip the vector handlers.
 
 Cores map to QEMU machines: `m0plus`/`m3` → mps2-an385 (armv6m code runs fine on
 the emulated M3), `m4` → mps2-an386, `m7` → mps2-an500. The m4/m7 builds use

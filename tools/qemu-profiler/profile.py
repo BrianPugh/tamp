@@ -154,14 +154,14 @@ def gen_extended_blob():
     return out_h.parent
 
 
-def build_firmware(core, variant, extra_cflags):
+def build_firmware(core, variant, extra_cflags, main_src="main.c", elf_name="bench.elf"):
     cfg = CORES[core]
     outdir = BUILD / f"{core}-{variant}"
     outdir.mkdir(parents=True, exist_ok=True)
-    elf = outdir / "bench.elf"
+    elf = outdir / elf_name
     fw = HERE / "firmware"
     srcs = [
-        fw / "main.c",
+        fw / main_src,
         fw / "startup.c",
         fw / "semihost.c",
         C_SRC / "tamp" / "common.c",
@@ -299,6 +299,54 @@ def profile_one(core, variant, plugin, extra_cflags, top, quiet=False):
     return result
 
 
+def pack_corpus(corpus_dir):
+    """Pack a fuzz corpus directory into the length-prefixed replay blob."""
+    blob = REPO / "build" / "qemu-corpus.bin"
+    files = sorted(p for p in Path(corpus_dir).iterdir() if p.is_file())
+    with blob.open("wb") as f:
+        f.write(len(files).to_bytes(4, "little"))
+        for p in files:
+            data = p.read_bytes()
+            f.write(len(data).to_bytes(4, "little"))
+            f.write(data)
+    return len(files)
+
+
+def replay(corpus_dir, cores, extra_cflags):
+    """Replay an adversarial corpus through the real ARM binaries under QEMU.
+
+    Catches ISA/ABI-specific defects host ASAN fuzzing cannot (target codegen,
+    unsigned plain char, 32-bit size_t); the firmware canary-fences its
+    buffers and faults report via the vector handlers.
+    """
+    n = pack_corpus(corpus_dir)
+    print(f"packed {n} corpus entries from {corpus_dir}")
+    ok = True
+    for core in cores:
+        elf = build_firmware(core, "classic", extra_cflags, main_src="replay_main.c", elf_name="replay.elf")
+        cfg = CORES[core]
+        cmd = [
+            QEMU,
+            "-M",
+            cfg["machine"],
+            "-nographic",
+            "-monitor",
+            "none",
+            "-semihosting-config",
+            "enable=on,target=native",
+            "-kernel",
+            str(elf),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, cwd=REPO)
+        out = proc.stdout + proc.stderr
+        line = next((ln for ln in out.splitlines() if "QEMU-REPLAY:" in ln), "no QEMU-REPLAY line")
+        print(f"{core} ({cfg['machine']}, {cfg['note']}): {line.split('QEMU-REPLAY: ')[-1]}")
+        if "QEMU-REPLAY: PASS" not in out:
+            print(out[-1500:])
+            ok = False
+    return ok
+
+
 def annotate(core, variant, symbol, threshold=0.0):
     """Print disassembly of `symbol` with per-instruction executed counts."""
     outdir = BUILD / f"{core}-{variant}"
@@ -373,6 +421,11 @@ def main():
         metavar="SYMBOL",
         help="print count-annotated disassembly of SYMBOL from the last run (uses --cores/--variants first entry)",
     )
+    ap.add_argument(
+        "--replay",
+        metavar="CORPUS_DIR",
+        help="replay a fuzz corpus through the real ARM binaries on the emulated cores",
+    )
     args = ap.parse_args()
 
     if args.compare:
@@ -380,6 +433,10 @@ def main():
         return
     if args.annotate:
         annotate(args.cores.split(",")[0], args.variants.split(",")[0], args.annotate)
+        return
+    if args.replay:
+        if not replay(args.replay, args.cores.split(","), args.cflags.split()):
+            sys.exit(1)
         return
 
     if not shutil.which(QEMU):
