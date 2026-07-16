@@ -24,7 +24,7 @@ component's platform sources.
 | ESP32-C3                                                                              | RISC-V RV32IMC | 160 MHz | ESP-IDF v6.0.2, `-O2`             | —                         | 1.413           | 70,800                | 0.040             | 2,500,000               |
 | ESP32-C3                                                                              | RISC-V RV32IMC | 160 MHz | ESP-IDF v6.0.2, `-O2`             | `TAMP_ESP32=1`            | 0.961           | 104,100               | 0.036             | 2,777,800               |
 | STM32H7B0 [^sram]                                                                     | Cortex-M7      | 280 MHz | C, `-O3`, I+D cache               | —                         | 0.518           | 192,900               | 0.015             | 6,746,000               |
-| STM32H7B0 [^sram]                                                                     | Cortex-M7      | 280 MHz | C, `-O3`, I+D cache               | `TAMP_ARMV7EM=1`          | 0.395           | 253,000               | 0.007             | 13,848,000              |
+| STM32H7B0 [^sram]                                                                     | Cortex-M7      | 280 MHz | C, `-O3`, I+D cache               | `TAMP_ARMV7EM=1`          | 0.395           | 253,000               | 0.007             | 15,154,000              |
 
 [^sram]:
     The STM32H7B0's benchmark input/reference data resides in internal SRAM (the
