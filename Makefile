@@ -29,6 +29,7 @@ help-extra:
 	@echo "Fuzzing (requires LLVM clang; on macOS: brew install llvm):"
 	@echo "  make fuzz-decompressor  Fuzz decompressor with random input"
 	@echo "  make fuzz-round-trip    Fuzz compress->decompress round-trip"
+	@echo "  make fuzz-matrix        Short decompressor fuzz of every flag configuration"
 	@echo "  make fuzz-clean         Clean fuzz artifacts and corpora"
 	@echo ""
 	@echo "Other targets:"
@@ -563,9 +564,18 @@ fuzz-round-trip: build/fuzz_round_trip
 	@mkdir -p fuzz/corpus_round_trip
 	./build/fuzz_round_trip fuzz/corpus_round_trip
 
+# Builds the malicious-input decompressor fuzzer in every flag-gated code-path
+# configuration (portable, ARMV7EM profile, fast-loop-only, ESP32, extended
+# off, memset off, ...), replays the shared corpus, and fuzzes each briefly.
+# FUZZ_MATRIX_SECONDS overrides the per-config fuzz duration (default 90).
+.PHONY: fuzz-matrix
+fuzz-matrix:
+	@mkdir -p fuzz/corpus_decompressor
+	FUZZ_CC=$(FUZZ_CC) fuzz/fuzz-matrix.sh $(or $(FUZZ_MATRIX_SECONDS),90)
+
 fuzz-clean:
 	@rm -f build/fuzz_decompressor build/fuzz_round_trip
-	@rm -rf fuzz/corpus_decompressor fuzz/corpus_round_trip
+	@rm -rf fuzz/corpus_decompressor fuzz/corpus_round_trip build/fuzz_matrix
 	@rm -rf build/esp32_host build/fuzz_round_trip_esp32 build/esp32_host_differential fuzz/corpus_round_trip_esp32
 
 ##################################
