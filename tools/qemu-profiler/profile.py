@@ -63,6 +63,17 @@ CORES = {
         "defines": ["TAMP_ARMV7EM=1"],
         "note": "armv7em profile (STM32H7-like)",
     },
+    # Not in the default core list: armv8m.main executes the ARMV7EM-profile
+    # code (unaligned access supported), but the flag default doesn't cover it,
+    # so measure both portable and --cflags=-DTAMP_ARMV7EM=1 explicitly.
+    "m33": {
+        "machine": "mps2-an505",
+        "mcpu": "cortex-m33",
+        "defines": [],
+        "note": "portable build (RP2350-like)",
+        "linker": "link-an505.ld",  # secure-alias memory map
+        "code_base": 0x10000000,
+    },
 }
 
 VARIANTS = {
@@ -70,10 +81,15 @@ VARIANTS = {
     "extended": {"data_h": "bench_data_extended.h"},  # generated, see gen_extended_blob()
 }
 
-# Symbols considered "the decompressor" for the headline metric.
+# Symbols considered "the decompressor" for the headline metric. Every
+# out-of-line helper reachable from the decode loop MUST be listed: a helper
+# missing here silently vanishes from the metric (this bit the campaign once —
+# tamp_window_write_from_output_fn was uncounted, inflating M0+ deltas).
 CORE_SYMBOL_PREFIXES = (
     "tamp_decompressor_decompress_cb",
     "tamp_window_copy",
+    "tamp_window_write_from_output_fn",
+    "tamp_history_reconstruct",
     "decode_rle",
     "decode_extended_match",
     "decode_huffman",
@@ -183,7 +199,7 @@ def build_firmware(core, variant, extra_cflags, main_src="main.c", elf_name="ben
         *[f"-D{d}" for d in cfg["defines"]],
         *extra_cflags,
         "-T",
-        str(fw / "link.ld"),
+        str(fw / cfg.get("linker", "link.ld")),
         "-nostartfiles",
         "--specs=nosys.specs",
         "-Wl,--gc-sections",
@@ -209,7 +225,7 @@ def run_qemu(core, elf, plugin, out_file):
         "-semihosting-config",
         "enable=on,target=native",
         "-plugin",
-        f"{plugin},out={out_file},base={CODE_BASE:#x},size={CODE_SIZE:#x}",
+        f"{plugin},out={out_file},base={cfg.get('code_base', CODE_BASE):#x},size={CODE_SIZE:#x}",
         "-kernel",
         str(elf),
     ]
