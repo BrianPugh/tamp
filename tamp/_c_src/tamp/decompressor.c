@@ -550,6 +550,12 @@ static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** 
  * refill_bit_buffer is provably dead here. Removing it is the branch-elimination
  * the fast loop exists to exploit.
  */
+#if !TAMP_RESERVOIR_REFILL
+/* The reservoir refill (TAMP_RESERVOIR_REFILL, the ARMV7EM default) replaces
+ * the per-token refill/huffman helpers with bb/rbits-local decode, so these two
+ * exist only for the non-reservoir fast loop (opt-in builds and
+ * -DTAMP_RESERVOIR_REFILL=0). Guarded out when the reservoir is on, where they
+ * would be unused and warn under -Werror. */
 static inline void refill_bit_buffer_unchecked(TampDecompressor* d, const unsigned char** input) {
     const unsigned char* in = *input;
     uint32_t bit_buffer = d->bit_buffer;
@@ -590,6 +596,7 @@ static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bi
     }
     return huffman_value;
 }
+#endif /* !TAMP_RESERVOIR_REFILL */
 
 /* Fast-loop classic-token body, factored into a macro so it can be instantiated
  * more than once per bounds check (two-token unroll below). The two sub-macros
@@ -760,6 +767,224 @@ static void TAMP_NOINLINE tamp_history_reconstruct(unsigned char* window, const 
         }                                                                                                      \
     }
 #endif /* TAMP_HISTORY_WINDOW */
+
+#if TAMP_RESERVOIR_REFILL
+/* TAMP_RESERVOIR_REFILL: 64-bit bit reservoir over the fast decode loop (see
+ * common.h for the flag and measured numbers). `bb` holds valid bits in its top
+ * `rbits` bits; a decode reads
+ * the top 32 (`bb >> 32`). A single unconditional 4-byte refill fires only when
+ * <=32 valid bits remain (~every 1-2 tokens), replacing the per-token
+ * refill_bit_buffer_unchecked. bb's bits below the top `rbits` are always zero
+ * inside the loop (consumption `bb <<=` shifts zeros in at the bottom; each
+ * refill ORs a chunk into exactly that zero region, contiguous with the live
+ * bits), which the writeback mask relies on.
+ *
+ * Writeback discipline (runs on EVERY loop exit before the struct bit_buffer is
+ * read again). The invariant rbits == 8*bytes_read - bits_consumed holds across
+ * the pushback, so the next input byte always begins exactly where the
+ * reservoir's valid bits end - byte alignment is automatic, no matter what
+ * bit_buffer_pos the loop was entered with:
+ *   1. while (rbits > 32) { input -= 1; rbits -= 8; }
+ *        Un-read the surplus whole bytes (rbits now in [25,32] when the loop
+ *        ran a token, else the untouched entry value). Only decrements the
+ *        accounting + input cursor; bb is untouched, so the pushed-back bits
+ *        remain sitting below the new top-`rbits` region.
+ *   2. bit_buffer = (top 32 bits of bb) AND a mask that clears every bit below
+ *        the top `rbits` - those hold the just-un-read data, and the next
+ *        refill_bit_buffer ORs new bytes into exactly that region, so they must
+ *        be zero for the OR to stay clean.
+ *   3. bit_buffer_pos = rbits.
+ * The uncommitted-token contract is: on any structural/seam break, bb/rbits are
+ * left describing the exact bitstream position the careful body / decode_*
+ * helpers must resume from, and after the writeback the struct bit_buffer is a
+ * valid 32-bit-style buffer (top bit_buffer_pos bits live, low bits zero). */
+
+/* Refill 4 whole bytes when the reservoir has room. Callers guarantee >=4 input
+ * bytes remain via the loop precondition (>=8 input covers the two per-iteration
+ * refills). Reads bytes MSB-first, same order as refill_bit_buffer. */
+#define TAMP_RES_REFILL()                                                                                           \
+    do {                                                                                                            \
+        if (rbits <= 32) {                                                                                          \
+            uint32_t _chunk = ((uint32_t)input[0] << 24) | ((uint32_t)input[1] << 16) | ((uint32_t)input[2] << 8) | \
+                              (uint32_t)input[3];                                                                   \
+            input += 4;                                                                                             \
+            bb |= (uint64_t)_chunk << (32 - rbits);                                                                 \
+            rbits += 32;                                                                                            \
+        }                                                                                                           \
+    } while (0)
+
+/* Commit the reservoir back to the 32-bit struct bit_buffer (see discipline),
+ * then restore the fast-loop's >=25-bit invariant with a checked refill.
+ *
+ * The refill is REQUIRED, not an optimization: the loop can exit (output
+ * precondition) with rbits as low as ~9, so bit_buffer_pos would be < 25. The
+ * careful body runs immediately after a precondition exit with NO intervening
+ * refill and needs up to 24 bits for one classic token, so it would return
+ * TAMP_INPUT_EXHAUSTED prematurely (mid-buffer) without this top-up. The
+ * non-reservoir fast loop keeps pos >= 25 via its per-token unchecked refill;
+ * the reservoir restores the same guarantee here. */
+#define TAMP_RES_WRITEBACK()                                \
+    do {                                                    \
+        while (rbits > 32) {                                \
+            input -= 1;                                     \
+            rbits -= 8;                                     \
+        }                                                   \
+        uint32_t _hi = (uint32_t)(bb >> 32);                \
+        _hi &= (uint32_t)(0xFFFFFFFFu << (32 - rbits));     \
+        decompressor->bit_buffer = _hi;                     \
+        decompressor->bit_buffer_pos = (uint8_t)rbits;      \
+        refill_bit_buffer(decompressor, &input, input_end); \
+    } while (0)
+
+/* Extended-symbol break for the reservoir plain body: consume only the
+ * is_literal + type-huffman bits (decode_rle/decode_extended_match re-decode
+ * the count/window-offset from the committed bit_buffer), set token_state,
+ * break. Mirrors TAMP_FAST_EXT_BREAK_. Empty in classic-only builds. */
+#if TAMP_EXTENDED_DECOMPRESS
+#define TAMP_RES_EXT_BREAK_(cons, ms)                                        \
+    if (TAMP_UNLIKELY(extended_enabled && (ms) >= TAMP_RLE_SYMBOL)) {        \
+        bb <<= (cons);                                                       \
+        rbits -= (int32_t)(cons);                                            \
+        decompressor->token_state = (uint8_t)((ms) - (TAMP_RLE_SYMBOL - 1)); \
+        break;                                                               \
+    }
+#else
+#define TAMP_RES_EXT_BREAK_(cons, ms)
+#endif
+
+/* Reservoir classic-token body (writes the ring), decoding from bb/rbits.
+ * Bit-for-bit identical token decode to TAMP_FAST_TOKEN_BODY; only the buffer
+ * representation differs. FLUSH aligns to the next stream byte boundary the
+ * same way `bit_buffer_pos & ~7` does: the padding to skip equals post & 7
+ * where post = rbits - consumed (post ~= -consumed_total mod 8). */
+#define TAMP_RES_TOKEN_BODY()                                                                  \
+    {                                                                                          \
+        uint32_t _top = (uint32_t)(bb >> 32);                                                  \
+        if (TAMP_UNLIKELY(_top >> 31)) {                                                       \
+            /* Literal. */                                                                     \
+            uint32_t _t = _top << 1;                                                           \
+            uint8_t literal = _t >> (32 - conf_literal);                                       \
+            bb <<= (1 + conf_literal);                                                         \
+            rbits -= (int32_t)(1 + conf_literal);                                              \
+            uint16_t wp = decompressor->window_pos;                                            \
+            decompressor->window_pos = (wp + 1) & window_mask;                                 \
+            decompressor->window[wp] = literal;                                                \
+            *output++ = literal;                                                               \
+        } else {                                                                               \
+            uint32_t _t = _top << 1; /* shift out the is_literal flag */                       \
+            uint32_t consumed = 1;                                                             \
+            uint8_t match_size;                                                                \
+            if (TAMP_LIKELY((_t >> 31) == 0)) {                                                \
+                _t <<= 1;                                                                      \
+                consumed += 1;                                                                 \
+                match_size = 0;                                                                \
+            } else {                                                                           \
+                _t <<= 1;                                                                      \
+                uint8_t code = HUFFMAN_TABLE[_t >> (32 - 7)];                                  \
+                uint8_t bit_len = code >> 4;                                                   \
+                _t <<= bit_len;                                                                \
+                consumed += 1 + bit_len;                                                       \
+                match_size = code & 0xF;                                                       \
+            }                                                                                  \
+            if (TAMP_UNLIKELY(match_size == FLUSH)) {                                          \
+                int32_t post = rbits - (int32_t)consumed;                                      \
+                uint32_t align = (uint32_t)(post & 7);                                         \
+                bb <<= (consumed + align);                                                     \
+                rbits = post - (int32_t)align;                                                 \
+                decompressor->last_was_flush = 1;                                              \
+                break;                                                                         \
+            }                                                                                  \
+            TAMP_RES_EXT_BREAK_(consumed, match_size)                                          \
+            match_size += min_pattern_size;                                                    \
+            uint16_t window_offset = _t >> (32 - conf_window);                                 \
+            const uint32_t window_size = (1u << conf_window);                                  \
+            if (TAMP_UNLIKELY((uint32_t)window_offset > window_size - (uint32_t)match_size)) { \
+                /* Commit the reservoir before returning: the OOB token is left                \
+                 * uncommitted (bb/rbits not advanced past it), so the writeback               \
+                 * pushes back the read-ahead surplus and leaves bit_buffer /                  \
+                 * bit_buffer_pos / input consistent with the offending token. */              \
+                TAMP_RES_WRITEBACK();                                                          \
+                TAMP_DECOMP_RETURN(TAMP_OOB);                                                  \
+            }                                                                                  \
+            bb <<= (consumed + conf_window);                                                   \
+            rbits -= (int32_t)(consumed + conf_window);                                        \
+            TAMP_COPY_TO_OUTPUT(output, decompressor->window + window_offset, match_size);     \
+            uint16_t wp = decompressor->window_pos;                                            \
+            TAMP_FAST_WINDOW_UPDATE_(wp, match_size, window_size);                             \
+            decompressor->window_pos = wp;                                                     \
+        }                                                                                      \
+    }
+
+#if TAMP_HISTORY_WINDOW
+/* Reservoir history-mode body: same decode as TAMP_RES_TOKEN_BODY, but no ring
+ * write (rebuilt in bulk on exit) and matches served from the output history.
+ * Extended is disabled in history mode, so no extended break. The seam-crossing
+ * bail leaves the token UNCOMMITTED - bb/rbits are NOT advanced past it, so the
+ * post-loop writeback rebuilds bit_buffer pointing at this token's first bit and
+ * the careful body re-decodes it against the reconstructed ring. */
+#define TAMP_RES_TOKEN_BODY_HISTORY()                                                                          \
+    {                                                                                                          \
+        uint32_t _top = (uint32_t)(bb >> 32);                                                                  \
+        if (TAMP_UNLIKELY(_top >> 31)) {                                                                       \
+            /* Literal: no ring store in history mode. */                                                      \
+            uint32_t _t = _top << 1;                                                                           \
+            uint8_t literal = _t >> (32 - conf_literal);                                                       \
+            bb <<= (1 + conf_literal);                                                                         \
+            rbits -= (int32_t)(1 + conf_literal);                                                              \
+            decompressor->window_pos = (decompressor->window_pos + 1) & window_mask;                           \
+            *output++ = literal;                                                                               \
+        } else {                                                                                               \
+            uint32_t _t = _top << 1; /* shift out the is_literal flag */                                       \
+            uint32_t consumed = 1;                                                                             \
+            uint8_t match_size;                                                                                \
+            if (TAMP_LIKELY((_t >> 31) == 0)) {                                                                \
+                _t <<= 1;                                                                                      \
+                consumed += 1;                                                                                 \
+                match_size = 0;                                                                                \
+            } else {                                                                                           \
+                _t <<= 1;                                                                                      \
+                uint8_t code = HUFFMAN_TABLE[_t >> (32 - 7)];                                                  \
+                uint8_t bit_len = code >> 4;                                                                   \
+                _t <<= bit_len;                                                                                \
+                consumed += 1 + bit_len;                                                                       \
+                match_size = code & 0xF;                                                                       \
+            }                                                                                                  \
+            if (TAMP_UNLIKELY(match_size == FLUSH)) {                                                          \
+                int32_t post = rbits - (int32_t)consumed;                                                      \
+                uint32_t align = (uint32_t)(post & 7);                                                         \
+                bb <<= (consumed + align);                                                                     \
+                rbits = post - (int32_t)align;                                                                 \
+                decompressor->last_was_flush = 1;                                                              \
+                break;                                                                                         \
+            }                                                                                                  \
+            match_size += min_pattern_size;                                                                    \
+            uint16_t window_offset = _t >> (32 - conf_window);                                                 \
+            const uint32_t window_size = (1u << conf_window);                                                  \
+            if (TAMP_UNLIKELY((uint32_t)window_offset > window_size - (uint32_t)match_size)) {                 \
+                /* Commit the reservoir (OOB token uncommitted: bb/rbits not                                   \
+                 * advanced past it) so bit_buffer / bit_buffer_pos / input stay                               \
+                 * consistent with the offending token, then rebuild the ring for a                            \
+                 * caller that inspects the window after the error. */                                         \
+                TAMP_RES_WRITEBACK();                                                                          \
+                tamp_history_reconstruct(decompressor->window, output, decompressor->window_pos, window_size); \
+                TAMP_DECOMP_RETURN(TAMP_OOB);                                                                  \
+            }                                                                                                  \
+            uint16_t wp = decompressor->window_pos;                                                            \
+            uint16_t dist = (uint16_t)(((wp - window_offset - 1) & window_mask) + 1);                          \
+            if (TAMP_UNLIKELY(dist < match_size)) {                                                            \
+                /* Seam-crossing: leave the token uncommitted (bb/rbits unchanged). */                         \
+                break;                                                                                         \
+            }                                                                                                  \
+            bb <<= (consumed + conf_window);                                                                   \
+            rbits -= (int32_t)(consumed + conf_window);                                                        \
+            const unsigned char* msrc = output - dist;                                                         \
+            TAMP_COPY_TO_OUTPUT(output, msrc, match_size);                                                     \
+            decompressor->window_pos = (wp + match_size) & window_mask;                                        \
+        }                                                                                                      \
+    }
+#endif /* TAMP_HISTORY_WINDOW */
+#endif /* TAMP_RESERVOIR_REFILL */
+
 #endif /* TAMP_FAST_DECODE_LOOP */
 
 #if TAMP_HAS_GCC_OPTIMIZE
@@ -931,6 +1156,37 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                  * body). */
                 const unsigned char* const history_base = output;
                 const uint32_t hist_window_size = (uint32_t)1u << conf_window;
+#if TAMP_RESERVOIR_REFILL
+                /* Reservoir variant: bb/rbits stay live across the arm goto; the
+                 * writeback rebuilds the struct bit_buffer at every exit before
+                 * the careful body / outer loop reads it. */
+                uint64_t bb = (uint64_t)decompressor->bit_buffer << 32;
+                int32_t rbits = decompressor->bit_buffer_pos;
+                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
+                    if ((size_t)(output - history_base) >= hist_window_size) goto res_history_armed;
+                    TAMP_RES_REFILL();
+                    TAMP_RES_TOKEN_BODY()
+                    TAMP_RES_REFILL();
+                    TAMP_RES_TOKEN_BODY()
+                }
+                TAMP_RES_WRITEBACK();
+                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
+                goto res_history_done;
+            res_history_armed:
+                /* Armed: the ring is stale from here (writes are skipped). Every
+                 * exit edge reconstructs it before anything reads the window;
+                 * OOB reconstructs inside the body before returning. */
+                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
+                    TAMP_RES_REFILL();
+                    TAMP_RES_TOKEN_BODY_HISTORY()
+                    TAMP_RES_REFILL();
+                    TAMP_RES_TOKEN_BODY_HISTORY()
+                }
+                TAMP_RES_WRITEBACK();
+                tamp_history_reconstruct(decompressor->window, output, decompressor->window_pos, hist_window_size);
+                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
+            res_history_done:;
+#else
                 while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
                     if ((size_t)(output - history_base) >= hist_window_size) goto history_armed;
                     TAMP_FAST_TOKEN_BODY()
@@ -956,6 +1212,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                 tamp_history_reconstruct(decompressor->window, output, decompressor->window_pos, hist_window_size);
                 if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
             history_done:;
+#endif /* TAMP_RESERVOIR_REFILL */
             } else
 #endif /* TAMP_HISTORY_WINDOW */
             {
@@ -967,6 +1224,18 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                  * body with clean, topped-up state - a dedicated single-token
                  * tail loop was measured to add ~580 bytes of flash for no
                  * meaningful speedup, so the careful body owns the tail. */
+#if TAMP_RESERVOIR_REFILL
+                uint64_t bb = (uint64_t)decompressor->bit_buffer << 32;
+                int32_t rbits = decompressor->bit_buffer_pos;
+                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
+                    TAMP_RES_REFILL();
+                    TAMP_RES_TOKEN_BODY()
+                    TAMP_RES_REFILL();
+                    TAMP_RES_TOKEN_BODY()
+                }
+                TAMP_RES_WRITEBACK();
+                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
+#else
                 while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
                     TAMP_FAST_TOKEN_BODY()
                     refill_bit_buffer_unchecked(decompressor, &input);
@@ -974,6 +1243,7 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                     refill_bit_buffer_unchecked(decompressor, &input);
                 }
                 if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
+#endif /* TAMP_RESERVOIR_REFILL */
             }
         }
 #endif /* TAMP_FAST_DECODE_LOOP */
@@ -1134,6 +1404,15 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
 #undef TAMP_FAST_EXT_BREAK_
 #if TAMP_HISTORY_WINDOW
 #undef TAMP_FAST_TOKEN_BODY_HISTORY
+#endif
+#if TAMP_RESERVOIR_REFILL
+#undef TAMP_RES_REFILL
+#undef TAMP_RES_WRITEBACK
+#undef TAMP_RES_EXT_BREAK_
+#undef TAMP_RES_TOKEN_BODY
+#if TAMP_HISTORY_WINDOW
+#undef TAMP_RES_TOKEN_BODY_HISTORY
+#endif
 #endif
 #endif
 

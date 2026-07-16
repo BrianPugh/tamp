@@ -108,6 +108,96 @@ static int roundtrip(const unsigned char *data, size_t n, uint8_t window) {
     return 0;
 }
 
+/* --- OOB-writeback regression (see decompressor.c: both reservoir bodies must
+ * TAMP_RES_WRITEBACK() before TAMP_DECOMP_RETURN(TAMP_OOB), so input_consumed
+ * and bit_buffer_pos stay consistent with the offending token). Hand-crafted
+ * classic streams (window=8, literal=8) whose N-th token references an
+ * out-of-bounds window offset; every decode path (careful, non-reservoir fast
+ * loop, reservoir fast loop, reservoir history mode) must report the same exact
+ * token bit offset. --- */
+
+/* MSB-first bit writer into a byte buffer (bits are emitted high-to-low). */
+typedef struct {
+    unsigned char *buf;
+    size_t bitpos;
+    size_t cap;
+} bitwriter_t;
+static void bw_put(bitwriter_t *w, uint32_t value, int nbits) {
+    for (int i = nbits - 1; i >= 0; i--) {
+        size_t byte = w->bitpos >> 3;
+        int bit = 7 - (int)(w->bitpos & 7);
+        if (byte < w->cap && ((value >> i) & 1u)) w->buf[byte] |= (unsigned char)(1u << bit);
+        w->bitpos++;
+    }
+}
+
+/* Decode a hand-crafted stream expected to fault OOB, and check that the decode
+ * that returned it left input/bit_buffer consistent with the offending token.
+ * `expected_bit_off` is the token's bit offset AFTER the 1-byte header, so
+ * (input_consumed - 1) * 8 - bit_buffer_pos (the exact count of decoded bits)
+ * must equal it. Returns 0 on pass. */
+static int oob_case(const char *name, const unsigned char *in, size_t in_len, size_t expected_bit_off) {
+    TampDecompressor d;
+    if (tamp_decompressor_init(&d, NULL, dwin, MAX_WINDOW_BITS) != TAMP_OK) {
+        printf("FAIL(%s): decompressor_init\n", name);
+        return 1;
+    }
+    size_t written = 0, consumed = 0;
+    tamp_res r = tamp_decompressor_decompress(&d, deco, sizeof(deco), &written, in, in_len, &consumed);
+    if (r != TAMP_OOB) {
+        printf("FAIL(%s): expected TAMP_OOB, got %d (consumed=%zu written=%zu)\n", name, r, consumed, written);
+        return 1;
+    }
+    long long decoded_bits = (long long)(consumed - 1) * 8 - (long long)d.bit_buffer_pos;
+    if (decoded_bits != (long long)expected_bit_off) {
+        printf("FAIL(%s): OOB token bit offset %lld != expected %zu (consumed=%zu bit_buffer_pos=%u)\n", name,
+               decoded_bits, expected_bit_off, consumed, d.bit_buffer_pos);
+        return 1;
+    }
+    return 0;
+}
+
+/* Case 1: first token after the header is OOB (exercises the un-armed /
+ * TAMP_RES_TOKEN_BODY body on reservoir builds). Header 0x18 = window 8,
+ * literal 8, classic, 1-byte header. Token: pattern flag 0, huffman symbol 0
+ * (match_size = min_pattern = 2), window offset 0xFF = 255 > 256 - 2 -> OOB.
+ * Trailing filler so the fast loop's >=8-input precondition is met. */
+static int oob_unarmed(void) {
+    static unsigned char in[64];
+    memset(in, 0, sizeof(in));
+    bitwriter_t w = {in, 0, sizeof(in)};
+    bw_put(&w, 0x18, 8); /* header */
+    bw_put(&w, 0, 1);    /* pattern flag */
+    bw_put(&w, 0, 1);    /* huffman symbol 0 -> match_size raw 0 */
+    bw_put(&w, 0xFF, 8); /* window offset 255 (OOB) */
+    return oob_case("oob_unarmed", in, sizeof(in), 0);
+}
+
+/* Case 2: 300 literals precede the OOB token so history mode arms (>= 256
+ * output bytes) before it, exercising TAMP_RES_TOKEN_BODY_HISTORY's OOB path on
+ * reservoir builds. Built with the bit writer, NOT compressor+FLUSH: a FLUSH
+ * sets last_was_flush and blocks the next fast-loop entry, which would decode
+ * the OOB token in the careful body and miss the armed path. Each literal is
+ * 9 bits (flag 1 + 8 literal bits) on window 8 / literal 8. */
+static int oob_armed(void) {
+    static unsigned char in[1024];
+    memset(in, 0, sizeof(in));
+    bitwriter_t w = {in, 0, sizeof(in)};
+    bw_put(&w, 0x18, 8); /* header */
+    const size_t NLIT = 300;
+    for (size_t i = 0; i < NLIT; i++) {
+        bw_put(&w, 1, 1);                    /* literal flag */
+        bw_put(&w, (uint32_t)(i & 0xFF), 8); /* 8 literal bits */
+    }
+    size_t tok_bit_off = NLIT * 9;                 /* OOB token's bit offset after the header */
+    bw_put(&w, 0, 1);                              /* pattern flag */
+    bw_put(&w, 0, 1);                              /* huffman symbol 0 -> match_size 2 */
+    bw_put(&w, 0xFF, 8);                           /* window offset 255 (OOB) */
+    for (int i = 0; i < 32; i++) bw_put(&w, 0, 8); /* filler: keep >=8 input at the token */
+    size_t in_len = (w.bitpos + 7) / 8;
+    return oob_case("oob_armed", in, in_len, tok_bit_off);
+}
+
 int main(void) {
     static unsigned char buf[MAX_INPUT];
     int fails = 0, tests = 0;
@@ -167,6 +257,14 @@ int main(void) {
         tests++;
         fails += roundtrip(buf, n, window);
     }
+
+    /* OOB-writeback regression: both reservoir OOB returns must commit the
+     * reservoir first so the reported input_consumed / bit_buffer_pos pin the
+     * offending token exactly. Runs in every build config. */
+    tests++;
+    fails += oob_unarmed();
+    tests++;
+    fails += oob_armed();
 
     printf("%s: history_round_trip %d tests, %d failures\n", fails ? "FAIL" : "PASS", tests, fails);
     return fails ? 1 : 0;

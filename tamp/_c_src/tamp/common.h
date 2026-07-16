@@ -174,6 +174,25 @@ extern "C" {
 #define TAMP_HISTORY_WINDOW TAMP_ARMV7EM
 #endif
 
+/* 64-bit bit reservoir over the fast decode loop (see decompressor.c). The
+ * loop keeps the undecoded bits in a 64-bit local and refills 4 whole bytes at
+ * a time only when <=32 bits remain (~every 1-2 tokens), replacing the
+ * per-token refill_bit_buffer_unchecked and its branch. On loop exit the
+ * reservoir is written back to the 32-bit struct bit_buffer, surplus whole
+ * bytes are pushed back to the input cursor, and a checked refill restores the
+ * >=25-bit invariant the careful body relies on. Measured on the window=10
+ * enwik8 workload: -17.3% (M4) / -16.2% (M7) core insns/byte, and +14.2%
+ * decompression throughput on STM32H7B0 hardware (the reason it defaults on for
+ * ARMV7EM). Composes with TAMP_FAST_DECODE_LOOP only (it replaces that loop's
+ * bit handling) and is a no-op without it. Portable-core opt-in fast-loop
+ * builds also profile favorably in QEMU despite the __aeabi_ll* helper calls
+ * for 64-bit shifts (m0plus -6.9%, m33 -12.0% core insns/byte vs fast-loop
+ * only), but only ARMV7EM is hardware-verified, so those cores must opt in
+ * explicitly. */
+#ifndef TAMP_RESERVOIR_REFILL
+#define TAMP_RESERVOIR_REFILL TAMP_ARMV7EM
+#endif
+
 /* Compile-time-pinned stream configuration (opt-in; decompressor only).
  * Most embedded deployments only ever decode streams produced with one fixed
  * configuration. Defining these pins the window and/or literal bit counts at
