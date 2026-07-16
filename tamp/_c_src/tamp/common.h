@@ -161,6 +161,35 @@ extern "C" {
 #define TAMP_FAST_DECODE_LOOP TAMP_ARMV7EM
 #endif
 
+/* History-window mode inside the fast decode loop (see decompressor.c). Once
+ * window_size contiguous output bytes have been produced in the current call,
+ * the ring exactly mirrors the last window_size output bytes, so matches can be
+ * served straight from the output history and the per-token window write (one
+ * store per output byte) is skipped entirely; the ring is rebuilt in bulk from
+ * the output tail when the fast loop exits. Measured ceiling on the window=10
+ * enwik8 workload: ~21% fewer core insns/byte on Cortex-M4/M7. Composes with
+ * TAMP_FAST_DECODE_LOOP only (the careful body always maintains the ring), and
+ * is a no-op without it. */
+#ifndef TAMP_HISTORY_WINDOW
+#define TAMP_HISTORY_WINDOW TAMP_ARMV7EM
+#endif
+
+/* Compile-time-pinned stream configuration (opt-in; decompressor only).
+ * Most embedded deployments only ever decode streams produced with one fixed
+ * configuration. Defining these pins the window and/or literal bit counts at
+ * compile time: the decompressor folds every window_mask / window_size / bit
+ * shift to an immediate, and with BOTH pinned min_pattern_size becomes a
+ * compile-time constant too. A pinned build REJECTS (TAMP_INVALID_CONF) any
+ * stream whose header disagrees, so this is only safe when every stream really
+ * uses the pinned configuration.
+ *
+ * There is no default: leave them undefined for the normal runtime behavior
+ * (any valid window in [8,15] / literal in [5,8]). Valid pinned values match
+ * those ranges, e.g. -DTAMP_FIXED_WINDOW_BITS=10 -DTAMP_FIXED_LITERAL_BITS=8.
+ * They may be set independently. */
+/* #define TAMP_FIXED_WINDOW_BITS  10 */
+/* #define TAMP_FIXED_LITERAL_BITS 8  */
+
 /* TAMP_USE_MEMSET: Use libc memset (default: 1).
  * Set to 0 for environments without libc (e.g. MicroPython native modules).
  * When disabled, uses a volatile loop that prevents GCC from emitting a

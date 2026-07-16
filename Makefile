@@ -487,12 +487,73 @@ build/ctests/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests
 build/test_runner: $(CTEST_TAMP_OBJS) $(CTEST_LFS_OBJS) $(CTEST_FATFS_OBJS) $(CTEST_TEST_OBJS)
 	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
 
-c-test: build/test_runner
+c-test: build/test_runner c-compile-matrix c-test-history
 	./build/test_runner
+
+# Standalone round-trip regression test for the fast-loop history-window mode
+# (TAMP_HISTORY_WINDOW): exercises the seam-crossing bail and the history match
+# copy whose source aliases the output buffer. Compiled fuzz-free with
+# -fsanitize=address,undefined (no Unity, no libFuzzer) three ways so both
+# decoder paths and both output-copy variants run against the same data:
+#   on  - history + word-at-a-time output copy (the ARMV7EM default combination)
+#   byte- history + byte-loop output copy: the only variant that exposes the
+#         msrc snapshot fix (the word copy evaluates its source once regardless)
+#   off - portable defaults, history compiled out (classic careful-body path)
+HISTORY_TEST_SRCS = tamp/_c_src/tamp/common.c tamp/_c_src/tamp/compressor.c \
+	tamp/_c_src/tamp/decompressor.c ctests/history_round_trip.c
+HISTORY_TEST_ON_FLAGS = -DTAMP_FAST_DECODE_LOOP=1 -DTAMP_HISTORY_WINDOW=1 -DTAMP_WINDOW_FROM_OUTPUT=1 \
+	-DTAMP_FAST_WINDOW_COPY=1 -DTAMP_FAST_BIT_REFILL=1 -DTAMP_FAST_OUTPUT_COPY=1
+HISTORY_TEST_BYTE_FLAGS = -DTAMP_FAST_DECODE_LOOP=1 -DTAMP_HISTORY_WINDOW=1 -DTAMP_WINDOW_FROM_OUTPUT=1 \
+	-DTAMP_FAST_WINDOW_COPY=1 -DTAMP_FAST_BIT_REFILL=1 -DTAMP_FAST_OUTPUT_COPY=0
+
+.PHONY: c-test-history
+c-test-history:
+	@mkdir -p build
+	$(CTEST_CC) $(CTEST_SANITIZER_FLAGS) -Wall -Itamp/_c_src $(HISTORY_TEST_ON_FLAGS) \
+		$(HISTORY_TEST_SRCS) -o build/history_round_trip_on
+	@echo "c-test-history: history ON (word-copy)"
+	./build/history_round_trip_on
+	$(CTEST_CC) $(CTEST_SANITIZER_FLAGS) -Wall -Itamp/_c_src $(HISTORY_TEST_BYTE_FLAGS) \
+		$(HISTORY_TEST_SRCS) -o build/history_round_trip_byte
+	@echo "c-test-history: history ON (byte-loop)"
+	./build/history_round_trip_byte
+	$(CTEST_CC) $(CTEST_SANITIZER_FLAGS) -Wall -Itamp/_c_src \
+		$(HISTORY_TEST_SRCS) -o build/history_round_trip_off
+	@echo "c-test-history: history OFF (portable defaults)"
+	./build/history_round_trip_off
+
+# Compile the vendored trio under every documented decompressor flag
+# combination. Regression guard: flag-gated code paths must always compile
+# (e.g. TAMP_FAST_DECODE_LOOP=1 with TAMP_EXTENDED=0 once referenced the
+# extended-only token_state field and only broke in that combination).
+C_COMPILE_MATRIX_CONFIGS = \
+	"" \
+	"-DTAMP_ARMV7EM=1" \
+	"-DTAMP_FAST_DECODE_LOOP=1" \
+	"-DTAMP_WINDOW_FROM_OUTPUT=1" \
+	"-DTAMP_EXTENDED=0" \
+	"-DTAMP_EXTENDED=0 -DTAMP_FAST_DECODE_LOOP=1" \
+	"-DTAMP_EXTENDED=0 -DTAMP_ARMV7EM=1" \
+	"-DTAMP_USE_MEMSET=0" \
+	"-DTAMP_STREAM=0" \
+	"-DTAMP_FIXED_WINDOW_BITS=10 -DTAMP_FIXED_LITERAL_BITS=8" \
+	"-DTAMP_FIXED_WINDOW_BITS=10 -DTAMP_FIXED_LITERAL_BITS=8 -DTAMP_ARMV7EM=1"
+
+.PHONY: c-compile-matrix
+c-compile-matrix:
+	@mkdir -p build
+	@set -e; for cfg in $(C_COMPILE_MATRIX_CONFIGS); do \
+		echo "c-compile-matrix: $$cfg"; \
+		for src in tamp/_c_src/tamp/common.c tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c; do \
+			$(CC) -O2 -Wall -Itamp/_c_src $$cfg -c $$src -o build/c_compile_matrix.o.tmp; \
+		done; \
+	done; rm -f build/c_compile_matrix.o.tmp
+	@echo "c-compile-matrix: all configurations compile"
 
 clean-c-test:
 	@rm -f build/test_runner
 	@rm -f build/test_runner_embedded
+	@rm -f build/history_round_trip_on build/history_round_trip_byte build/history_round_trip_off
 	@rm -f build/ctests/*.o
 	@rm -f build/ctests-embedded/*.o
 	@rm -f build/unity/*.o
