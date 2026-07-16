@@ -135,6 +135,12 @@ extern "C" {
 #define TAMP_FAST_BIT_REFILL TAMP_ARMV7EM
 #endif
 
+/* Word-at-a-time TAMP_COPY_TO_OUTPUT (see decompressor.c). Requires cheap
+ * unaligned 32-bit access. */
+#ifndef TAMP_FAST_OUTPUT_COPY
+#define TAMP_FAST_OUTPUT_COPY TAMP_ARMV7EM
+#endif
+
 /* TAMP_USE_MEMSET: Use libc memset (default: 1).
  * Set to 0 for environments without libc (e.g. MicroPython native modules).
  * When disabled, uses a volatile loop that prevents GCC from emitting a
