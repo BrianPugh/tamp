@@ -169,7 +169,16 @@ extern "C" {
  * the output tail when the fast loop exits. Measured ceiling on the window=10
  * enwik8 workload: ~21% fewer core insns/byte on Cortex-M4/M7. Composes with
  * TAMP_FAST_DECODE_LOOP only (the careful body always maintains the ring), and
- * is a no-op without it. */
+ * is a no-op without it.
+ *
+ * The armed path only ever runs on classic (non-extended) streams - extended
+ * tokens decouple the ring from the output by format design - so deployments
+ * that exclusively decode extended-format streams gain nothing from the armed
+ * path itself. It is still not free to disable: this flag is the largest size
+ * contributor of the profile (~4.4 KB of decompressor .text on Cortex-M7), and
+ * -DTAMP_HISTORY_WINDOW=0 reclaims that flash at a measured cost of ~4% more
+ * insns/byte on extended streams (the history build's dedicated plain loop is
+ * also lost) and a large fraction of the classic-stream speedup. */
 #ifndef TAMP_HISTORY_WINDOW
 #define TAMP_HISTORY_WINDOW TAMP_ARMV7EM
 #endif
