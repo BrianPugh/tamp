@@ -86,8 +86,9 @@ extern "C" {
  ******************************************************************************/
 
 /* Profile for ARMv7E-M cores (Cortex-M4/M7): little-endian with cheap
- * unaligned loads. Enables the prefilter match finder and both fast paths
- * (measured on Cortex-M7: 1.36x compression, +14% decompression). */
+ * unaligned loads. Enables the prefilter match finder and every decompressor
+ * fast path below (measured on STM32H7B0/Cortex-M7 vs the portable build:
+ * 1.31x compression, 1.92x decompression, ~5.2 KB additional flash). */
 #ifndef TAMP_ARMV7EM
 #define TAMP_ARMV7EM 0
 #endif

@@ -20,6 +20,13 @@ make rp2040-device-flash       # Copy UF2 to a BOOTSEL-mounted Pico (/Volumes/RP
 make rp2040-device-benchmark RP2040_PORT=/dev/tty.usbmodem...   # Capture a run
 ```
 
+`RP2040_TAMP_OPT` adds tamp compile definitions (semicolon-separated) for A/B
+builds; the default (empty) is the portable BENCHMARKS.md row:
+
+```bash
+make rp2040-device-build RP2040_TAMP_OPT="TAMP_FAST_DECODE_LOOP=1"   # fastloop row
+```
+
 To flash: hold BOOTSEL while connecting USB, then `make rp2040-device-flash`.
 The Pico reboots into the benchmark, which loops forever printing `BENCH`/`INFO`
 lines, `PASS:`/`FAIL:` checks, and a `TAMP-DEVICE-RESULT:` sentinel each
