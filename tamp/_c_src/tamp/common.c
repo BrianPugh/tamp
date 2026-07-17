@@ -55,35 +55,71 @@ TAMP_OPTIMIZE_SIZE int8_t tamp_compute_min_pattern_size(uint8_t window, uint8_t 
     return 2 + (window > (10 + ((literal - 5) << 1)));
 }
 
+/* Two variants, selected by TAMP_FAST_WINDOW_COPY (see common.h): the fast
+ * variant adds a branch that skips per-byte masking for the common case where
+ * the destination run does not wrap.
+ *
+ * Both handle the critical overlap case: when the destination is AHEAD of the
+ * source by less than match_size, a forward copy corrupts data because we
+ * write to positions before reading from them.
+ *
+ * Example: src=100, dst=105, match_size=8
+ *   - Forward copy at i=5 would read window[105], but we already overwrote it at i=0!
+ *   - Must copy in REVERSE order (end to start) to read source bytes before overwriting.
+ *
+ * The reverse copy's destination wraps via mask; the source never needs
+ * wrapping (bounds are pre-validated by the caller). */
+#if TAMP_FAST_WINDOW_COPY
 void tamp_window_copy(unsigned char *window, uint16_t *window_pos, uint16_t window_offset, uint8_t match_size,
                       uint16_t window_mask) {
-    /* Calculate distance from source to destination in circular buffer.
-     * src_to_dst = (dst - src) & mask gives the forward distance. */
-    const uint16_t src_to_dst = (*window_pos - window_offset) & window_mask;
+    uint16_t pos = *window_pos;
+    /* Forward distance from source to destination in the circular buffer. */
+    const uint16_t src_to_dst = (pos - window_offset) & window_mask;
 
-    /* Critical overlap case: destination is AHEAD of source and they overlap.
-     * When dst > src by less than match_size, a forward copy corrupts data because
-     * we write to positions before reading from them.
-     *
-     * Example: src=100, dst=105, match_size=8
-     *   - Forward copy at i=5 would read window[105], but we already overwrote it at i=0!
-     *   - Must copy in REVERSE order (end to start) to read source bytes before overwriting.
-     */
     if (TAMP_UNLIKELY(src_to_dst < match_size && src_to_dst > 0)) {
-        /* Copy in reverse order: start from last byte, work backwards to first byte.
-         * This ensures we read all overlapping source bytes before they're overwritten.
-         * Destination wraps via mask; source doesn't need wrapping (pre-validated bounds). */
+        /* Overlap: copy in reverse order (see above). */
         for (uint8_t i = match_size; i-- > 0;) {
-            window[(*window_pos + i) & window_mask] = window[window_offset + i];
+            window[(pos + i) & window_mask] = window[window_offset + i];
         }
-        *window_pos = (*window_pos + match_size) & window_mask;
+        pos = (pos + match_size) & window_mask;
+    } else if (TAMP_LIKELY((uint32_t)pos + match_size <= (uint32_t)window_mask + 1)) {
+        /* Common case: destination run doesn't wrap, no per-byte masking. */
+        unsigned char *dst = window + pos;
+        const unsigned char *src = window + window_offset;
+        for (uint8_t i = 0; i < match_size; i++) {
+            dst[i] = src[i];
+        }
+        pos = (pos + match_size) & window_mask;
     } else {
         for (uint8_t i = 0; i < match_size; i++) {
-            window[*window_pos] = window[window_offset + i];
-            *window_pos = (*window_pos + 1) & window_mask;
+            window[pos] = window[window_offset + i];
+            pos = (pos + 1) & window_mask;
         }
     }
+    *window_pos = pos;
 }
+#else
+void tamp_window_copy(unsigned char *window, uint16_t *window_pos, uint16_t window_offset, uint8_t match_size,
+                      uint16_t window_mask) {
+    uint16_t pos = *window_pos;
+    /* Forward distance from source to destination in the circular buffer. */
+    const uint16_t src_to_dst = (pos - window_offset) & window_mask;
+
+    if (TAMP_UNLIKELY(src_to_dst < match_size && src_to_dst > 0)) {
+        /* Overlap: copy in reverse order (see above). */
+        for (uint8_t i = match_size; i-- > 0;) {
+            window[(pos + i) & window_mask] = window[window_offset + i];
+        }
+        pos = (pos + match_size) & window_mask;
+    } else {
+        for (uint8_t i = 0; i < match_size; i++) {
+            window[pos] = window[window_offset + i];
+            pos = (pos + 1) & window_mask;
+        }
+    }
+    *window_pos = pos;
+}
+#endif /* TAMP_FAST_WINDOW_COPY */
 
 /*******************************************************************************
  * Built-in I/O handler implementations

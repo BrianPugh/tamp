@@ -13,6 +13,7 @@ help-main:
 	@echo "  make test              Run Python and MicroPython tests"
 	@echo "  make c-test            Run C unit tests"
 	@echo "  make c-test-embedded   Run C unit tests with embedded find_best_match"
+	@echo "  make c-test-prefilter  Run C unit tests with prefilter find_best_match"
 	@echo "  make clean             Clean all build artifacts"
 	@echo ""
 	@echo "MicroPython native module:"
@@ -29,10 +30,12 @@ help-extra:
 	@echo "Fuzzing (requires LLVM clang; on macOS: brew install llvm):"
 	@echo "  make fuzz-decompressor  Fuzz decompressor with random input"
 	@echo "  make fuzz-round-trip    Fuzz compress->decompress round-trip"
+	@echo "  make fuzz-matrix        Short decompressor fuzz of every flag configuration"
 	@echo "  make fuzz-clean         Clean fuzz artifacts and corpora"
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make binary-size        Show binary sizes for README table"
+	@echo "  make benchmark-code-sizes  Reproduce the BENCHMARKS.md 'Code size (B)' column"
 	@echo "  make v1-compressed-datasets        Regenerate ground-truth v1 (--no-extended) .tamp binaries"
 	@echo "  make extended-compressed-datasets  Regenerate ground-truth extended .tamp binaries"
 	@echo "  make c-benchmark-stream Benchmark stream API with various temporary working buffer sizes"
@@ -408,6 +411,11 @@ CTEST_DEFINES = -DTAMP_STREAM_STDIO=1 -DTAMP_STREAM_MEMORY=1 \
 	-DTAMP_STREAM_FATFS=1 -DTEST_FATFS=1 \
 	-DTAMP_LAZY_MATCHING=1 \
 	-DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR
+# c-test covers the same match finder the pip/Cython build opts into on
+# 64-bit hosts (the core defaults to the portable one); c-test-embedded
+# covers the portable path. Selections are mutually exclusive (compile
+# error), so this is applied only to the non-embedded tamp objects.
+CTEST_MATCH_DEFINE = -DTAMP_USE_DESKTOP_MATCH=1
 CTEST_CFLAGS = $(CTEST_INCLUDES) $(CTEST_SANITIZER_FLAGS) $(CTEST_DEFINES)
 # Strict warnings applied only to first-party tamp sources, not third-party (Unity/LittleFS/FatFs)
 CTEST_WARN_FLAGS = -Wall -Wextra -Wtype-limits -Werror
@@ -439,7 +447,7 @@ CTEST_TEST_OBJS = \
 # Build tamp source files for testing
 build/ctests/%.o: tamp/_c_src/tamp/%.c
 	@mkdir -p build/ctests
-	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -c $< -o $@
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_MATCH_DEFINE) $(CTEST_WARN_FLAGS) -c $< -o $@
 
 # Build Unity framework
 build/unity/unity.o: ctests/Unity/src/unity.c ctests/Unity/src/unity.h
@@ -475,20 +483,62 @@ build/ctests/fatfs_ramdisk.o: ctests/fatfs_ramdisk.c
 # Build test runner (includes test files via #include)
 build/ctests/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c ctests/test_stream.c ctests/test_stream_filesystems.c
 	@mkdir -p build/ctests
-	$(CTEST_CC) $(CTEST_CFLAGS)  -c $< -o $@
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_MATCH_DEFINE) -c $< -o $@
 
 # Link test executable
 build/test_runner: $(CTEST_TAMP_OBJS) $(CTEST_LFS_OBJS) $(CTEST_FATFS_OBJS) $(CTEST_TEST_OBJS)
 	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
 
-c-test: build/test_runner
+c-test: build/test_runner c-compile-matrix
 	./build/test_runner
+
+# Compile the vendored trio under every documented decompressor flag
+# combination. Regression guard: flag-gated code paths must always compile
+# (e.g. TAMP_FAST_DECODE_LOOP=1 with TAMP_EXTENDED=0 once referenced the
+# extended-only token_state field and only broke in that combination).
+C_COMPILE_MATRIX_CONFIGS = \
+	"" \
+	"-DTAMP_ARMV7EM=1" \
+	"-DTAMP_FAST_DECODE_LOOP=1" \
+	"-DTAMP_WINDOW_FROM_OUTPUT=1" \
+	"-DTAMP_EXTENDED=0" \
+	"-DTAMP_EXTENDED=0 -DTAMP_FAST_DECODE_LOOP=1" \
+	"-DTAMP_EXTENDED=0 -DTAMP_ARMV7EM=1" \
+	"-DTAMP_ARMV7EM=1 -DTAMP_COMPACT_CAREFUL_BODY=0" \
+	"-DTAMP_FAST_DECODE_LOOP=1 -DTAMP_COMPACT_CAREFUL_BODY=1" \
+	"-DTAMP_USE_MEMSET=0" \
+	"-DTAMP_STREAM=0" \
+	"-DTAMP_FIXED_WINDOW_BITS=10 -DTAMP_FIXED_LITERAL_BITS=8" \
+	"-DTAMP_FIXED_WINDOW_BITS=10 -DTAMP_FIXED_LITERAL_BITS=8 -DTAMP_ARMV7EM=1"
+
+.PHONY: c-compile-matrix
+c-compile-matrix:
+	@mkdir -p build
+	@set -e; for cfg in $(C_COMPILE_MATRIX_CONFIGS); do \
+		echo "c-compile-matrix: $$cfg"; \
+		for src in tamp/_c_src/tamp/common.c tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c; do \
+			$(CC) -O2 -Wall -Itamp/_c_src $$cfg -c $$src -o build/c_compile_matrix.o.tmp; \
+		done; \
+	done; rm -f build/c_compile_matrix.o.tmp
+	@set -e; for cfg in \
+		"-DTAMP_ESP32=1 -DTAMP_USE_DESKTOP_MATCH=1" \
+		"-DTAMP_USE_EMBEDDED_MATCH=1 -DTAMP_USE_DESKTOP_MATCH=1"; do \
+		echo "c-compile-matrix (must NOT compile): $$cfg"; \
+		if $(CC) -O2 -Wall -Itamp/_c_src $$cfg -c tamp/_c_src/tamp/common.c \
+			-o build/c_compile_matrix.o.tmp 2>/dev/null; then \
+			echo "c-compile-matrix: ERROR: conflicting match selection compiled: $$cfg"; \
+			rm -f build/c_compile_matrix.o.tmp; exit 1; \
+		fi; \
+	done; rm -f build/c_compile_matrix.o.tmp
+	@echo "c-compile-matrix: all configurations compile"
 
 clean-c-test:
 	@rm -f build/test_runner
 	@rm -f build/test_runner_embedded
+	@rm -f build/test_runner_prefilter
 	@rm -f build/ctests/*.o
 	@rm -f build/ctests-embedded/*.o
+	@rm -f build/ctests-prefilter/*.o
 	@rm -f build/unity/*.o
 
 # Embedded implementation tests (forces embedded find_best_match on desktop)
@@ -516,6 +566,34 @@ build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OB
 
 c-test-embedded: build/test_runner_embedded
 	./build/test_runner_embedded
+
+# Prefilter implementation tests (forces the ARMV7EM profile's find_best_match
+# on desktop; without this leg the shipping M4/M7 matcher is compile-checked
+# but never behaviorally run on host).
+.PHONY: c-test-prefilter
+
+CTEST_PREFILTER_TAMP_OBJS = \
+	build/ctests-prefilter/common.o \
+	build/ctests-prefilter/compressor.o \
+	build/ctests-prefilter/decompressor.o
+
+CTEST_PREFILTER_TEST_OBJS = \
+	build/unity/unity.o \
+	build/ctests-prefilter/test_runner.o
+
+build/ctests-prefilter/%.o: tamp/_c_src/tamp/%.c
+	@mkdir -p build/ctests-prefilter
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -DTAMP_USE_PREFILTER_MATCH=1 -c $< -o $@
+
+build/ctests-prefilter/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
+	@mkdir -p build/ctests-prefilter
+	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_PREFILTER_MATCH=1 -c $< -o $@
+
+build/test_runner_prefilter: $(CTEST_PREFILTER_TAMP_OBJS) $(CTEST_PREFILTER_TEST_OBJS) $(CTEST_LFS_OBJS) $(CTEST_FATFS_OBJS)
+	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
+
+c-test-prefilter: build/test_runner_prefilter
+	./build/test_runner_prefilter
 
 
 ############
@@ -558,9 +636,18 @@ fuzz-round-trip: build/fuzz_round_trip
 	@mkdir -p fuzz/corpus_round_trip
 	./build/fuzz_round_trip fuzz/corpus_round_trip
 
+# Builds the malicious-input decompressor fuzzer in every flag-gated code-path
+# configuration (portable, ARMV7EM profile, fast-loop-only, ESP32, extended
+# off, memset off, ...), replays the shared corpus, and fuzzes each briefly.
+# FUZZ_MATRIX_SECONDS overrides the per-config fuzz duration (default 90).
+.PHONY: fuzz-matrix
+fuzz-matrix:
+	@mkdir -p fuzz/corpus_decompressor
+	FUZZ_CC=$(FUZZ_CC) fuzz/fuzz-matrix.sh $(or $(FUZZ_MATRIX_SECONDS),90)
+
 fuzz-clean:
 	@rm -f build/fuzz_decompressor build/fuzz_round_trip
-	@rm -rf fuzz/corpus_decompressor fuzz/corpus_round_trip
+	@rm -rf fuzz/corpus_decompressor fuzz/corpus_round_trip build/fuzz_matrix
 	@rm -rf build/esp32_host build/fuzz_round_trip_esp32 build/esp32_host_differential fuzz/corpus_round_trip_esp32
 
 ##################################
@@ -762,6 +849,10 @@ binary-size:
 	@output=$$($(MAKE) -s mpy-viper-size 2>&1) && echo "$$output" || echo "Tamp (MicroPython Viper)           (requires mpy-cross)"
 	@output=$$($(MAKE) -s mpy-native-size 2>&1) && echo "$$output" || echo "Tamp (MicroPython Native)          (requires MPY_DIR)"
 	@output=$$($(MAKE) -s c-size 2>&1) && echo "$$output" || echo "Tamp (C)                           (requires arm-none-eabi-gcc)"
+
+.PHONY: benchmark-code-sizes
+benchmark-code-sizes:
+	@tools/benchmark-code-size.sh
 
 
 ##########

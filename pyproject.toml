@@ -230,6 +230,10 @@ convention = "numpy"
 "mpy_bindings/*.py" = [
     "F821",  # Undefined names
 ]
+"tools/qemu-profiler/profile.py" = [
+    "S603",  # subprocess calls are fixed local toolchain binaries (gcc, qemu, nm)
+    "S607",  # partial paths intentional: resolved via PATH like the Makefiles do
+]
 "tamp/*_viper.py" = [
     "F821",  # Undefined names (e.g. `ptr8`)
 ]

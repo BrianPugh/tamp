@@ -4,11 +4,14 @@
 #
 # Variables:
 #     RP2040_PORT   Serial port of the running benchmark (required for benchmark)
+#     RP2040_TAMP_OPT  Extra tamp compile definitions (semicolon-separated),
+#                      e.g. RP2040_TAMP_OPT="TAMP_FAST_DECODE_LOOP=1" for the
+#                      fastloop BENCHMARKS.md row. Empty = portable defaults.
 .PHONY: rp2040-device-build rp2040-device-flash rp2040-device-benchmark rp2040-device-help
 
 rp2040-device-build: build/enwik8-100kb build/enwik8-100kb-v1.tamp device-vectors
 	@[ -n "$$PICO_SDK_PATH" ] || { echo "Error: PICO_SDK_PATH is not set."; exit 1; }
-	cmake -B devices/rp2040/build -S devices/rp2040
+	cmake -B devices/rp2040/build -S devices/rp2040 -DTAMP_BENCH_DEFINES="$(RP2040_TAMP_OPT)"
 	$(MAKE) -C devices/rp2040/build tamp_benchmark
 
 rp2040-device-flash: rp2040-device-build

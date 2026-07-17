@@ -31,9 +31,13 @@ different platforms:
 - `compressor.h/c` - Compression implementation (sink/poll low-level API and
   higher-level compress/flush API)
 - `decompressor.h/c` - Decompression implementation
-- `compressor_find_match_desktop.c` - Desktop-optimized match finding (included
-  by `compressor.c` on 64-bit targets: x86_64, aarch64, unless
-  `TAMP_USE_EMBEDDED_MATCH=1`)
+- `common.c`/`compressor.c`/`decompressor.c` must compile standalone with only
+  the headers (users vendor these three files), so every implementation
+  reachable on embedded targets is defined inline. Only variants unreachable
+  there may live in `#include`'d files (`compressor_find_match_desktop.c` on
+  `x86_64`/`aarch64`, `compressor_find_match_swar32.c` opt-in) or come from a
+  platform component ESP32-style (extern `find_best_match`,
+  `private/tamp_copy.h`).
 
 ## Development Commands
 
@@ -234,8 +238,34 @@ make website-clean         # Clean website build artifacts
   (default: 32 bytes, 256+ recommended for performance)
 - `TAMP_STREAM_MEMORY` / `TAMP_STREAM_STDIO` / `TAMP_STREAM_LITTLEFS` /
   `TAMP_STREAM_FATFS` - Enable built-in I/O handlers for specific backends
-- `TAMP_USE_EMBEDDED_MATCH=1` - Force embedded `find_best_match` implementation
-  on desktop (for testing)
+- Platform tuning flags (see `common.h`'s "Platform performance tuning"
+  section): the core sources never select architecture-specific code on their
+  own - every flag defaults to the portable implementation, and each build
+  system opts into its platform's measured configuration (`setup.py` sets
+  `TAMP_USE_DESKTOP_MATCH=1` on 64-bit hosts, espidf Kconfig defaults
+  `TAMP_ESP32=y`, the STM32H7B0 harness sets `TAMP_ARMV7EM=1`):
+  - `TAMP_ARMV7EM=1` - profile for Cortex-M4/M7: enables the prefilter match
+    finder plus all six decompressor fast-path flags below (measured on
+    STM32H7B0/M7 vs the portable build: 1.31x compression, 1.92x decompression,
+    ~5.2 KB additional flash; M4 unmeasured on hardware)
+  - `TAMP_USE_EMBEDDED_MATCH=1` - the portable `find_best_match` (selections are
+    mutually exclusive, including `TAMP_ESP32`; conflicts are a compile error)
+  - `TAMP_USE_PREFILTER_MATCH` - first-byte prefilter (slower on 64-bit hosts)
+  - `TAMP_USE_DESKTOP_MATCH` - 64-bit SWAR for 64-bit hosts
+  - `TAMP_USE_SWAR32_MATCH` - experimental 32-bit SWAR (candidate for
+    single-issue cores like Cortex-M33)
+  - `TAMP_FAST_WINDOW_COPY` - no-wrap fast path in `tamp_window_copy` (+14%
+    decompression on M7; -3% Xtensa LX7, +160B Cortex-M0+)
+  - `TAMP_FAST_BIT_REFILL` - locals-based `refill_bit_buffer` (+5% decompression
+    on M7; -3% Xtensa LX7, +324B Cortex-M0+)
+  - `TAMP_FAST_OUTPUT_COPY` - word-at-a-time copy to the output buffer
+  - `TAMP_WINDOW_FROM_OUTPUT` - window update sourced from the just-written
+    output snapshot instead of `tamp_window_copy`
+  - `TAMP_FAST_DECODE_LOOP` - checked-once fast inner decode loop over a 64-bit
+    bit reservoir (the largest single decompression win)
+  - `TAMP_COMPACT_CAREFUL_BODY` - compile the non-fast-loop careful body -Os
+    (GCC-only; only sensible with `TAMP_FAST_DECODE_LOOP`) See `common.h` for
+    each flag's measured numbers.
 - `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
   environments without libc (e.g. MicroPython native modules).
 

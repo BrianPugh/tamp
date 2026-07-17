@@ -1,6 +1,7 @@
 """Builds the Cython extensions; all other packaging configuration is in pyproject.toml."""
 
 import os
+import platform
 import sys
 
 from setuptools import setup
@@ -52,6 +53,11 @@ def build_extensions():
     if os.environ.get("TAMP_USE_EMBEDDED_MATCH", "0") == "1":
         print("Using embedded find_best_match implementation")
         define_macros.append(("TAMP_USE_EMBEDDED_MATCH", "1"))
+    elif platform.machine().lower() in ("x86_64", "amd64", "arm64", "aarch64"):
+        # The core C sources default to portable code everywhere; each build
+        # system opts into its platform's measured configuration (see the
+        # platform tuning section in tamp/_c_src/tamp/common.h).
+        define_macros.append(("TAMP_USE_DESKTOP_MATCH", "1"))
 
     if profile:
         print("Setting profiling configuration.")

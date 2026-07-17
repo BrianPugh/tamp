@@ -3,63 +3,24 @@
  *
  * This is the highest-priority target since decompressors typically
  * handle untrusted input. We test across all valid window/literal
- * configurations, both with and without extended format.
+ * configurations, with and without extended format, and across
+ * fuzz-chosen input/output chunk sizes so the suspend/resume state
+ * machines (mid-token INPUT_EXHAUSTED, output-full skip_bytes /
+ * token_state resume, header-byte stash) run against malicious data,
+ * not just the happy full-buffer path.
+ *
+ * Build with the portable defaults AND with the ARMV7EM-profile flags
+ * (TAMP_FAST_DECODE_LOOP=1 TAMP_WINDOW_FROM_OUTPUT=1 TAMP_FAST_WINDOW_COPY=1
+ *  TAMP_FAST_BIT_REFILL=1 TAMP_FAST_OUTPUT_COPY=1) - the fast decode loop and
+ * the inline window-update variants are compiled out otherwise and would
+ * never be fuzzed.
  */
-#include "tamp/common.h"
-#include "tamp/decompressor.h"
+#include "decompressor_fuzz_case.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    if (size < 1) return 0;
-
-    // Use first byte to select configuration
-    uint8_t config_byte = data[0];
-    data++;
-    size--;
-
-    uint8_t window_bits = 8 + (config_byte & 0x07);  // 8-15
-    if (window_bits > 15) window_bits = 15;
-    uint8_t literal_bits = 5 + ((config_byte >> 3) & 0x03);  // 5-8
-    if (literal_bits > 8) literal_bits = 8;
-    bool extended = (config_byte >> 5) & 1;
-    bool use_header = (config_byte >> 6) & 1;
-
+    // Corpus byte contract + drive loop live in decompressor_fuzz_case.h,
+    // shared with the QEMU replay firmware so the encoding cannot diverge.
     unsigned char window[1 << 15];  // Max window size
-    TampDecompressor decompressor;
-    tamp_res res;
-
-    if (use_header) {
-        // Let the decompressor read the header from the stream
-        res = tamp_decompressor_init(&decompressor, NULL, window, 15);
-    } else {
-        TampConf conf = {
-            .window = window_bits,
-            .literal = literal_bits,
-            .use_custom_dictionary = 0,
-            .extended = extended,
-        };
-        res = tamp_decompressor_init(&decompressor, &conf, window, window_bits);
-    }
-    if (res != TAMP_OK) return 0;
-
     unsigned char output[4096];
-    size_t input_consumed_size = 0;
-    size_t output_written_size = 0;
-
-    // Decompress in chunks to exercise the output-full resume path
-    const unsigned char *remaining = data;
-    size_t remaining_size = size;
-
-    while (remaining_size > 0) {
-        size_t consumed = 0;
-        size_t written = 0;
-        res = tamp_decompressor_decompress(&decompressor, output, sizeof(output), &written, remaining, remaining_size,
-                                           &consumed);
-        remaining += consumed;
-        remaining_size -= consumed;
-
-        if (res < 0 && res != TAMP_INPUT_EXHAUSTED) break;
-        if (res == TAMP_INPUT_EXHAUSTED && consumed == 0) break;
-    }
-
-    return 0;
+    return tamp_fuzz_case_run(data, size, window, output, sizeof(output));
 }

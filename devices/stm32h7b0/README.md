@@ -28,6 +28,17 @@ make stm32h7b0-device-benchmark # Same, plus a BENCH/INFO summary block at the e
 
 No port variable is needed; OpenOCD auto-detects the ST-Link.
 
+Compile-time experiments can be passed through `EXTRA_CFLAGS`, e.g.
+`make stm32h7b0-device-benchmark EXTRA_CFLAGS=-DTAMP_USE_EMBEDDED_MATCH=1` to
+A/B the match-finder variants (the first-byte prefilter is the ARMv7E-M default;
+see `devices/BENCHMARKS.md` for measured rows).
+
+Memory placement guidance, measured on this harness: with I+D caches enabled,
+moving code to ITCM or the window buffer to DTCM changes performance by less
+than 1% (the 16 KB caches already cover the hot loops and window from internal
+flash/AXI SRAM). TCM placement only matters for cache-hostile configurations
+such as XiP from external QSPI or windows larger than the D-cache.
+
 The firmware configures the chip itself: LDO supply + VOS0, 280 MHz from PLL1
 (25 MHz HSE, M=5 N=112 P=2), flash latency 7, I+D caches, and a 1 MHz TIM2
 timebase. It prints `INFO` lines with register readbacks plus a DWT-vs-TIM2

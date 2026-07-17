@@ -25,11 +25,18 @@ CMSIS_HEADERS := \
 CC := arm-none-eabi-gcc
 TAMP_SRC := ../../tamp/_c_src
 
+# TAMP_ARMV7EM=1: opt into the measured Cortex-M7 configuration (the core C
+# sources default to portable code; see the platform tuning section in
+# common.h). EXTRA_CFLAGS passes experiment defines from the command line and
+# wins over earlier defines, e.g.
+#   make stm32h7b0-device-benchmark EXTRA_CFLAGS=-DTAMP_ARMV7EM=0
 CFLAGS := -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 \
 	-O3 -ggdb -ffunction-sections -fdata-sections \
 	-Wall -Wextra \
 	-DSTM32H7B0xx \
-	-I$(CMSIS) -I. -I../common -I$(TAMP_SRC)
+	-DTAMP_ARMV7EM=1 \
+	-I$(CMSIS) -I. -I../common -I$(TAMP_SRC) \
+	$(EXTRA_CFLAGS)
 
 # Full newlib (not nano): the harness prints %llu timings, which newlib-nano's
 # printf does not support. 128K of flash has plenty of room.
@@ -41,6 +48,9 @@ SRCS := startup.c system.c syscalls.c main.c \
 	$(TAMP_SRC)/tamp/common.c \
 	$(TAMP_SRC)/tamp/compressor.c \
 	$(TAMP_SRC)/tamp/decompressor.c
+
+# #include'd by compressor.c, not compiled separately - deps only.
+MATCH_VARIANTS := $(wildcard $(TAMP_SRC)/tamp/compressor_find_match_*.c)
 
 ELF := $(BUILD)/tamp_benchmark.elf
 
@@ -54,11 +64,18 @@ $(CMSIS)/core_cm7.h $(CMSIS)/cmsis_compiler.h $(CMSIS)/cmsis_gcc.h $(CMSIS)/cmsi
 	@mkdir -p $(CMSIS)
 	curl -fsSL $(CMSIS_CORE_URL)/$(notdir $@) -o $@
 
-$(ELF): $(SRCS) linker.ld $(CMSIS_HEADERS) Makefile
+# Rebuild when the flags change (the whole firmware is one compile+link, so
+# there are no per-object dependencies to catch this).
+FLAGSTAMP := $(BUILD)/cflags.stamp
+$(FLAGSTAMP): force
+	@mkdir -p $(BUILD)
+	@echo '$(CFLAGS)' | cmp -s - $(FLAGSTAMP) || echo '$(CFLAGS)' > $(FLAGSTAMP)
+
+$(ELF): $(SRCS) $(MATCH_VARIANTS) linker.ld $(CMSIS_HEADERS) Makefile $(FLAGSTAMP)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $@
 	arm-none-eabi-size $@
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean
+.PHONY: all clean force

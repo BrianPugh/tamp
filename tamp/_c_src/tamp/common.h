@@ -69,6 +69,141 @@ extern "C" {
 #define TAMP_OPTIMIZE_SIZE
 #endif
 
+/*******************************************************************************
+ * Platform performance tuning
+ *
+ * The core sources never select architecture-specific code on their own:
+ * every flag below defaults to the portable implementation. Build systems opt
+ * in to the measured configuration for their platform, mirroring TAMP_ESP32:
+ *
+ *   pip/Cython (setup.py):      TAMP_USE_DESKTOP_MATCH=1 on 64-bit hosts
+ *   espidf component (Kconfig): TAMP_ESP32 (default y)
+ *   ARMv7E-M (Cortex-M4/M7):    TAMP_ARMV7EM=1 (profile flag, see below)
+ *
+ * Individual flags can still be set/overridden with -D<flag>=0/1. Measured
+ * numbers below are from devices/BENCHMARKS.md workloads; when enabling a
+ * flag on an unmeasured core, benchmark it.
+ ******************************************************************************/
+
+/* Profile for ARMv7E-M cores (Cortex-M4/M7): little-endian with cheap
+ * unaligned loads. Enables the prefilter match finder and every decompressor
+ * fast path below (measured on STM32H7B0/Cortex-M7 vs the portable build:
+ * 1.31x compression, 1.92x decompression, ~5.2 KB additional flash). */
+#ifndef TAMP_ARMV7EM
+#define TAMP_ARMV7EM 0
+#endif
+
+/* find_best_match implementation (see compressor.c). At most one of these
+ * may be 1 (enforced below); with none set, the portable scan is used.
+ *   embedded:  portable single-byte-first scan, the default.
+ *   swar32:    experimental 32-bit SWAR (candidate for single-issue cores;
+ *              measured 0.93x on Cortex-M7 - opt-in only).
+ *   desktop:   64-bit SWAR for 64-bit hosts (little-endian, cheap unaligned
+ *              loads; measured ~2x the prefilter there).
+ *   prefilter: first-byte prefilter (1.36x compression on Cortex-M7;
+ *              ~0.5x on out-of-order 64-bit hosts). */
+#ifndef TAMP_USE_EMBEDDED_MATCH
+#define TAMP_USE_EMBEDDED_MATCH 0
+#endif
+#ifndef TAMP_USE_SWAR32_MATCH
+#define TAMP_USE_SWAR32_MATCH 0
+#endif
+#ifndef TAMP_USE_DESKTOP_MATCH
+#define TAMP_USE_DESKTOP_MATCH 0
+#endif
+#ifndef TAMP_USE_PREFILTER_MATCH
+#define TAMP_USE_PREFILTER_MATCH \
+    (TAMP_ARMV7EM && !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_SWAR32_MATCH && !TAMP_USE_DESKTOP_MATCH)
+#endif
+
+/* The selections are mutually exclusive; reject conflicting configurations
+ * loudly rather than silently picking one. TAMP_ESP32 counts as a selection:
+ * the espidf platform component provides find_best_match via extern, and
+ * compressor.c's dispatch checks it first, so combining it with an explicit
+ * TAMP_USE_*_MATCH would otherwise silently drop the requested finder. */
+#if (TAMP_USE_EMBEDDED_MATCH + TAMP_USE_SWAR32_MATCH + TAMP_USE_DESKTOP_MATCH + TAMP_USE_PREFILTER_MATCH + \
+     TAMP_ESP32) > 1
+#error "At most one find_best_match selection (TAMP_USE_*_MATCH / TAMP_ESP32) may be enabled"
+#endif
+
+/* tamp_window_copy variant with a no-wrap fast path (see common.c).
+ * Measured: +14% decompression on Cortex-M7; -3% on Xtensa LX7; ~+160 bytes
+ * on Cortex-M0/M0+ where flash is the scarce resource. */
+#ifndef TAMP_FAST_WINDOW_COPY
+#define TAMP_FAST_WINDOW_COPY TAMP_ARMV7EM
+#endif
+
+/* refill_bit_buffer on locals with a single writeback (see decompressor.c).
+ * Measured: +5% decompression on Cortex-M7; -3% on Xtensa LX7; +324 bytes on
+ * Cortex-M0/M0+ (register spills on the 8-register file). */
+#ifndef TAMP_FAST_BIT_REFILL
+#define TAMP_FAST_BIT_REFILL TAMP_ARMV7EM
+#endif
+
+/* Word-at-a-time TAMP_COPY_TO_OUTPUT (see decompressor.c). Requires cheap
+ * unaligned 32-bit access. */
+#ifndef TAMP_FAST_OUTPUT_COPY
+#define TAMP_FAST_OUTPUT_COPY TAMP_ARMV7EM
+#endif
+
+/* Source the window update from the just-written output snapshot instead of
+ * calling tamp_window_copy (see decompressor.c). Removes the call plus its
+ * reverse-copy overlap logic from the hot path. Measured: -4% (M7) / -6.7%
+ * (M4) core insns/byte, but +3% on Cortex-M0+ (inlining the update costs more
+ * than the call on the 8-register file), so it defaults off there. */
+#ifndef TAMP_WINDOW_FROM_OUTPUT
+#define TAMP_WINDOW_FROM_OUTPUT TAMP_ARMV7EM
+#endif
+
+/* Checked-once fast inner decode loop (see decompressor.c). Under a
+ * per-iteration precondition (>=4 input bytes, >=32 output bytes, no pending
+ * skip/extended/flush state, no callback) every mid-token bounds/exhaustion
+ * check on the classic token path is provably dead and removed. The loop keeps
+ * the undecoded bits in a 64-bit reservoir local and refills 4 whole bytes at
+ * a time only when <=32 bits remain (~every 1-2 tokens); on loop exit the
+ * reservoir is written back to the 32-bit struct bit_buffer, surplus whole
+ * bytes are pushed back to the input cursor, and a checked refill restores the
+ * >=25-bit invariant the careful body relies on. The reservoir alone (measured
+ * against an earlier fast-loop variant that refilled the 32-bit struct
+ * bit_buffer per token, since removed) was worth +14.2% decompression
+ * throughput on STM32H7B0/M7 hardware, +4.7% AND slightly smaller code on
+ * RP2040/M0+ hardware despite the __aeabi_ll* helper calls for the 64-bit
+ * shifts, and -12.0% core insns/byte on QEMU m33 (hardware-unverified) on the
+ * window=10 enwik8 workload. Duplicates the classic token path (a few hundred
+ * bytes of flash), so it defaults off on the portable/M0+ build and on where
+ * the platform profile already opts into the other fast paths. */
+#ifndef TAMP_FAST_DECODE_LOOP
+#define TAMP_FAST_DECODE_LOOP TAMP_ARMV7EM
+#endif
+
+/* Compile the careful body of tamp_decompressor_decompress_cb -Os (see
+ * decompressor.c; GCC-only, no-op elsewhere). Only sensible with
+ * TAMP_FAST_DECODE_LOOP, which routes every hot token through the extracted
+ * -O3 fast-loop function and leaves the careful body handling buffer tails,
+ * resume state, and extended dispatch glue. Measured on the window=10 enwik8
+ * workload: -872 B of decompressor .text on Cortex-M7 for no throughput
+ * change; +64 B on Cortex-M0+ (the 8-register file spills more under Os), so
+ * it stays off outside the ARMV7EM profile. */
+#ifndef TAMP_COMPACT_CAREFUL_BODY
+#define TAMP_COMPACT_CAREFUL_BODY TAMP_ARMV7EM
+#endif
+
+/* Compile-time-pinned stream configuration (opt-in; decompressor only).
+ * Most embedded deployments only ever decode streams produced with one fixed
+ * configuration. Defining these pins the window and/or literal bit counts at
+ * compile time: the decompressor folds every window_mask / window_size / bit
+ * shift to an immediate, and with BOTH pinned min_pattern_size becomes a
+ * compile-time constant too. A pinned build REJECTS (TAMP_INVALID_CONF) any
+ * stream whose header disagrees, so this is only safe when every stream really
+ * uses the pinned configuration.
+ *
+ * There is no default: leave them undefined for the normal runtime behavior
+ * (any valid window in [8,15] / literal in [5,8]). Valid pinned values match
+ * those ranges, e.g. -DTAMP_FIXED_WINDOW_BITS=10 -DTAMP_FIXED_LITERAL_BITS=8.
+ * They may be set independently. */
+/* #define TAMP_FIXED_WINDOW_BITS  10 */
+/* #define TAMP_FIXED_LITERAL_BITS 8  */
+
 /* TAMP_USE_MEMSET: Use libc memset (default: 1).
  * Set to 0 for environments without libc (e.g. MicroPython native modules).
  * When disabled, uses a volatile loop that prevents GCC from emitting a

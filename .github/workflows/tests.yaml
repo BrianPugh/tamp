@@ -178,6 +178,9 @@ jobs:
       - name: Run C tests (embedded find_best_match)
         run: make c-test-embedded
 
+      - name: Run C tests (prefilter find_best_match)
+        run: make c-test-prefilter
+
       - name: Verify CLI compression/decompression integrity
         run: |
           source .venv/bin/activate

@@ -26,6 +26,14 @@ target_include_directories(tamp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(tamp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 target_link_libraries(tamp PUBLIC pico_time)
 
+# Extra tamp compile definitions for A/B benchmark builds, e.g.
+# cmake -DTAMP_BENCH_DEFINES="TAMP_FAST_DECODE_LOOP=1" (semicolon-separated
+# for multiple). Empty (the portable defaults) unless explicitly set.
+set(TAMP_BENCH_DEFINES "" CACHE STRING "Extra tamp compile definitions (e.g. TAMP_FAST_DECODE_LOOP=1)")
+if(TAMP_BENCH_DEFINES)
+    target_compile_definitions(tamp PUBLIC ${TAMP_BENCH_DEFINES})
+endif()
+
 add_executable(tamp_benchmark main.c ../common/tamp_bench.c)
 target_link_libraries(tamp_benchmark tamp)
 
