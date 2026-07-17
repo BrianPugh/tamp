@@ -78,26 +78,200 @@ inline bool tamp_compressor_full(const TampCompressor* compressor) {
     return compressor->input_size == sizeof(compressor->input);
 }
 
+#if TAMP_USE_PREFILTER_MATCH || TAMP_USE_DESKTOP_MATCH
+/* Shared helpers for the 64-bit SWAR match finders (prefilter and desktop). */
+#include <string.h>  // for memcpy (portable unaligned loads)
+
+// MSVC compatibility for count trailing zeros
+#if defined(_MSC_VER)
+/* _BitScanForward64 exists only on x64/ARM64 MSVC targets; fail here with a
+ * clear message so a wrong opt-in doesn't surface as an unknown-identifier
+ * error inside tamp_ctzll (this shared block compiles before the finder
+ * files, so this guard also covers TAMP_USE_PREFILTER_MATCH). */
+#if !defined(_M_X64) && !defined(_M_ARM64)
+#error \
+    "TAMP_USE_DESKTOP_MATCH/TAMP_USE_PREFILTER_MATCH require a 64-bit MSVC target (x64/ARM64); use the portable matcher on 32-bit targets"
+#endif
+#include <intrin.h>
+static inline int tamp_ctzll(uint64_t value) {
+    unsigned long index;
+    _BitScanForward64(&index, value);
+    return (int)index;
+}
+#else
+#define tamp_ctzll(v) __builtin_ctzll(v)
+#endif
+
+/* Detect zero bytes in a 64-bit word (classic bit manipulation trick).
+ * Can have false positives when a zero byte is followed by 0x01-0x7F due to
+ * borrow propagation; callers re-verify every hit. */
+static inline uint64_t tamp_has_zero_byte(uint64_t v) {
+    return (v - 0x0101010101010101ULL) & ~v & 0x8080808080808080ULL;
+}
+
+/**
+ * @brief Extend a verified 2-byte candidate match at idx.
+ *
+ * Pure computation (callers update the best match): uses the pre-computed
+ * input_word_ext and input_bytes to avoid repeated read_input() calls.
+ *
+ * @return The match length at idx, or 0 when the best-length gate proves it
+ *         cannot beat the current best match.
+ *
+ * NOTE: an equivalent macro form measured ~3% faster compression on
+ * Cortex-M7 with GCC 15 (the inline boundary shifts register save/restore
+ * into the per-hit path); the function form is kept for maintainability.
+ */
+static inline uint8_t tamp_match_extend(const unsigned char* window, uint16_t window_size_minus_1,
+                                        uint8_t max_pattern_size, const uint8_t* input_bytes, uint64_t input_word_ext,
+                                        uint16_t idx, uint8_t best_match_size) {
+    /* Best-length gate: a strictly longer match must also agree at offset
+     * best_match_size, so a single byte compare rejects most candidates early. */
+    if (best_match_size && (TAMP_UNLIKELY((idx + best_match_size) > window_size_minus_1) ||
+                            TAMP_LIKELY(window[idx + best_match_size] != input_bytes[best_match_size])))
+        return 0;
+
+    uint8_t match_len = 2;
+
+    /* Try 8-byte comparison for bytes 2-9 using pre-computed input_word_ext */
+    if (max_pattern_size >= 10 && (idx + 9) <= window_size_minus_1) {
+        uint64_t window_word;
+        memcpy(&window_word, window + idx + 2, sizeof(uint64_t));
+        uint64_t diff = window_word ^ input_word_ext;
+        if (diff != 0) return 2 + (tamp_ctzll(diff) >> 3);
+        match_len = 10;
+    }
+
+    /* Byte-by-byte for the remainder using pre-loaded input_bytes */
+    for (uint8_t i = match_len; i < max_pattern_size; i++) {
+        if (TAMP_UNLIKELY((idx + i) > window_size_minus_1)) break;
+        if (TAMP_LIKELY(window[idx + i] != input_bytes[i])) break;
+        match_len = i + 1;
+    }
+    return match_len;
+}
+
+/* Update the best match with a freshly extended candidate; evaluates to
+ * true when the maximum possible match was found and scanning can stop. */
+#define TAMP_MATCH_UPDATE(idx, len)        \
+    (TAMP_UNLIKELY((len) > *match_size) && \
+     (*match_size = (len), *match_index = (idx), TAMP_UNLIKELY(*match_size == max_pattern_size)))
+#endif /* TAMP_USE_PREFILTER_MATCH || TAMP_USE_DESKTOP_MATCH */
+
 /*
- * Platform-specific find_best_match implementations:
+ * find_best_match implementations, selected by the flags from common.h's
+ * platform tuning section (the default is the portable embedded scan; build
+ * systems opt into their platform's measured configuration):
  *
  * 1. TAMP_ESP32: External implementation in espidf/tamp/compressor_esp32.cpp
  *
- * 2. Desktop 64-bit (x86_64, aarch64, Windows 64-bit):
- *    Included from compressor_find_match_desktop.c - uses bit manipulation
- *    and 64-bit loads for parallel match detection
+ * 2. TAMP_USE_PREFILTER_MATCH (via TAMP_ARMV7EM, Cortex-M4/M7): first-byte
+ *    prefilter, defined below.
  *
- * 3. Embedded/Default (Cortex-M0/M0+, other 32-bit):
- *    Defined below - single-byte-first comparison, safe for all architectures
+ * 3. TAMP_USE_DESKTOP_MATCH (64-bit hosts): included from
+ *    compressor_find_match_desktop.c - uses bit manipulation and 64-bit
+ *    loads for parallel match detection.
  *
- * Set TAMP_USE_EMBEDDED_MATCH=1 to force the embedded implementation on desktop
- * (useful for testing the embedded code path on CI).
+ * 4. Default: defined below - portable single-byte-first comparison, safe
+ *    for all architectures.
+ *
+ * Implementations reachable on embedded targets are defined inline so that
+ * common.c/compressor.c/decompressor.c compile standalone with only the
+ * headers; only desktop/experimental variants live in #include'd files.
  */
 
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor* compressor, uint16_t* match_index, uint8_t* match_size);
 
-#elif (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)) && !TAMP_USE_EMBEDDED_MATCH
+#elif TAMP_USE_PREFILTER_MATCH
+/* First-byte prefilter: SWAR-detect candidate positions holding the first
+ * input byte with one 64-bit load per 8 window positions, then verify the
+ * 2-byte seed with a 16-bit load per hit. Kept inline so compressor.c
+ * compiles standalone on embedded targets.
+ */
+/**
+ * @brief Find the best match for the current input buffer.
+ *
+ * First-byte prefilter: SWAR-detect candidate positions holding the first
+ * input byte, then verify the 2-byte seed with a 16-bit load per hit.
+ *
+ * @param[in,out] compressor TampCompressor object to perform search on.
+ * @param[out] match_index  If match_size is 0, this value is undefined.
+ * @param[out] match_size Size of best found match.
+ */
+static inline void find_best_match(TampCompressor* compressor, uint16_t* match_index, uint8_t* match_size) {
+    *match_size = 0;
+
+    if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return;
+
+    const uint16_t window_size_minus_1 = WINDOW_SIZE - 1;
+    const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
+    const unsigned char* window = compressor->window;
+
+    // Pre-load input bytes into linear array to avoid repeated modular arithmetic.
+    // Zero-initialized: entries at max_pattern_size and beyond are read when
+    // assembling input_word_ext below; their values never affect the result.
+    uint8_t input_bytes[16] = {0};
+    for (uint8_t i = 0; i < max_pattern_size && i < 16; i++) {
+        input_bytes[i] = read_input(i);
+    }
+
+    // Little-endian format to match direct memory loads
+    const uint16_t first_second = input_bytes[0] | (input_bytes[1] << 8);
+
+    // Broadcast pattern for detecting first_byte in parallel
+    const uint64_t first_pattern = 0x0101010101010101ULL * input_bytes[0];
+
+    // Pre-compute 64-bit input word for extension (bytes 2-9)
+    const uint64_t input_word_ext = (uint64_t)input_bytes[2] | ((uint64_t)input_bytes[3] << 8) |
+                                    ((uint64_t)input_bytes[4] << 16) | ((uint64_t)input_bytes[5] << 24) |
+                                    ((uint64_t)input_bytes[6] << 32) | ((uint64_t)input_bytes[7] << 40) |
+                                    ((uint64_t)input_bytes[8] << 48) | ((uint64_t)input_bytes[9] << 56);
+
+    uint16_t window_index = 0;
+
+    // Main loop: scan 8 positions per iteration with one 64-bit load. A hit
+    // at byte 7 verifies its pair byte via the unaligned 16-bit candidate
+    // load, so no overlapping second word is needed.
+    for (; window_index + 8 <= window_size_minus_1; window_index += 8) {
+        uint64_t word;
+        memcpy(&word, window + window_index, sizeof(uint64_t));
+
+        // Positions whose byte may equal the first input byte.
+        // Note: tamp_has_zero_byte can have false positives; the 16-bit candidate
+        // check below re-verifies every hit.
+        uint64_t hits = tamp_has_zero_byte(word ^ first_pattern);
+
+        while (hits) {
+            int byte_pos = tamp_ctzll(hits) >> 3;
+            uint16_t candidate;
+            memcpy(&candidate, window + window_index + byte_pos, sizeof(uint16_t));
+            if (TAMP_UNLIKELY(candidate == first_second)) {
+                uint8_t len = tamp_match_extend(window, window_size_minus_1, max_pattern_size, input_bytes,
+                                                input_word_ext, window_index + byte_pos, *match_size);
+                if (TAMP_MATCH_UPDATE(window_index + byte_pos, len)) return;
+            }
+            hits &= hits - 1;  // Clear lowest set bit
+        }
+    }
+
+    // Handle remaining positions
+    for (; window_index < window_size_minus_1; window_index++) {
+        uint16_t candidate;
+        memcpy(&candidate, window + window_index, sizeof(uint16_t));
+        if (TAMP_LIKELY(candidate != first_second)) {
+            continue;
+        }
+        uint8_t len = tamp_match_extend(window, window_size_minus_1, max_pattern_size, input_bytes, input_word_ext,
+                                        window_index, *match_size);
+        if (TAMP_MATCH_UPDATE(window_index, len)) return;
+    }
+}
+
+#elif TAMP_USE_SWAR32_MATCH
+#include "compressor_find_match_swar32.c"
+
+#elif TAMP_USE_DESKTOP_MATCH
 #include "compressor_find_match_desktop.c"
 
 #else
