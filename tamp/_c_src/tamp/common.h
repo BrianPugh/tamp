@@ -162,6 +162,18 @@ extern "C" {
 #define TAMP_FAST_DECODE_LOOP TAMP_ARMV7EM
 #endif
 
+/* Compile the careful body of tamp_decompressor_decompress_cb -Os (see
+ * decompressor.c; GCC-only, no-op elsewhere). Only sensible with
+ * TAMP_FAST_DECODE_LOOP, which routes every hot token through the extracted
+ * -O3 fast-loop function and leaves the careful body handling buffer tails,
+ * resume state, and extended dispatch glue. Measured on the window=10 enwik8
+ * workload: -872 B of decompressor .text on Cortex-M7 for no throughput
+ * change; +64 B on Cortex-M0+ (the 8-register file spills more under Os), so
+ * it stays off outside the ARMV7EM profile. */
+#ifndef TAMP_COMPACT_CAREFUL_BODY
+#define TAMP_COMPACT_CAREFUL_BODY TAMP_ARMV7EM
+#endif
+
 /* 64-bit bit reservoir over the fast decode loop (see decompressor.c). The
  * loop keeps the undecoded bits in a 64-bit local and refills 4 whole bytes at
  * a time only when <=32 bits remain (~every 1-2 tokens), replacing the

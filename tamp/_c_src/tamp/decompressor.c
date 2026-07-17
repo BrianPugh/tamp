@@ -819,12 +819,94 @@ static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bi
 
 #endif /* TAMP_RESERVOIR_REFILL */
 
+/* The hot fast loop, extracted from tamp_decompressor_decompress_cb so the
+ * surrounding careful body (cold in fast-loop builds: buffer tails, resume
+ * state, extended dispatch glue) can be compiled -Os while this stays -O3.
+ * Called once per outer-loop iteration, so the call overhead and the per-call
+ * conf reloads are amortized over every token the loop consumes. Cursors are
+ * passed by reference and written back on every exit; returns TAMP_OK on a
+ * normal exit (precondition failure or structural break - the caller re-checks
+ * pending/flush state) or TAMP_OOB on a malicious offset.
+ *
+ * Without TAMP_COMPACT_CAREFUL_BODY the whole function is inlined back into
+ * the -O3 careful body: keeping it outlined there costs flash (+304 B on M0+)
+ * for duplicated conf loads and call glue with no Os payoff. */
+#if TAMP_COMPACT_CAREFUL_BODY
+static TAMP_NOINLINE tamp_res
+#else
+static TAMP_ALWAYS_INLINE tamp_res
+#endif
+tamp_fast_decode_loop(TampDecompressor* decompressor, const unsigned char** input_p, const unsigned char* input_end,
+                      unsigned char** output_p, const unsigned char* output_end) {
+    const unsigned char* input = *input_p;
+    unsigned char* output = *output_p;
+    const uint8_t conf_window = TAMP_CONF_WINDOW_INIT(decompressor);
+    const uint8_t conf_literal = TAMP_CONF_LITERAL_INIT(decompressor);
+    const uint8_t min_pattern_size = TAMP_CONF_MIN_PATTERN_INIT(decompressor);
+    const uint16_t window_mask = (1 << conf_window) - 1;
+#if TAMP_EXTENDED_DECOMPRESS
+    const bool extended_enabled = decompressor->conf_extended;
+#endif
+    tamp_res res = TAMP_OK;
+/* Cursor writeback + return for the token-body macros' error paths; the
+ * caller's TAMP_DECOMP_RETURN derives the *_size accounting from the
+ * written-back cursors. */
+#define TAMP_DECOMP_RETURN(code) \
+    do {                         \
+        res = (code);            \
+        goto tamp_fast_done;     \
+    } while (0)
+#if TAMP_RESERVOIR_REFILL
+    /* Single token per iteration: the reservoir already amortizes the
+     * refill to ~one per 1-2 tokens, and a two-token unroll here
+     * measured SLOWER on real M7 hardware (H7B0: -3.1% throughput)
+     * while costing ~1 KB of flash. (QEMU insn counts disagree on M4:
+     * unroll -4% insns there; hardware-unverified.) */
+    uint64_t bb = (uint64_t)decompressor->bit_buffer << 32;
+    int32_t rbits = decompressor->bit_buffer_pos;
+    while ((size_t)(input_end - input) >= 4 && (size_t)(output_end - output) >= 32) {
+        TAMP_RES_REFILL();
+        TAMP_RES_TOKEN_BODY()
+    }
+    TAMP_RES_WRITEBACK();
+#else
+    /* Two-token unroll: one bounds check covers two token bodies (each
+     * plus its trailing refill), halving the per-token check overhead
+     * (M0+ fastloop: un-unrolling measured +8.7% insns). Margins are
+     * doubled (>=8 input, >=64 output) so both tokens' dead-check
+     * preconditions still hold. Top-up refills are unguarded: input
+     * was not touched during decode and the >=8-byte precondition
+     * leaves headroom for the two <=4-byte refills. */
+    while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
+        TAMP_FAST_TOKEN_BODY()
+        refill_bit_buffer_unchecked(decompressor, &input);
+        TAMP_FAST_TOKEN_BODY()
+        refill_bit_buffer_unchecked(decompressor, &input);
+    }
+#endif /* TAMP_RESERVOIR_REFILL */
+#undef TAMP_DECOMP_RETURN
+tamp_fast_done:
+    *input_p = input;
+    *output_p = output;
+    return res;
+}
+
 #endif /* TAMP_FAST_DECODE_LOOP */
 
 #if TAMP_HAS_GCC_OPTIMIZE
 #pragma GCC push_options
 #pragma GCC optimize("-fno-tree-pre")
 #endif
+/* With TAMP_COMPACT_CAREFUL_BODY every hot token goes through
+ * tamp_fast_decode_loop above and the remaining body (header parsing,
+ * resume/tail tokens, extended dispatch glue) is compiled for size. Without
+ * it the careful body keeps -O3: on portable builds it IS the hot loop. */
+#if TAMP_COMPACT_CAREFUL_BODY
+#define TAMP_DECOMPRESS_CB_OPT TAMP_OPTIMIZE_SIZE
+#else
+#define TAMP_DECOMPRESS_CB_OPT
+#endif
+TAMP_DECOMPRESS_CB_OPT
 tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigned char* output, size_t output_size,
                                          size_t* output_written_size, const unsigned char* input, size_t input_size,
                                          size_t* input_consumed_size, tamp_callback_t callback, void* user_data) {
@@ -956,45 +1038,15 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
          * structural break (FLUSH sets last_was_flush, extended sets
          * token_state) we continue the outer loop so its refill + extended
          * dispatch / double-FLUSH handling own those cases; a precondition
-         * failure falls through to the careful body with clean state. */
+         * failure (the final tokens of the buffer) falls through to the
+         * careful body with clean, topped-up state - a dedicated single-token
+         * tail loop was measured to add ~580 bytes of flash for no meaningful
+         * speedup, so the careful body owns the tail. */
         if (callback == NULL && decompressor->skip_bytes == 0 && TAMP_PENDING_TOKEN_STATE(decompressor) == 0 &&
             decompressor->last_was_flush == 0) {
-            /* A FLUSH / extended token breaks out; the guard below routes it
-             * to the outer loop. A precondition failure (the final tokens of
-             * the buffer) falls through to the careful body with clean,
-             * topped-up state - a dedicated single-token tail loop was
-             * measured to add ~580 bytes of flash for no meaningful speedup,
-             * so the careful body owns the tail. */
-#if TAMP_RESERVOIR_REFILL
-            /* Single token per iteration: the reservoir already amortizes the
-             * refill to ~one per 1-2 tokens, and a two-token unroll here
-             * measured SLOWER on real M7 hardware (H7B0: -3.1% throughput)
-             * while costing ~1 KB of flash. (QEMU insn counts disagree on M4:
-             * unroll -4% insns there; hardware-unverified.) */
-            uint64_t bb = (uint64_t)decompressor->bit_buffer << 32;
-            int32_t rbits = decompressor->bit_buffer_pos;
-            while ((size_t)(input_end - input) >= 4 && (size_t)(output_end - output) >= 32) {
-                TAMP_RES_REFILL();
-                TAMP_RES_TOKEN_BODY()
-            }
-            TAMP_RES_WRITEBACK();
+            res = tamp_fast_decode_loop(decompressor, &input, input_end, &output, output_end);
+            if (TAMP_UNLIKELY(res != TAMP_OK)) TAMP_DECOMP_RETURN(res);
             if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
-#else
-            /* Two-token unroll: one bounds check covers two token bodies (each
-             * plus its trailing refill), halving the per-token check overhead
-             * (M0+ fastloop: un-unrolling measured +8.7% insns). Margins are
-             * doubled (>=8 input, >=64 output) so both tokens' dead-check
-             * preconditions still hold. Top-up refills are unguarded: input
-             * was not touched during decode and the >=8-byte precondition
-             * leaves headroom for the two <=4-byte refills. */
-            while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-                TAMP_FAST_TOKEN_BODY()
-                refill_bit_buffer_unchecked(decompressor, &input);
-                TAMP_FAST_TOKEN_BODY()
-                refill_bit_buffer_unchecked(decompressor, &input);
-            }
-            if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
-#endif /* TAMP_RESERVOIR_REFILL */
         }
 #endif /* TAMP_FAST_DECODE_LOOP */
 

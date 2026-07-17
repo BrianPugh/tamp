@@ -87,9 +87,9 @@ VARIANTS = {
 # tamp_window_write_from_output_fn was uncounted, inflating M0+ deltas).
 CORE_SYMBOL_PREFIXES = (
     "tamp_decompressor_decompress_cb",
+    "tamp_fast_decode_loop",
     "tamp_window_copy",
     "tamp_window_write_from_output_fn",
-    "tamp_history_reconstruct",
     "decode_rle",
     "decode_extended_match",
     "decode_huffman",
