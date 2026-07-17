@@ -69,6 +69,62 @@ extern "C" {
 #define TAMP_OPTIMIZE_SIZE
 #endif
 
+/*******************************************************************************
+ * Platform performance tuning
+ *
+ * The core sources never select architecture-specific code on their own:
+ * every flag below defaults to the portable implementation. Build systems opt
+ * in to the measured configuration for their platform, mirroring TAMP_ESP32:
+ *
+ *   pip/Cython (setup.py):      TAMP_USE_DESKTOP_MATCH=1 on 64-bit hosts
+ *   espidf component (Kconfig): TAMP_ESP32 (default y)
+ *   ARMv7E-M (Cortex-M4/M7):    TAMP_ARMV7EM=1 (profile flag, see below)
+ *
+ * Individual flags can still be set/overridden with -D<flag>=0/1. Measured
+ * numbers below are from devices/BENCHMARKS.md workloads; when enabling a
+ * flag on an unmeasured core, benchmark it.
+ ******************************************************************************/
+
+/* Profile for ARMv7E-M cores (Cortex-M4/M7): little-endian with cheap
+ * unaligned loads. Enables the prefilter match finder (measured on
+ * STM32H7B0/Cortex-M7: 1.36x compression vs the portable scan). */
+#ifndef TAMP_ARMV7EM
+#define TAMP_ARMV7EM 0
+#endif
+
+/* find_best_match implementation (see compressor.c). At most one of these
+ * may be 1 (enforced below); with none set, the portable scan is used.
+ *   embedded:  portable single-byte-first scan, the default.
+ *   swar32:    experimental 32-bit SWAR (candidate for single-issue cores;
+ *              measured 0.93x on Cortex-M7 - opt-in only).
+ *   desktop:   64-bit SWAR for 64-bit hosts (little-endian, cheap unaligned
+ *              loads; measured ~2x the prefilter there).
+ *   prefilter: first-byte prefilter (1.36x compression on Cortex-M7;
+ *              ~0.5x on out-of-order 64-bit hosts). */
+#ifndef TAMP_USE_EMBEDDED_MATCH
+#define TAMP_USE_EMBEDDED_MATCH 0
+#endif
+#ifndef TAMP_USE_SWAR32_MATCH
+#define TAMP_USE_SWAR32_MATCH 0
+#endif
+#ifndef TAMP_USE_DESKTOP_MATCH
+#define TAMP_USE_DESKTOP_MATCH 0
+#endif
+#ifndef TAMP_USE_PREFILTER_MATCH
+#define TAMP_USE_PREFILTER_MATCH \
+    (TAMP_ARMV7EM && !TAMP_USE_EMBEDDED_MATCH && !TAMP_USE_SWAR32_MATCH && !TAMP_USE_DESKTOP_MATCH)
+#endif
+
+/* The selections are mutually exclusive; reject conflicting configurations
+ * loudly rather than silently picking one. TAMP_ESP32 counts as a selection:
+ * the espidf platform component provides find_best_match via extern, and
+ * compressor.c's dispatch checks it first, so combining it with an explicit
+ * TAMP_USE_*_MATCH would otherwise silently drop the requested finder. */
+#if (TAMP_USE_EMBEDDED_MATCH + TAMP_USE_SWAR32_MATCH + TAMP_USE_DESKTOP_MATCH + TAMP_USE_PREFILTER_MATCH + \
+     TAMP_ESP32) > 1
+#error "At most one find_best_match selection (TAMP_USE_*_MATCH / TAMP_ESP32) may be enabled"
+#endif
+
 /* TAMP_USE_MEMSET: Use libc memset (default: 1).
  * Set to 0 for environments without libc (e.g. MicroPython native modules).
  * When disabled, uses a volatile loop that prevents GCC from emitting a

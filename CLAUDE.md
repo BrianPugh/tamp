@@ -31,9 +31,13 @@ different platforms:
 - `compressor.h/c` - Compression implementation (sink/poll low-level API and
   higher-level compress/flush API)
 - `decompressor.h/c` - Decompression implementation
-- `compressor_find_match_desktop.c` - Desktop-optimized match finding (included
-  by `compressor.c` on 64-bit targets: x86_64, aarch64, unless
-  `TAMP_USE_EMBEDDED_MATCH=1`)
+- `common.c`/`compressor.c`/`decompressor.c` must compile standalone with only
+  the headers (users vendor these three files), so every implementation
+  reachable on embedded targets is defined inline. Only variants unreachable
+  there may live in `#include`'d files (`compressor_find_match_desktop.c` on
+  `x86_64`/`aarch64`, `compressor_find_match_swar32.c` opt-in) or come from a
+  platform component ESP32-style (extern `find_best_match`,
+  `private/tamp_copy.h`).
 
 ## Development Commands
 
@@ -226,8 +230,20 @@ make website-clean         # Clean website build artifacts
   (default: 32 bytes, 256+ recommended for performance)
 - `TAMP_STREAM_MEMORY` / `TAMP_STREAM_STDIO` / `TAMP_STREAM_LITTLEFS` /
   `TAMP_STREAM_FATFS` - Enable built-in I/O handlers for specific backends
-- `TAMP_USE_EMBEDDED_MATCH=1` - Force embedded `find_best_match` implementation
-  on desktop (for testing)
+- Platform tuning flags (see `common.h`'s "Platform performance tuning"
+  section): the core sources never select architecture-specific code on their
+  own - every flag defaults to the portable implementation, and each build
+  system opts into its platform's measured configuration (`setup.py` sets
+  `TAMP_USE_DESKTOP_MATCH=1` on 64-bit hosts, espidf Kconfig defaults
+  `TAMP_ESP32=y`):
+  - `TAMP_ARMV7EM=1` - profile for Cortex-M4/M7: enables the prefilter match
+    finder (measured on STM32H7B0/M7: 1.36x compression vs the portable scan)
+  - `TAMP_USE_EMBEDDED_MATCH=1` - the portable `find_best_match` (selections are
+    mutually exclusive, including `TAMP_ESP32`; conflicts are a compile error)
+  - `TAMP_USE_PREFILTER_MATCH` - first-byte prefilter (slower on 64-bit hosts)
+  - `TAMP_USE_DESKTOP_MATCH` - 64-bit SWAR for 64-bit hosts
+  - `TAMP_USE_SWAR32_MATCH` - experimental 32-bit SWAR (candidate for
+    single-issue cores like Cortex-M33)
 - `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
   environments without libc (e.g. MicroPython native modules).
 
