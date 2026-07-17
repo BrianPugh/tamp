@@ -84,6 +84,14 @@ inline bool tamp_compressor_full(const TampCompressor* compressor) {
 
 // MSVC compatibility for count trailing zeros
 #if defined(_MSC_VER)
+/* _BitScanForward64 exists only on x64/ARM64 MSVC targets; fail here with a
+ * clear message so a wrong opt-in doesn't surface as an unknown-identifier
+ * error inside tamp_ctzll (this shared block compiles before the finder
+ * files, so this guard also covers TAMP_USE_PREFILTER_MATCH). */
+#if !defined(_M_X64) && !defined(_M_ARM64)
+#error \
+    "TAMP_USE_DESKTOP_MATCH/TAMP_USE_PREFILTER_MATCH require a 64-bit MSVC target (x64/ARM64); use the portable matcher on 32-bit targets"
+#endif
 #include <intrin.h>
 static inline int tamp_ctzll(uint64_t value) {
     unsigned long index;
@@ -230,7 +238,7 @@ static inline void find_best_match(TampCompressor* compressor, uint16_t* match_i
         memcpy(&word, window + window_index, sizeof(uint64_t));
 
         // Positions whose byte may equal the first input byte.
-        // Note: HAS_ZERO_BYTE can have false positives; the 16-bit candidate
+        // Note: tamp_has_zero_byte can have false positives; the 16-bit candidate
         // check below re-verifies every hit.
         uint64_t hits = tamp_has_zero_byte(word ^ first_pattern);
 
