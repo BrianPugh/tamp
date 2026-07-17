@@ -16,6 +16,14 @@
  *     TAMP_MATCH_UPDATE.
  */
 
+/* Fail loudly on targets that can't provide the 64-bit intrinsics (e.g. MSVC
+ * x86: _BitScanForward64 exists only on x64/ARM64 targets, and would otherwise
+ * surface as an unresolved-symbol link error). Selection is a build-system
+ * decision, so a wrong opt-in must be a clear compile error. */
+#if defined(_MSC_VER) && !defined(_M_X64) && !defined(_M_ARM64)
+#error "TAMP_USE_DESKTOP_MATCH requires a 64-bit MSVC target (x64/ARM64); use the portable matcher on 32-bit targets"
+#endif
+
 /**
  * @brief Find the best match for the current input buffer.
  *
