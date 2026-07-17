@@ -172,11 +172,11 @@ extern "C" {
  * enwik8 workload: -17.3% (M4) / -16.2% (M7) core insns/byte, and +14.2%
  * decompression throughput on STM32H7B0 hardware (the reason it defaults on for
  * ARMV7EM). Composes with TAMP_FAST_DECODE_LOOP only (it replaces that loop's
- * bit handling) and is a no-op without it. Portable-core opt-in fast-loop
- * builds also profile favorably in QEMU despite the __aeabi_ll* helper calls
- * for 64-bit shifts (m0plus -6.9%, m33 -12.0% core insns/byte vs fast-loop
- * only), but only ARMV7EM is hardware-verified, so those cores must opt in
- * explicitly. */
+ * bit handling) and is a no-op without it. Hardware-verified on Cortex-M0+ too
+ * despite the __aeabi_ll* helper calls for 64-bit shifts: +4.7% decompression
+ * AND slightly smaller code on RP2040 stacked on TAMP_FAST_DECODE_LOOP=1 (the
+ * BENCHMARKS.md opt-in row). QEMU also profiles m33 favorably (-12.0% core
+ * insns/byte vs fast-loop only), hardware-unverified. */
 #ifndef TAMP_RESERVOIR_REFILL
 #define TAMP_RESERVOIR_REFILL TAMP_ARMV7EM
 #endif
