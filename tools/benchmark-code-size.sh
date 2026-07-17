@@ -85,8 +85,8 @@ else
     run_arm rp2040_default "rp2040 default (RP2040, C, -O3)" \
         -O3 -mcpu=cortex-m0plus -mthumb
 
-    run_arm rp2040_fastloop "rp2040 fastloop (RP2040, C, -O3, TAMP_FAST_DECODE_LOOP=1 TAMP_RESERVOIR_REFILL=1)" \
-        -O3 -mcpu=cortex-m0plus -mthumb -DTAMP_FAST_DECODE_LOOP=1 -DTAMP_RESERVOIR_REFILL=1
+    run_arm rp2040_fastloop "rp2040 fastloop (RP2040, C, -O3, TAMP_FAST_DECODE_LOOP=1)" \
+        -O3 -mcpu=cortex-m0plus -mthumb -DTAMP_FAST_DECODE_LOOP=1
 
     run_arm rp2040_mpy_native "rp2040 mpy-native (RP2040, MicroPython native module)" \
         -O2 -mcpu=cortex-m0plus -mthumb -DTAMP_STREAM=0 -DTAMP_USE_MEMSET=0

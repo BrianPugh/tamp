@@ -24,7 +24,7 @@ make rp2040-device-benchmark RP2040_PORT=/dev/tty.usbmodem...   # Capture a run
 builds; the default (empty) is the portable BENCHMARKS.md row:
 
 ```bash
-make rp2040-device-build RP2040_TAMP_OPT="TAMP_FAST_DECODE_LOOP=1;TAMP_RESERVOIR_REFILL=1"   # fastloop row
+make rp2040-device-build RP2040_TAMP_OPT="TAMP_FAST_DECODE_LOOP=1"   # fastloop row
 ```
 
 To flash: hold BOOTSEL while connecting USB, then `make rp2040-device-flash`.

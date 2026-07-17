@@ -154,10 +154,20 @@ extern "C" {
 /* Checked-once fast inner decode loop (see decompressor.c). Under a
  * per-iteration precondition (>=4 input bytes, >=32 output bytes, no pending
  * skip/extended/flush state, no callback) every mid-token bounds/exhaustion
- * check on the classic token path is provably dead and removed. Duplicates the
- * classic token path (a few hundred bytes of flash), so it defaults off on the
- * portable/M0+ build and on where the platform profile already opts into the
- * other fast paths. */
+ * check on the classic token path is provably dead and removed. The loop keeps
+ * the undecoded bits in a 64-bit reservoir local and refills 4 whole bytes at
+ * a time only when <=32 bits remain (~every 1-2 tokens); on loop exit the
+ * reservoir is written back to the 32-bit struct bit_buffer, surplus whole
+ * bytes are pushed back to the input cursor, and a checked refill restores the
+ * >=25-bit invariant the careful body relies on. The reservoir alone (measured
+ * against an earlier fast-loop variant that refilled the 32-bit struct
+ * bit_buffer per token, since removed) was worth +14.2% decompression
+ * throughput on STM32H7B0/M7 hardware, +4.7% AND slightly smaller code on
+ * RP2040/M0+ hardware despite the __aeabi_ll* helper calls for the 64-bit
+ * shifts, and -12.0% core insns/byte on QEMU m33 (hardware-unverified) on the
+ * window=10 enwik8 workload. Duplicates the classic token path (a few hundred
+ * bytes of flash), so it defaults off on the portable/M0+ build and on where
+ * the platform profile already opts into the other fast paths. */
 #ifndef TAMP_FAST_DECODE_LOOP
 #define TAMP_FAST_DECODE_LOOP TAMP_ARMV7EM
 #endif
@@ -172,25 +182,6 @@ extern "C" {
  * it stays off outside the ARMV7EM profile. */
 #ifndef TAMP_COMPACT_CAREFUL_BODY
 #define TAMP_COMPACT_CAREFUL_BODY TAMP_ARMV7EM
-#endif
-
-/* 64-bit bit reservoir over the fast decode loop (see decompressor.c). The
- * loop keeps the undecoded bits in a 64-bit local and refills 4 whole bytes at
- * a time only when <=32 bits remain (~every 1-2 tokens), replacing the
- * per-token refill_bit_buffer_unchecked and its branch. On loop exit the
- * reservoir is written back to the 32-bit struct bit_buffer, surplus whole
- * bytes are pushed back to the input cursor, and a checked refill restores the
- * >=25-bit invariant the careful body relies on. Measured on the window=10
- * enwik8 workload: -17.3% (M4) / -16.2% (M7) core insns/byte, and +14.2%
- * decompression throughput on STM32H7B0 hardware (the reason it defaults on for
- * ARMV7EM). Composes with TAMP_FAST_DECODE_LOOP only (it replaces that loop's
- * bit handling) and is a no-op without it. Hardware-verified on Cortex-M0+ too
- * despite the __aeabi_ll* helper calls for 64-bit shifts: +4.7% decompression
- * AND slightly smaller code on RP2040 stacked on TAMP_FAST_DECODE_LOOP=1 (the
- * BENCHMARKS.md opt-in row). QEMU also profiles m33 favorably (-12.0% core
- * insns/byte vs fast-loop only), hardware-unverified. */
-#ifndef TAMP_RESERVOIR_REFILL
-#define TAMP_RESERVOIR_REFILL TAMP_ARMV7EM
 #endif
 
 /* Compile-time-pinned stream configuration (opt-in; decompressor only).

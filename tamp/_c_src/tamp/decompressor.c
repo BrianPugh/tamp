@@ -541,82 +541,8 @@ static inline void refill_bit_buffer(TampDecompressor* d, const unsigned char** 
 #endif /* TAMP_FAST_BIT_REFILL */
 
 #if TAMP_FAST_DECODE_LOOP
-/**
- * @brief Refill bit buffer without the per-byte input-end guard.
- *
- * The fast decode loop only calls this when at least 4 input bytes are
- * available (its entry precondition), and the refill reads at most 4 bytes
- * (pos<=24 tops up in 8-bit steps from >=0), so the `in != input_end` guard of
- * refill_bit_buffer is provably dead here. Removing it is the branch-elimination
- * the fast loop exists to exploit.
- */
-#if !TAMP_RESERVOIR_REFILL
-/* The reservoir refill (TAMP_RESERVOIR_REFILL, the ARMV7EM default) replaces
- * the per-token refill/huffman helpers with bb/rbits-local decode, so these two
- * exist only for the non-reservoir fast loop (opt-in builds and
- * -DTAMP_RESERVOIR_REFILL=0). Guarded out when the reservoir is on, where they
- * would be unused and warn under -Werror. */
-static inline void refill_bit_buffer_unchecked(TampDecompressor* d, const unsigned char** input) {
-    const unsigned char* in = *input;
-    uint32_t bit_buffer = d->bit_buffer;
-    uint8_t bit_buffer_pos = d->bit_buffer_pos;
-    while (bit_buffer_pos <= 24) {
-        bit_buffer_pos += 8;
-        bit_buffer |= (uint32_t)*in++ << (32 - bit_buffer_pos);
-    }
-    d->bit_buffer = bit_buffer;
-    d->bit_buffer_pos = bit_buffer_pos;
-    *input = in;
-}
-
-/**
- * @brief Decode a huffman symbol with no trailing bits and no exhaustion check.
- *
- * Classic token path only (trailing_bits == 0). The fast loop guarantees
- * bit_buffer_pos >= 25 on entry and a classic token consumes at most 24 bits,
- * so decode_huffman's two TAMP_INPUT_EXHAUSTED checks are provably dead. The
- * symbol-0 branch and 7-bit table lookup are kept EXACTLY as decode_huffman
- * (the symbol-0 branch beats an unconditional load).
- */
-static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bit_buffer_pos) {
-    uint8_t huffman_value;
-    (*bit_buffer_pos)--;
-    if (TAMP_LIKELY((*bit_buffer >> 31) == 0)) {
-        /* Symbol 0: code "0" */
-        *bit_buffer <<= 1;
-        huffman_value = 0;
-    } else {
-        /* All other symbols: use 128-entry table indexed by next 7 bits */
-        *bit_buffer <<= 1;
-        uint8_t code = HUFFMAN_TABLE[*bit_buffer >> (32 - 7)];
-        uint8_t bit_len = code >> 4;
-        *bit_buffer <<= bit_len;
-        *bit_buffer_pos -= bit_len;
-        huffman_value = code & 0xF;
-    }
-    return huffman_value;
-}
-#endif /* !TAMP_RESERVOIR_REFILL */
-
-/* Fast-loop classic-token body, factored into a macro so it can be instantiated
- * more than once per bounds check (two-token unroll below). The two sub-macros
- * carry the preprocessor-conditional regions (extended-symbol break, window
- * update) that cannot live inside a single object-like macro body. The `break`
- * exits the enclosing while loop (the macro expands to a brace block, not a
- * loop/switch), so a FLUSH / extended token stops the unroll and the outer loop
- * takes over - identical semantics to the pre-unroll single-token loop. */
-#if TAMP_EXTENDED_DECOMPRESS
-#define TAMP_FAST_EXT_BREAK_(bb, bbp, ms)                                    \
-    if (TAMP_UNLIKELY(extended_enabled && (ms) >= TAMP_RLE_SYMBOL)) {        \
-        decompressor->bit_buffer = (bb);                                     \
-        decompressor->bit_buffer_pos = (bbp);                                \
-        decompressor->token_state = (uint8_t)((ms) - (TAMP_RLE_SYMBOL - 1)); \
-        break;                                                               \
-    }
-#else
-#define TAMP_FAST_EXT_BREAK_(bb, bbp, ms)
-#endif
-
+/* Window update for the fast-loop token body, selected by the same platform
+ * flags that pick the careful path's window-update strategy. */
 #if TAMP_WINDOW_FROM_OUTPUT
 #define TAMP_FAST_WINDOW_UPDATE_(wp, ms, wsz) \
     TAMP_WINDOW_WRITE_FROM_OUTPUT(decompressor->window, (wp), output - (ms), (ms), (wsz), window_mask)
@@ -629,54 +555,12 @@ static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bi
     TAMP_WINDOW_COPY(decompressor->window, &(wp), window_offset, (ms), window_mask)
 #endif
 
-#define TAMP_FAST_TOKEN_BODY()                                                                 \
-    {                                                                                          \
-        if (TAMP_UNLIKELY(decompressor->bit_buffer >> 31)) {                                   \
-            /* Literal: no exhaustion check, no last_was_flush clear. */                       \
-            uint32_t bit_buffer = decompressor->bit_buffer << 1;                               \
-            uint8_t literal = bit_buffer >> (32 - conf_literal);                               \
-            decompressor->bit_buffer = bit_buffer << conf_literal;                             \
-            decompressor->bit_buffer_pos -= (1 + conf_literal);                                \
-            uint16_t wp = decompressor->window_pos;                                            \
-            decompressor->window_pos = (wp + 1) & window_mask;                                 \
-            decompressor->window[wp] = literal;                                                \
-            *output++ = literal;                                                               \
-        } else {                                                                               \
-            uint32_t bit_buffer = decompressor->bit_buffer;                                    \
-            uint8_t bit_buffer_pos = decompressor->bit_buffer_pos;                             \
-            bit_buffer <<= 1; /* shift out the is_literal flag */                              \
-            bit_buffer_pos--;                                                                  \
-            uint8_t match_size = decode_huffman_unchecked(&bit_buffer, &bit_buffer_pos);       \
-            if (TAMP_UNLIKELY(match_size == FLUSH)) {                                          \
-                decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);                 \
-                decompressor->bit_buffer_pos = bit_buffer_pos & ~7;                            \
-                decompressor->last_was_flush = 1;                                              \
-                break;                                                                         \
-            }                                                                                  \
-            TAMP_FAST_EXT_BREAK_(bit_buffer, bit_buffer_pos, match_size)                       \
-            match_size += min_pattern_size;                                                    \
-            uint16_t window_offset = bit_buffer >> (32 - conf_window);                         \
-            const uint32_t window_size = (1u << conf_window);                                  \
-            /* OOB security check (non-negotiable). */                                         \
-            if (TAMP_UNLIKELY((uint32_t)window_offset > window_size - (uint32_t)match_size)) { \
-                TAMP_DECOMP_RETURN(TAMP_OOB);                                                  \
-            }                                                                                  \
-            decompressor->bit_buffer = bit_buffer << conf_window;                              \
-            decompressor->bit_buffer_pos = bit_buffer_pos - conf_window;                       \
-            TAMP_COPY_TO_OUTPUT(output, decompressor->window + window_offset, match_size);     \
-            uint16_t wp = decompressor->window_pos;                                            \
-            TAMP_FAST_WINDOW_UPDATE_(wp, match_size, window_size);                             \
-            decompressor->window_pos = wp;                                                     \
-        }                                                                                      \
-    }
-
-#if TAMP_RESERVOIR_REFILL
-/* TAMP_RESERVOIR_REFILL: 64-bit bit reservoir over the fast decode loop (see
- * common.h for the flag and measured numbers). `bb` holds valid bits in its top
- * `rbits` bits; a decode reads
- * the top 32 (`bb >> 32`). A single unconditional 4-byte refill fires only when
- * <=32 valid bits remain (~every 1-2 tokens), replacing the per-token
- * refill_bit_buffer_unchecked. bb's bits below the top `rbits` are always zero
+/* The fast loop decodes from a 64-bit bit reservoir (see common.h,
+ * TAMP_FAST_DECODE_LOOP, for the measured numbers). `bb` holds valid bits in
+ * its top `rbits` bits; a decode reads the top 32 (`bb >> 32`). A single
+ * unconditional 4-byte refill fires only when <=32 valid bits remain (~every
+ * 1-2 tokens), instead of a per-token refill of the 32-bit struct bit_buffer.
+ * bb's bits below the top `rbits` are always zero
  * inside the loop (consumption `bb <<=` shifts zeros in at the bottom; each
  * refill ORs a chunk into exactly that zero region, contiguous with the live
  * bits), which the writeback mask relies on.
@@ -722,9 +606,7 @@ static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bi
  * precondition) with rbits as low as ~9, so bit_buffer_pos would be < 25. The
  * careful body runs immediately after a precondition exit with NO intervening
  * refill and needs up to 24 bits for one classic token, so it would return
- * TAMP_INPUT_EXHAUSTED prematurely (mid-buffer) without this top-up. The
- * non-reservoir fast loop keeps pos >= 25 via its per-token unchecked refill;
- * the reservoir restores the same guarantee here. */
+ * TAMP_INPUT_EXHAUSTED prematurely (mid-buffer) without this top-up. */
 #define TAMP_RES_WRITEBACK()                                \
     do {                                                    \
         while (rbits > 32) {                                \
@@ -741,7 +623,7 @@ static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bi
 /* Extended-symbol break for the reservoir plain body: consume only the
  * is_literal + type-huffman bits (decode_rle/decode_extended_match re-decode
  * the count/window-offset from the committed bit_buffer), set token_state,
- * break. Mirrors TAMP_FAST_EXT_BREAK_. Empty in classic-only builds. */
+ * break. Empty in classic-only builds. */
 #if TAMP_EXTENDED_DECOMPRESS
 #define TAMP_RES_EXT_BREAK_(cons, ms)                                        \
     if (TAMP_UNLIKELY(extended_enabled && (ms) >= TAMP_RLE_SYMBOL)) {        \
@@ -754,11 +636,10 @@ static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bi
 #define TAMP_RES_EXT_BREAK_(cons, ms)
 #endif
 
-/* Reservoir classic-token body (writes the ring), decoding from bb/rbits.
- * Bit-for-bit identical token decode to TAMP_FAST_TOKEN_BODY; only the buffer
- * representation differs. FLUSH aligns to the next stream byte boundary the
- * same way `bit_buffer_pos & ~7` does: the padding to skip equals post & 7
- * where post = rbits - consumed (post ~= -consumed_total mod 8). */
+/* Fast-loop classic-token body (writes the ring), decoding from bb/rbits.
+ * FLUSH aligns to the next stream byte boundary the same way
+ * `bit_buffer_pos & ~7` does: the padding to skip equals post & 7 where
+ * post = rbits - consumed (post ~= -consumed_total mod 8). */
 #define TAMP_RES_TOKEN_BODY()                                                                  \
     {                                                                                          \
         uint32_t _top = (uint32_t)(bb >> 32);                                                  \
@@ -817,8 +698,6 @@ static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bi
         }                                                                                      \
     }
 
-#endif /* TAMP_RESERVOIR_REFILL */
-
 /* The hot fast loop, extracted from tamp_decompressor_decompress_cb so the
  * surrounding careful body (cold in fast-loop builds: buffer tails, resume
  * state, extended dispatch glue) can be compiled -Os while this stays -O3.
@@ -856,7 +735,6 @@ tamp_fast_decode_loop(TampDecompressor* decompressor, const unsigned char** inpu
         res = (code);            \
         goto tamp_fast_done;     \
     } while (0)
-#if TAMP_RESERVOIR_REFILL
     /* Single token per iteration: the reservoir already amortizes the
      * refill to ~one per 1-2 tokens, and a two-token unroll here
      * measured SLOWER on real M7 hardware (H7B0: -3.1% throughput)
@@ -869,21 +747,6 @@ tamp_fast_decode_loop(TampDecompressor* decompressor, const unsigned char** inpu
         TAMP_RES_TOKEN_BODY()
     }
     TAMP_RES_WRITEBACK();
-#else
-    /* Two-token unroll: one bounds check covers two token bodies (each
-     * plus its trailing refill), halving the per-token check overhead
-     * (M0+ fastloop: un-unrolling measured +8.7% insns). Margins are
-     * doubled (>=8 input, >=64 output) so both tokens' dead-check
-     * preconditions still hold. Top-up refills are unguarded: input
-     * was not touched during decode and the >=8-byte precondition
-     * leaves headroom for the two <=4-byte refills. */
-    while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-        TAMP_FAST_TOKEN_BODY()
-        refill_bit_buffer_unchecked(decompressor, &input);
-        TAMP_FAST_TOKEN_BODY()
-        refill_bit_buffer_unchecked(decompressor, &input);
-    }
-#endif /* TAMP_RESERVOIR_REFILL */
 #undef TAMP_DECOMP_RETURN
 tamp_fast_done:
     *input_p = input;
@@ -1201,15 +1064,11 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
 #pragma GCC pop_options
 #endif
 #if TAMP_FAST_DECODE_LOOP
-#undef TAMP_FAST_TOKEN_BODY
 #undef TAMP_FAST_WINDOW_UPDATE_
-#undef TAMP_FAST_EXT_BREAK_
-#if TAMP_RESERVOIR_REFILL
 #undef TAMP_RES_REFILL
 #undef TAMP_RES_WRITEBACK
 #undef TAMP_RES_EXT_BREAK_
 #undef TAMP_RES_TOKEN_BODY
-#endif
 #endif
 
 #if TAMP_STREAM
