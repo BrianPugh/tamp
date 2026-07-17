@@ -3,12 +3,9 @@
 All rows measure the same workload: compressing and decompressing the **first
 100 KB of [enwik8](https://mattmahoney.net/dc/textdata.html)** with a 1 KB
 window (`window=10`, `literal=8`), in the classic (v1, non-extended) stream
-format. Note that `TAMP_HISTORY_WINDOW` (part of `TAMP_ARMV7EM=1`) accelerates
-classic streams specifically, so extended-format deployments should expect
-smaller decompression gains from that profile than these rows show. Throughput
-is input bytes per second for compression and output bytes per second for
-decompression. Reproduce with the `*-device-benchmark` Makefile targets (see the
-per-device directories here).
+format. Throughput is input bytes per second for compression and output bytes
+per second for decompression. Reproduce with the `*-device-benchmark` Makefile
+targets (see the per-device directories here).
 
 The "Tamp options" column lists the compile-time flags that reproduce that build
 when using Tamp as a library (`—` = none: the portable defaults). The available

@@ -26,14 +26,11 @@ CORPUS=fuzz/corpus_decompressor
 # name:flags — one entry per distinct decompressor code-path configuration.
 CONFIGS=(
     "portable:"
+    # Fast loop with the reservoir explicitly off (the non-reservoir permanent
+    # path, reachable via -DTAMP_RESERVOIR_REFILL=0 and on portable fast-loop opt-ins).
     "v7em:-DTAMP_FAST_DECODE_LOOP=1 -DTAMP_WINDOW_FROM_OUTPUT=1 -DTAMP_FAST_WINDOW_COPY=1 -DTAMP_FAST_BIT_REFILL=1 -DTAMP_FAST_OUTPUT_COPY=1"
-    "v7em_history:-DTAMP_FAST_DECODE_LOOP=1 -DTAMP_WINDOW_FROM_OUTPUT=1 -DTAMP_FAST_WINDOW_COPY=1 -DTAMP_FAST_BIT_REFILL=1 -DTAMP_FAST_OUTPUT_COPY=1 -DTAMP_HISTORY_WINDOW=1"
-    # Shipping ARMV7EM default: full fast-loop + history + 64-bit reservoir refill.
-    "v7em_reservoir:-DTAMP_FAST_DECODE_LOOP=1 -DTAMP_WINDOW_FROM_OUTPUT=1 -DTAMP_FAST_WINDOW_COPY=1 -DTAMP_FAST_BIT_REFILL=1 -DTAMP_FAST_OUTPUT_COPY=1 -DTAMP_HISTORY_WINDOW=1 -DTAMP_RESERVOIR_REFILL=1"
-    # Same profile with the reservoir explicitly off (the other permanent path,
-    # reachable via -DTAMP_RESERVOIR_REFILL=0 and on portable fast-loop opt-ins).
-    "reservoir_off_v7em:-DTAMP_FAST_DECODE_LOOP=1 -DTAMP_WINDOW_FROM_OUTPUT=1 -DTAMP_FAST_WINDOW_COPY=1 -DTAMP_FAST_BIT_REFILL=1 -DTAMP_FAST_OUTPUT_COPY=1 -DTAMP_HISTORY_WINDOW=1 -DTAMP_RESERVOIR_REFILL=0"
-    "history_classic:-DTAMP_EXTENDED=0 -DTAMP_FAST_DECODE_LOOP=1 -DTAMP_HISTORY_WINDOW=1"
+    # Shipping ARMV7EM default: full fast-loop + 64-bit reservoir refill.
+    "v7em_reservoir:-DTAMP_FAST_DECODE_LOOP=1 -DTAMP_WINDOW_FROM_OUTPUT=1 -DTAMP_FAST_WINDOW_COPY=1 -DTAMP_FAST_BIT_REFILL=1 -DTAMP_FAST_OUTPUT_COPY=1 -DTAMP_RESERVOIR_REFILL=1"
     "fastloop_only:-DTAMP_FAST_DECODE_LOOP=1"
     "window_from_output_portable:-DTAMP_WINDOW_FROM_OUTPUT=1"
     "no_extended:-DTAMP_EXTENDED=0"

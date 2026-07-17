@@ -670,104 +670,6 @@ static inline uint8_t decode_huffman_unchecked(uint32_t* bit_buffer, uint8_t* bi
         }                                                                                      \
     }
 
-#if TAMP_HISTORY_WINDOW
-/* Rebuild the ring buffer from the last window_size output bytes after a
- * history-window run, restoring the invariant the careful body relies on. The
- * newest output byte (output_cursor[-1]) belongs at ring[(window_pos-1) & mask]
- * and distances grow backward from there, so the tail splits into two linear
- * segments at the ring wrap. output and window are distinct buffers, so both
- * segments are plain non-overlapping forward copies. Amortized cost is <= ~1
- * byte-copy per output byte: arming a run consumes window_size fresh contiguous
- * output bytes, each paid back by at most this window_size reconstruction.
- * NOINLINE: runs only on fast-loop exit, never in the per-token hot path. */
-static void TAMP_NOINLINE tamp_history_reconstruct(unsigned char* window, const unsigned char* output_cursor,
-                                                   uint16_t window_pos, uint32_t window_size) {
-    const unsigned char* tail = output_cursor - window_size;
-    uint32_t seg1 = window_size - window_pos; /* fills ring[window_pos .. window_size) */
-    unsigned char* d = window + window_pos;
-    const unsigned char* s = tail;
-    for (uint32_t phase = 0; phase < 2; phase++) {
-        uint32_t n = phase ? window_pos : seg1;
-        while (n >= 4) {
-            uint32_t w;
-            __builtin_memcpy(&w, s, 4);
-            __builtin_memcpy(d, &w, 4);
-            d += 4;
-            s += 4;
-            n -= 4;
-        }
-        while (n--) *d++ = *s++;
-        d = window; /* second segment fills ring[0 .. window_pos) from the tail remainder */
-    }
-}
-
-/* History-mode classic-token body: identical decode to TAMP_FAST_TOKEN_BODY but
- * the window is NOT written (rebuilt in bulk on exit) and matches are served
- * from the output history instead of the ring. Structural breaks (FLUSH /
- * extended) behave exactly as the non-history body; the caller reconstructs the
- * ring after the loop. A match whose ring source straddles window_pos (the
- * newest/oldest seam) has no contiguous output-history image: it breaks WITHOUT
- * committing the token so the careful body re-decodes it against the
- * reconstructed ring. */
-#define TAMP_FAST_TOKEN_BODY_HISTORY()                                                                         \
-    {                                                                                                          \
-        if (TAMP_UNLIKELY(decompressor->bit_buffer >> 31)) {                                                   \
-            /* Literal: no window store in history mode. */                                                    \
-            uint32_t bit_buffer = decompressor->bit_buffer << 1;                                               \
-            uint8_t literal = bit_buffer >> (32 - conf_literal);                                               \
-            decompressor->bit_buffer = bit_buffer << conf_literal;                                             \
-            decompressor->bit_buffer_pos -= (1 + conf_literal);                                                \
-            decompressor->window_pos = (decompressor->window_pos + 1) & window_mask;                           \
-            *output++ = literal;                                                                               \
-        } else {                                                                                               \
-            uint32_t bit_buffer = decompressor->bit_buffer;                                                    \
-            uint8_t bit_buffer_pos = decompressor->bit_buffer_pos;                                             \
-            bit_buffer <<= 1; /* shift out the is_literal flag */                                              \
-            bit_buffer_pos--;                                                                                  \
-            uint8_t match_size = decode_huffman_unchecked(&bit_buffer, &bit_buffer_pos);                       \
-            if (TAMP_UNLIKELY(match_size == FLUSH)) {                                                          \
-                decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);                                 \
-                decompressor->bit_buffer_pos = bit_buffer_pos & ~7;                                            \
-                decompressor->last_was_flush = 1;                                                              \
-                break;                                                                                         \
-            }                                                                                                  \
-            TAMP_FAST_EXT_BREAK_(bit_buffer, bit_buffer_pos, match_size)                                       \
-            match_size += min_pattern_size;                                                                    \
-            uint16_t window_offset = bit_buffer >> (32 - conf_window);                                         \
-            const uint32_t window_size = (1u << conf_window);                                                  \
-            /* OOB security check (non-negotiable); rebuild the ring first so a                                \
-             * caller inspecting it after the error sees consistent state. */                                  \
-            if (TAMP_UNLIKELY((uint32_t)window_offset > window_size - (uint32_t)match_size)) {                 \
-                tamp_history_reconstruct(decompressor->window, output, decompressor->window_pos, window_size); \
-                TAMP_DECOMP_RETURN(TAMP_OOB);                                                                  \
-            }                                                                                                  \
-            uint16_t wp = decompressor->window_pos;                                                            \
-            /* Distance from the output cursor back to the match source (ring index                            \
-             * window_offset). dist in [1, window_size]; window_size when                                      \
-             * window_offset == wp (oldest byte). A valid classic match copies a                               \
-             * contiguous run of window_size-bounded ring bytes, so dist >= match_size                         \
-             * unless the run straddles wp - the one case with no contiguous output                            \
-             * image, bailed below. */                                                                         \
-            uint16_t dist = (uint16_t)(((wp - window_offset - 1) & window_mask) + 1);                          \
-            if (TAMP_UNLIKELY(dist < match_size)) {                                                            \
-                /* Seam-crossing match: leave the token uncommitted and let the                                \
-                 * careful body handle it against the reconstructed ring. */                                   \
-                break;                                                                                         \
-            }                                                                                                  \
-            decompressor->bit_buffer = bit_buffer << conf_window;                                              \
-            decompressor->bit_buffer_pos = bit_buffer_pos - conf_window;                                       \
-            /* Snapshot the source pointer before the copy: it aliases the output                              \
-             * buffer, and passing an output-derived expression into the byte-loop                             \
-             * copy would read and advance `output` in one unsequenced expression.                             \
-             * dist >= match_size, so [msrc, msrc+match_size) is fully written and                             \
-             * never overlaps the destination: the word copy is safe. */                                       \
-            const unsigned char* msrc = output - dist;                                                         \
-            TAMP_COPY_TO_OUTPUT(output, msrc, match_size);                                                     \
-            decompressor->window_pos = (wp + match_size) & window_mask;                                        \
-        }                                                                                                      \
-    }
-#endif /* TAMP_HISTORY_WINDOW */
-
 #if TAMP_RESERVOIR_REFILL
 /* TAMP_RESERVOIR_REFILL: 64-bit bit reservoir over the fast decode loop (see
  * common.h for the flag and measured numbers). `bb` holds valid bits in its top
@@ -915,74 +817,6 @@ static void TAMP_NOINLINE tamp_history_reconstruct(unsigned char* window, const 
         }                                                                                      \
     }
 
-#if TAMP_HISTORY_WINDOW
-/* Reservoir history-mode body: same decode as TAMP_RES_TOKEN_BODY, but no ring
- * write (rebuilt in bulk on exit) and matches served from the output history.
- * Extended is disabled in history mode, so no extended break. The seam-crossing
- * bail leaves the token UNCOMMITTED - bb/rbits are NOT advanced past it, so the
- * post-loop writeback rebuilds bit_buffer pointing at this token's first bit and
- * the careful body re-decodes it against the reconstructed ring. */
-#define TAMP_RES_TOKEN_BODY_HISTORY()                                                                          \
-    {                                                                                                          \
-        uint32_t _top = (uint32_t)(bb >> 32);                                                                  \
-        if (TAMP_UNLIKELY(_top >> 31)) {                                                                       \
-            /* Literal: no ring store in history mode. */                                                      \
-            uint32_t _t = _top << 1;                                                                           \
-            uint8_t literal = _t >> (32 - conf_literal);                                                       \
-            bb <<= (1 + conf_literal);                                                                         \
-            rbits -= (int32_t)(1 + conf_literal);                                                              \
-            decompressor->window_pos = (decompressor->window_pos + 1) & window_mask;                           \
-            *output++ = literal;                                                                               \
-        } else {                                                                                               \
-            uint32_t _t = _top << 1; /* shift out the is_literal flag */                                       \
-            uint32_t consumed = 1;                                                                             \
-            uint8_t match_size;                                                                                \
-            if (TAMP_LIKELY((_t >> 31) == 0)) {                                                                \
-                _t <<= 1;                                                                                      \
-                consumed += 1;                                                                                 \
-                match_size = 0;                                                                                \
-            } else {                                                                                           \
-                _t <<= 1;                                                                                      \
-                uint8_t code = HUFFMAN_TABLE[_t >> (32 - 7)];                                                  \
-                uint8_t bit_len = code >> 4;                                                                   \
-                _t <<= bit_len;                                                                                \
-                consumed += 1 + bit_len;                                                                       \
-                match_size = code & 0xF;                                                                       \
-            }                                                                                                  \
-            if (TAMP_UNLIKELY(match_size == FLUSH)) {                                                          \
-                int32_t post = rbits - (int32_t)consumed;                                                      \
-                uint32_t align = (uint32_t)(post & 7);                                                         \
-                bb <<= (consumed + align);                                                                     \
-                rbits = post - (int32_t)align;                                                                 \
-                decompressor->last_was_flush = 1;                                                              \
-                break;                                                                                         \
-            }                                                                                                  \
-            match_size += min_pattern_size;                                                                    \
-            uint16_t window_offset = _t >> (32 - conf_window);                                                 \
-            const uint32_t window_size = (1u << conf_window);                                                  \
-            if (TAMP_UNLIKELY((uint32_t)window_offset > window_size - (uint32_t)match_size)) {                 \
-                /* Commit the reservoir (OOB token uncommitted: bb/rbits not                                   \
-                 * advanced past it) so bit_buffer / bit_buffer_pos / input stay                               \
-                 * consistent with the offending token, then rebuild the ring for a                            \
-                 * caller that inspects the window after the error. */                                         \
-                TAMP_RES_WRITEBACK();                                                                          \
-                tamp_history_reconstruct(decompressor->window, output, decompressor->window_pos, window_size); \
-                TAMP_DECOMP_RETURN(TAMP_OOB);                                                                  \
-            }                                                                                                  \
-            uint16_t wp = decompressor->window_pos;                                                            \
-            uint16_t dist = (uint16_t)(((wp - window_offset - 1) & window_mask) + 1);                          \
-            if (TAMP_UNLIKELY(dist < match_size)) {                                                            \
-                /* Seam-crossing: leave the token uncommitted (bb/rbits unchanged). */                         \
-                break;                                                                                         \
-            }                                                                                                  \
-            bb <<= (consumed + conf_window);                                                                   \
-            rbits -= (int32_t)(consumed + conf_window);                                                        \
-            const unsigned char* msrc = output - dist;                                                         \
-            TAMP_COPY_TO_OUTPUT(output, msrc, match_size);                                                     \
-            decompressor->window_pos = (wp + match_size) & window_mask;                                        \
-        }                                                                                                      \
-    }
-#endif /* TAMP_HISTORY_WINDOW */
 #endif /* TAMP_RESERVOIR_REFILL */
 
 #endif /* TAMP_FAST_DECODE_LOOP */
@@ -1130,121 +964,33 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
              * Margins are doubled (>=8 input, >=64 output) so both tokens'
              * dead-check preconditions still hold. Top-up refills are unguarded:
              * input was not touched during decode and the >=8-byte precondition
-             * leaves headroom for the two <=4-byte refills. */
-#if TAMP_HISTORY_WINDOW
-            /* History mode requires a classic (non-extended) stream. Extended
-             * tokens decouple window_pos from the output cursor by format design
-             * (RLE / truncated extended matches advance the ring and the output
-             * by different amounts), which breaks the output<->ring
-             * correspondence and would force a full window_size re-warm after
-             * every extended token - measured a net loss on extended streams,
-             * which also rarely stay armed long enough to profit. Extended
-             * streams therefore take the plain unrolled loop; only classic
-             * streams take the history path. */
-            bool history_capable = true;
-#if TAMP_EXTENDED_DECOMPRESS
-            history_capable = !extended_enabled;
-#endif
-            if (history_capable) {
-                /* history_base marks where fresh contiguous output began. Once
-                 * output has advanced window_size past it, every one of the last
-                 * window_size ring bytes was written by the un-armed body below
-                 * and so mirrors output[cursor-window_size .. cursor-1]: matches
-                 * can then be served from the output history and the per-token
-                 * ring write skipped. Arming resets on every fast-loop entry
-                 * (correspondence never carries across calls or the careful
-                 * body). */
-                const unsigned char* const history_base = output;
-                const uint32_t hist_window_size = (uint32_t)1u << conf_window;
+             * leaves headroom for the two <=4-byte refills. A FLUSH / extended
+             * token breaks out; the guard below routes it to the outer loop. A
+             * precondition failure (input in [4,8) or output in [32,64), i.e.
+             * the final tokens of the buffer) falls through to the careful
+             * body with clean, topped-up state - a dedicated single-token
+             * tail loop was measured to add ~580 bytes of flash for no
+             * meaningful speedup, so the careful body owns the tail. */
 #if TAMP_RESERVOIR_REFILL
-                /* Reservoir variant: bb/rbits stay live across the arm goto; the
-                 * writeback rebuilds the struct bit_buffer at every exit before
-                 * the careful body / outer loop reads it. */
-                uint64_t bb = (uint64_t)decompressor->bit_buffer << 32;
-                int32_t rbits = decompressor->bit_buffer_pos;
-                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-                    if ((size_t)(output - history_base) >= hist_window_size) goto res_history_armed;
-                    TAMP_RES_REFILL();
-                    TAMP_RES_TOKEN_BODY()
-                    TAMP_RES_REFILL();
-                    TAMP_RES_TOKEN_BODY()
-                }
-                TAMP_RES_WRITEBACK();
-                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
-                goto res_history_done;
-            res_history_armed:
-                /* Armed: the ring is stale from here (writes are skipped). Every
-                 * exit edge reconstructs it before anything reads the window;
-                 * OOB reconstructs inside the body before returning. */
-                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-                    TAMP_RES_REFILL();
-                    TAMP_RES_TOKEN_BODY_HISTORY()
-                    TAMP_RES_REFILL();
-                    TAMP_RES_TOKEN_BODY_HISTORY()
-                }
-                TAMP_RES_WRITEBACK();
-                tamp_history_reconstruct(decompressor->window, output, decompressor->window_pos, hist_window_size);
-                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
-            res_history_done:;
-#else
-                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-                    if ((size_t)(output - history_base) >= hist_window_size) goto history_armed;
-                    TAMP_FAST_TOKEN_BODY()
-                    refill_bit_buffer_unchecked(decompressor, &input);
-                    TAMP_FAST_TOKEN_BODY()
-                    refill_bit_buffer_unchecked(decompressor, &input);
-                }
-                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
-                goto history_done;
-            history_armed:
-                /* Armed: the ring is stale from here (writes are skipped). Every
-                 * exit edge below reconstructs it before anything reads the
-                 * window:
-                 *   - buffer-boundary / FLUSH / extended break -> reconstruct after loop
-                 *   - seam-crossing break -> reconstruct after loop, careful body reruns
-                 *   - OOB -> reconstruct inside the body before returning */
-                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-                    TAMP_FAST_TOKEN_BODY_HISTORY()
-                    refill_bit_buffer_unchecked(decompressor, &input);
-                    TAMP_FAST_TOKEN_BODY_HISTORY()
-                    refill_bit_buffer_unchecked(decompressor, &input);
-                }
-                tamp_history_reconstruct(decompressor->window, output, decompressor->window_pos, hist_window_size);
-                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
-            history_done:;
-#endif /* TAMP_RESERVOIR_REFILL */
-            } else
-#endif /* TAMP_HISTORY_WINDOW */
-            {
-                /* Two-token unroll: one bounds check covers two token bodies
-                 * (each plus its trailing refill). A FLUSH / extended token
-                 * breaks out; the guard below routes it to the outer loop. A
-                 * precondition failure (input in [4,8) or output in [32,64), i.e.
-                 * the final tokens of the buffer) falls through to the careful
-                 * body with clean, topped-up state - a dedicated single-token
-                 * tail loop was measured to add ~580 bytes of flash for no
-                 * meaningful speedup, so the careful body owns the tail. */
-#if TAMP_RESERVOIR_REFILL
-                uint64_t bb = (uint64_t)decompressor->bit_buffer << 32;
-                int32_t rbits = decompressor->bit_buffer_pos;
-                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-                    TAMP_RES_REFILL();
-                    TAMP_RES_TOKEN_BODY()
-                    TAMP_RES_REFILL();
-                    TAMP_RES_TOKEN_BODY()
-                }
-                TAMP_RES_WRITEBACK();
-                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
-#else
-                while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-                    TAMP_FAST_TOKEN_BODY()
-                    refill_bit_buffer_unchecked(decompressor, &input);
-                    TAMP_FAST_TOKEN_BODY()
-                    refill_bit_buffer_unchecked(decompressor, &input);
-                }
-                if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
-#endif /* TAMP_RESERVOIR_REFILL */
+            uint64_t bb = (uint64_t)decompressor->bit_buffer << 32;
+            int32_t rbits = decompressor->bit_buffer_pos;
+            while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
+                TAMP_RES_REFILL();
+                TAMP_RES_TOKEN_BODY()
+                TAMP_RES_REFILL();
+                TAMP_RES_TOKEN_BODY()
             }
+            TAMP_RES_WRITEBACK();
+            if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
+#else
+            while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
+                TAMP_FAST_TOKEN_BODY()
+                refill_bit_buffer_unchecked(decompressor, &input);
+                TAMP_FAST_TOKEN_BODY()
+                refill_bit_buffer_unchecked(decompressor, &input);
+            }
+            if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
+#endif /* TAMP_RESERVOIR_REFILL */
         }
 #endif /* TAMP_FAST_DECODE_LOOP */
 
@@ -1402,17 +1148,11 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
 #undef TAMP_FAST_TOKEN_BODY
 #undef TAMP_FAST_WINDOW_UPDATE_
 #undef TAMP_FAST_EXT_BREAK_
-#if TAMP_HISTORY_WINDOW
-#undef TAMP_FAST_TOKEN_BODY_HISTORY
-#endif
 #if TAMP_RESERVOIR_REFILL
 #undef TAMP_RES_REFILL
 #undef TAMP_RES_WRITEBACK
 #undef TAMP_RES_EXT_BREAK_
 #undef TAMP_RES_TOKEN_BODY
-#if TAMP_HISTORY_WINDOW
-#undef TAMP_RES_TOKEN_BODY_HISTORY
-#endif
 #endif
 #endif
 
