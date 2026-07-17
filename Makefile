@@ -566,6 +566,7 @@ c-test: build/test_runner c-compile-matrix
 C_COMPILE_MATRIX_CONFIGS = \
 	"" \
 	"-DTAMP_ARMV7EM=1" \
+	"-DTAMP_USE_SWAR32_MATCH=1" \
 	"-DTAMP_EXTENDED=0" \
 	"-DTAMP_EXTENDED=0 -DTAMP_ARMV7EM=1" \
 	"-DTAMP_USE_MEMSET=0" \
@@ -617,7 +618,7 @@ build/ctests-embedded/%.o: tamp/_c_src/tamp/%.c
 	@mkdir -p build/ctests-embedded
 	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
 
-build/ctests-embedded/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
+build/ctests-embedded/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c ctests/test_stream.c ctests/test_stream_filesystems.c
 	@mkdir -p build/ctests-embedded
 	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
 
@@ -645,7 +646,7 @@ build/ctests-prefilter/%.o: tamp/_c_src/tamp/%.c
 	@mkdir -p build/ctests-prefilter
 	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -DTAMP_USE_PREFILTER_MATCH=1 -c $< -o $@
 
-build/ctests-prefilter/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
+build/ctests-prefilter/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c ctests/test_stream.c ctests/test_stream_filesystems.c
 	@mkdir -p build/ctests-prefilter
 	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_PREFILTER_MATCH=1 -c $< -o $@
 

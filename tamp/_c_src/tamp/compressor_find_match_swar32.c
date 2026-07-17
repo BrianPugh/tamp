@@ -14,7 +14,16 @@
  * Requirements:
  *   - Little-endian byte order
  *   - Efficient unaligned 32-bit loads (memcpy must lower to a plain load)
+ *   - __builtin_ctz (GCC/Clang)
  */
+
+/* Fail loudly on toolchains without __builtin_ctz (e.g. MSVC). Selection is a
+ * build-system decision, so a wrong opt-in must be a clear compile error, not
+ * an undefined-symbol surprise. This finder targets embedded GCC/Clang cores;
+ * MSVC targets should use the desktop matcher (64-bit) or the portable scan. */
+#if !defined(__GNUC__) && !defined(__clang__)
+#error "TAMP_USE_SWAR32_MATCH requires __builtin_ctz (GCC/Clang)"
+#endif
 
 #include <string.h>  // for memcpy (portable unaligned loads)
 
