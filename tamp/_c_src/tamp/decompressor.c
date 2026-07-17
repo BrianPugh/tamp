@@ -959,30 +959,34 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
          * failure falls through to the careful body with clean state. */
         if (callback == NULL && decompressor->skip_bytes == 0 && TAMP_PENDING_TOKEN_STATE(decompressor) == 0 &&
             decompressor->last_was_flush == 0) {
-            /* Two-token unroll: one bounds check covers two token bodies (each
-             * plus its trailing refill), halving the per-token check overhead.
-             * Margins are doubled (>=8 input, >=64 output) so both tokens'
-             * dead-check preconditions still hold. Top-up refills are unguarded:
-             * input was not touched during decode and the >=8-byte precondition
-             * leaves headroom for the two <=4-byte refills. A FLUSH / extended
-             * token breaks out; the guard below routes it to the outer loop. A
-             * precondition failure (input in [4,8) or output in [32,64), i.e.
-             * the final tokens of the buffer) falls through to the careful
-             * body with clean, topped-up state - a dedicated single-token
-             * tail loop was measured to add ~580 bytes of flash for no
-             * meaningful speedup, so the careful body owns the tail. */
+            /* A FLUSH / extended token breaks out; the guard below routes it
+             * to the outer loop. A precondition failure (the final tokens of
+             * the buffer) falls through to the careful body with clean,
+             * topped-up state - a dedicated single-token tail loop was
+             * measured to add ~580 bytes of flash for no meaningful speedup,
+             * so the careful body owns the tail. */
 #if TAMP_RESERVOIR_REFILL
+            /* Single token per iteration: the reservoir already amortizes the
+             * refill to ~one per 1-2 tokens, and a two-token unroll here
+             * measured SLOWER on real M7 hardware (H7B0: -3.1% throughput)
+             * while costing ~1 KB of flash. (QEMU insn counts disagree on M4:
+             * unroll -4% insns there; hardware-unverified.) */
             uint64_t bb = (uint64_t)decompressor->bit_buffer << 32;
             int32_t rbits = decompressor->bit_buffer_pos;
-            while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
-                TAMP_RES_REFILL();
-                TAMP_RES_TOKEN_BODY()
+            while ((size_t)(input_end - input) >= 4 && (size_t)(output_end - output) >= 32) {
                 TAMP_RES_REFILL();
                 TAMP_RES_TOKEN_BODY()
             }
             TAMP_RES_WRITEBACK();
             if (TAMP_PENDING_TOKEN_STATE(decompressor) || decompressor->last_was_flush) continue;
 #else
+            /* Two-token unroll: one bounds check covers two token bodies (each
+             * plus its trailing refill), halving the per-token check overhead
+             * (M0+ fastloop: un-unrolling measured +8.7% insns). Margins are
+             * doubled (>=8 input, >=64 output) so both tokens' dead-check
+             * preconditions still hold. Top-up refills are unguarded: input
+             * was not touched during decode and the >=8-byte precondition
+             * leaves headroom for the two <=4-byte refills. */
             while ((size_t)(input_end - input) >= 8 && (size_t)(output_end - output) >= 64) {
                 TAMP_FAST_TOKEN_BODY()
                 refill_bit_buffer_unchecked(decompressor, &input);
