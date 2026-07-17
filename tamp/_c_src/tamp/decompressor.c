@@ -988,13 +988,11 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
             // references to read past the window buffer, potentially leaking memory.
             // Cast to uint32_t prevents signed integer overflow.
             const uint32_t window_size = (1u << conf_window);
-#if !TAMP_EXPERIMENT_NO_OOB
             /* window_offset < window_size by construction (conf_window-bit extraction),
              * and match_size <= 30 << window_size, so the subtraction cannot underflow. */
             if (TAMP_UNLIKELY((uint32_t)window_offset > window_size - (uint32_t)match_size)) {
                 TAMP_DECOMP_RETURN(TAMP_OOB);
             }
-#endif
 
             // Apply skip_bytes. skip is nonzero only when resuming a token that
             // was cut off by a full output buffer (at most once per call), so the

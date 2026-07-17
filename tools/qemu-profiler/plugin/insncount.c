@@ -23,15 +23,19 @@
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_version = QEMU_PLUGIN_VERSION;
 
-static uint64_t *counters; /* one per halfword in [base, base+size) */
-static uint64_t other_count;
+/* One scoreboard whose per-vcpu element is the whole counter array: nslots
+ * per-halfword buckets for [base, base+size) followed by a single "other"
+ * bucket. Counting happens inline in generated code (no helper call). */
+static struct qemu_plugin_scoreboard *score;
+static uint64_t nslots; /* number of per-halfword buckets; slot nslots is "other" */
 static uint64_t base = 0x0;
 static uint64_t size = 0x100000; /* 1 MiB default code region */
 static char out_path[4096] = "insncount.out";
 
-static void vcpu_insn_exec(unsigned int vcpu_index, void *udata) {
-    (void)vcpu_index;
-    ++*(uint64_t *)udata;
+/* qemu_plugin_u64 addressing the counter at byte offset `slot * 8` in the element. */
+static qemu_plugin_u64 slot_entry(uint64_t slot) {
+    qemu_plugin_u64 entry = {score, (size_t)(slot * sizeof(uint64_t))};
+    return entry;
 }
 
 static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb) {
@@ -40,13 +44,13 @@ static void vcpu_tb_trans(qemu_plugin_id_t id, struct qemu_plugin_tb *tb) {
     for (size_t i = 0; i < n; i++) {
         struct qemu_plugin_insn *insn = qemu_plugin_tb_get_insn(tb, i);
         uint64_t vaddr = qemu_plugin_insn_vaddr(insn);
-        uint64_t *slot;
+        uint64_t slot;
         if (vaddr >= base && vaddr < base + size) {
-            slot = &counters[(vaddr - base) >> 1];
+            slot = (vaddr - base) >> 1;
         } else {
-            slot = &other_count;
+            slot = nslots; /* "other" bucket */
         }
-        qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_insn_exec, QEMU_PLUGIN_CB_NO_REGS, slot);
+        qemu_plugin_register_vcpu_insn_exec_inline_per_vcpu(insn, QEMU_PLUGIN_INLINE_ADD_U64, slot_entry(slot), 1);
     }
 }
 
@@ -58,17 +62,19 @@ static void plugin_exit(qemu_plugin_id_t id, void *p) {
         qemu_plugin_outs("insncount: failed to open output file\n");
         return;
     }
+    uint64_t other_count = qemu_plugin_u64_sum(slot_entry(nslots));
     uint64_t total = other_count;
-    uint64_t nslots = size >> 1;
-    for (uint64_t i = 0; i < nslots; i++) total += counters[i];
+    for (uint64_t i = 0; i < nslots; i++) total += qemu_plugin_u64_sum(slot_entry(i));
     fprintf(f, "# total %" PRIu64 "\n", total);
     fprintf(f, "# other %" PRIu64 "\n", other_count);
     for (uint64_t i = 0; i < nslots; i++) {
-        if (counters[i]) {
-            fprintf(f, "%" PRIx64 " %" PRIu64 "\n", base + (i << 1), counters[i]);
+        uint64_t count = qemu_plugin_u64_sum(slot_entry(i));
+        if (count) {
+            fprintf(f, "%" PRIx64 " %" PRIu64 "\n", base + (i << 1), count);
         }
     }
     fclose(f);
+    qemu_plugin_scoreboard_free(score);
 }
 
 QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, char **argv) {
@@ -86,9 +92,11 @@ QEMU_PLUGIN_EXPORT int qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_
             return -1;
         }
     }
-    counters = calloc(size >> 1, sizeof(uint64_t));
-    if (!counters) {
-        fprintf(stderr, "insncount: OOM allocating counters\n");
+    nslots = size >> 1;
+    /* One element per vcpu, sized to hold every PC bucket plus the "other" bucket. */
+    score = qemu_plugin_scoreboard_new((nslots + 1) * sizeof(uint64_t));
+    if (!score) {
+        fprintf(stderr, "insncount: OOM allocating scoreboard\n");
         return -1;
     }
     qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);

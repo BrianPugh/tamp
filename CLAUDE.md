@@ -245,10 +245,11 @@ make website-clean         # Clean website build artifacts
   `TAMP_USE_DESKTOP_MATCH=1` on 64-bit hosts, espidf Kconfig defaults
   `TAMP_ESP32=y`, the STM32H7B0 harness sets `TAMP_ARMV7EM=1`):
   - `TAMP_ARMV7EM=1` - profile for Cortex-M4/M7: enables the prefilter match
-    finder plus both fast paths below (measured on M7: 1.36x compression, +14%
-    decompression; M4 unmeasured)
+    finder plus all six decompressor fast-path flags below (measured on
+    STM32H7B0/M7 vs the portable build: 1.31x compression, 1.92x decompression,
+    ~5.2 KB additional flash; M4 unmeasured on hardware)
   - `TAMP_USE_EMBEDDED_MATCH=1` - the portable `find_best_match` (selections are
-    mutually exclusive; conflicts are a compile error)
+    mutually exclusive, including `TAMP_ESP32`; conflicts are a compile error)
   - `TAMP_USE_PREFILTER_MATCH` - first-byte prefilter (slower on 64-bit hosts)
   - `TAMP_USE_DESKTOP_MATCH` - 64-bit SWAR for 64-bit hosts
   - `TAMP_USE_SWAR32_MATCH` - experimental 32-bit SWAR (candidate for
@@ -257,6 +258,14 @@ make website-clean         # Clean website build artifacts
     decompression on M7; -3% Xtensa LX7, +160B Cortex-M0+)
   - `TAMP_FAST_BIT_REFILL` - locals-based `refill_bit_buffer` (+5% decompression
     on M7; -3% Xtensa LX7, +324B Cortex-M0+)
+  - `TAMP_FAST_OUTPUT_COPY` - word-at-a-time copy to the output buffer
+  - `TAMP_WINDOW_FROM_OUTPUT` - window update sourced from the just-written
+    output snapshot instead of `tamp_window_copy`
+  - `TAMP_FAST_DECODE_LOOP` - checked-once fast inner decode loop over a 64-bit
+    bit reservoir (the largest single decompression win)
+  - `TAMP_COMPACT_CAREFUL_BODY` - compile the non-fast-loop careful body -Os
+    (GCC-only; only sensible with `TAMP_FAST_DECODE_LOOP`) See `common.h` for
+    each flag's measured numbers.
 - `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
   environments without libc (e.g. MicroPython native modules).
 

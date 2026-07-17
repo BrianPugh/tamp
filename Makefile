@@ -13,6 +13,7 @@ help-main:
 	@echo "  make test              Run Python and MicroPython tests"
 	@echo "  make c-test            Run C unit tests"
 	@echo "  make c-test-embedded   Run C unit tests with embedded find_best_match"
+	@echo "  make c-test-prefilter  Run C unit tests with prefilter find_best_match"
 	@echo "  make clean             Clean all build artifacts"
 	@echo ""
 	@echo "MicroPython native module:"
@@ -519,13 +520,25 @@ c-compile-matrix:
 			$(CC) -O2 -Wall -Itamp/_c_src $$cfg -c $$src -o build/c_compile_matrix.o.tmp; \
 		done; \
 	done; rm -f build/c_compile_matrix.o.tmp
+	@set -e; for cfg in \
+		"-DTAMP_ESP32=1 -DTAMP_USE_DESKTOP_MATCH=1" \
+		"-DTAMP_USE_EMBEDDED_MATCH=1 -DTAMP_USE_DESKTOP_MATCH=1"; do \
+		echo "c-compile-matrix (must NOT compile): $$cfg"; \
+		if $(CC) -O2 -Wall -Itamp/_c_src $$cfg -c tamp/_c_src/tamp/common.c \
+			-o build/c_compile_matrix.o.tmp 2>/dev/null; then \
+			echo "c-compile-matrix: ERROR: conflicting match selection compiled: $$cfg"; \
+			rm -f build/c_compile_matrix.o.tmp; exit 1; \
+		fi; \
+	done; rm -f build/c_compile_matrix.o.tmp
 	@echo "c-compile-matrix: all configurations compile"
 
 clean-c-test:
 	@rm -f build/test_runner
 	@rm -f build/test_runner_embedded
+	@rm -f build/test_runner_prefilter
 	@rm -f build/ctests/*.o
 	@rm -f build/ctests-embedded/*.o
+	@rm -f build/ctests-prefilter/*.o
 	@rm -f build/unity/*.o
 
 # Embedded implementation tests (forces embedded find_best_match on desktop)
@@ -553,6 +566,34 @@ build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OB
 
 c-test-embedded: build/test_runner_embedded
 	./build/test_runner_embedded
+
+# Prefilter implementation tests (forces the ARMV7EM profile's find_best_match
+# on desktop; without this leg the shipping M4/M7 matcher is compile-checked
+# but never behaviorally run on host).
+.PHONY: c-test-prefilter
+
+CTEST_PREFILTER_TAMP_OBJS = \
+	build/ctests-prefilter/common.o \
+	build/ctests-prefilter/compressor.o \
+	build/ctests-prefilter/decompressor.o
+
+CTEST_PREFILTER_TEST_OBJS = \
+	build/unity/unity.o \
+	build/ctests-prefilter/test_runner.o
+
+build/ctests-prefilter/%.o: tamp/_c_src/tamp/%.c
+	@mkdir -p build/ctests-prefilter
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -DTAMP_USE_PREFILTER_MATCH=1 -c $< -o $@
+
+build/ctests-prefilter/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
+	@mkdir -p build/ctests-prefilter
+	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_PREFILTER_MATCH=1 -c $< -o $@
+
+build/test_runner_prefilter: $(CTEST_PREFILTER_TAMP_OBJS) $(CTEST_PREFILTER_TEST_OBJS) $(CTEST_LFS_OBJS) $(CTEST_FATFS_OBJS)
+	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
+
+c-test-prefilter: build/test_runner_prefilter
+	./build/test_runner_prefilter
 
 
 ############

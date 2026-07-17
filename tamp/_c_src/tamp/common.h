@@ -117,9 +117,13 @@ extern "C" {
 #endif
 
 /* The selections are mutually exclusive; reject conflicting configurations
- * loudly rather than silently picking one. */
-#if (TAMP_USE_EMBEDDED_MATCH + TAMP_USE_SWAR32_MATCH + TAMP_USE_DESKTOP_MATCH + TAMP_USE_PREFILTER_MATCH) > 1
-#error "At most one TAMP_USE_*_MATCH find_best_match selection may be enabled"
+ * loudly rather than silently picking one. TAMP_ESP32 counts as a selection:
+ * the espidf platform component provides find_best_match via extern, and
+ * compressor.c's dispatch checks it first, so combining it with an explicit
+ * TAMP_USE_*_MATCH would otherwise silently drop the requested finder. */
+#if (TAMP_USE_EMBEDDED_MATCH + TAMP_USE_SWAR32_MATCH + TAMP_USE_DESKTOP_MATCH + TAMP_USE_PREFILTER_MATCH + \
+     TAMP_ESP32) > 1
+#error "At most one find_best_match selection (TAMP_USE_*_MATCH / TAMP_ESP32) may be enabled"
 #endif
 
 /* tamp_window_copy variant with a no-wrap fast path (see common.c).

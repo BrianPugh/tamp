@@ -195,6 +195,7 @@ def build_firmware(core, variant, extra_cflags, main_src="main.c", elf_name="ben
         f"-I{RP2040_DATA}",
         f"-I{fw}",
         f"-I{BUILD}",
+        f"-I{REPO / 'fuzz'}",  # shared decompressor_fuzz_case.h (replay_main.c)
         f'-DBENCH_DATA_H="{VARIANTS[variant]["data_h"]}"',
         *[f"-D{d}" for d in cfg["defines"]],
         *extra_cflags,

@@ -1,13 +1,14 @@
 /* Newlib syscall stubs. stdout goes to the debugger via ARM semihosting
- * (SYS_WRITE0), so the harness needs only the ST-Link - no UART wiring. The
- * firmware must run under `make stm32h7b0-device-*` (OpenOCD with semihosting
- * enabled); standalone, the BKPT escalates to HardFault. */
+ * (SYS_WRITE, one trap per _write), so the harness needs only the ST-Link - no
+ * UART wiring. The firmware must run under `make stm32h7b0-device-*` (OpenOCD
+ * with semihosting enabled); standalone, the BKPT escalates to HardFault. */
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
 
-#define SEMIHOST_SYS_WRITE0 0x04
+#define SEMIHOST_SYS_OPEN 0x01
+#define SEMIHOST_SYS_WRITE 0x05
 
 static uintptr_t semihost_call(uintptr_t op, uintptr_t arg) {
     register uintptr_t r0 __asm__("r0") = op;
@@ -16,18 +17,34 @@ static uintptr_t semihost_call(uintptr_t op, uintptr_t arg) {
     return r0;
 }
 
+/* Lazily open the debugger console (":tt") in write mode ("w" == 4) once and
+ * cache the handle; SYS_OPEN takes {path, mode, path_len} and returns a handle
+ * (or -1 on failure). */
+static int semihost_stdout(void) {
+    static int handle = 0; /* 0 == not yet opened; semihosting handles are >0 */
+    if (handle == 0) {
+        static const char path[] = ":tt";
+        uintptr_t args[3] = {(uintptr_t)path, 4, sizeof(path) - 1};
+        handle = (int)semihost_call(SEMIHOST_SYS_OPEN, (uintptr_t)args);
+    }
+    return handle;
+}
+
 int _write(int fd, const char *buf, int len) {
     (void)fd;
-    char chunk[64];
-    int remaining = len;
-    while (remaining > 0) {
-        int n = remaining < (int)sizeof(chunk) - 1 ? remaining : (int)sizeof(chunk) - 1;
-        for (int i = 0; i < n; i++) chunk[i] = *buf++;
-        chunk[n] = '\0';
-        semihost_call(SEMIHOST_SYS_WRITE0, (uintptr_t)chunk);
-        remaining -= n;
+    int handle = semihost_stdout();
+    if (handle == -1) {
+        errno = EIO;
+        return -1;
     }
-    return len;
+    /* SYS_WRITE takes {handle, buf, len} and returns the count NOT written. */
+    uintptr_t args[3] = {(uintptr_t)handle, (uintptr_t)buf, (uintptr_t)len};
+    int not_written = (int)semihost_call(SEMIHOST_SYS_WRITE, (uintptr_t)args);
+    if (not_written == len) {
+        errno = EIO;
+        return -1;
+    }
+    return len - not_written;
 }
 
 /* Heap bounds come from the linker script (AXI SRAM); the default newlib

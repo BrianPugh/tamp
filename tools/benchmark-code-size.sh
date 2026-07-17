@@ -193,21 +193,31 @@ else
         RISCV_ARCH=(-march=rv32imc -mabi=ilp32)
     fi
 
-    dir="$SCRATCH/esp32c3_default"
-    mkdir -p "$dir"
-    compile_c "$RISCV_GCC" "$dir/common.o" "$TAMP_SRC/common.c" -O2 "${RISCV_ARCH[@]}"
-    compile_c "$RISCV_GCC" "$dir/compressor.o" "$TAMP_SRC/compressor.c" -O2 "${RISCV_ARCH[@]}"
-    compile_c "$RISCV_GCC" "$dir/decompressor.o" "$TAMP_SRC/decompressor.c" -O2 "${RISCV_ARCH[@]}"
-    report "esp32c3 default (RISC-V RV32IMC, -O2)" "$RISCV_SIZE" \
-        "$dir/common.o" "$dir/compressor.o" "$dir/decompressor.o"
+    run_riscv_default() {
+        # run_riscv_default <slug> <label>
+        local slug="$1" label="$2"
+        local dir="$SCRATCH/$slug"
+        mkdir -p "$dir"
+        compile_c "$RISCV_GCC" "$dir/common.o" "$TAMP_SRC/common.c" -O2 "${RISCV_ARCH[@]}"
+        compile_c "$RISCV_GCC" "$dir/compressor.o" "$TAMP_SRC/compressor.c" -O2 "${RISCV_ARCH[@]}"
+        compile_c "$RISCV_GCC" "$dir/decompressor.o" "$TAMP_SRC/decompressor.c" -O2 "${RISCV_ARCH[@]}"
+        report "$label" "$RISCV_SIZE" "$dir/common.o" "$dir/compressor.o" "$dir/decompressor.o"
+    }
 
-    dir="$SCRATCH/esp32c3_tamp_esp32"
-    mkdir -p "$dir"
-    compile_c "$RISCV_GCC" "$dir/common.o" "$TAMP_SRC/common.c" -O2 "${RISCV_ARCH[@]}" "${ESP32_DEFINES[@]}"
-    compile_c "$RISCV_GCC" "$dir/compressor.o" "$TAMP_SRC/compressor.c" -O2 "${RISCV_ARCH[@]}" "${ESP32_DEFINES[@]}" "${ESP32_INC[@]}"
-    compile_c "$RISCV_GCC" "$dir/decompressor.o" "$TAMP_SRC/decompressor.c" -O2 "${RISCV_ARCH[@]}" "${ESP32_DEFINES[@]}" "${ESP32_INC[@]}"
-    "$RISCV_GXX" -std=c++20 -O2 "${RISCV_ARCH[@]}" "${ESP32_DEFINES[@]}" "${ESP32_INC[@]}" -Itamp/_c_src \
-        -c "$ESP32_CPP" -o "$dir/compressor_esp32.o"
-    report "esp32c3 TAMP_ESP32=1 (RISC-V RV32IMC, -O2)" "$RISCV_SIZE" \
-        "$dir/common.o" "$dir/compressor.o" "$dir/decompressor.o" "$dir/compressor_esp32.o"
+    run_tamp_esp32_riscv() {
+        # run_tamp_esp32_riscv <slug> <label>
+        local slug="$1" label="$2"
+        local dir="$SCRATCH/$slug"
+        mkdir -p "$dir"
+        compile_c "$RISCV_GCC" "$dir/common.o" "$TAMP_SRC/common.c" -O2 "${RISCV_ARCH[@]}" "${ESP32_DEFINES[@]}"
+        compile_c "$RISCV_GCC" "$dir/compressor.o" "$TAMP_SRC/compressor.c" -O2 "${RISCV_ARCH[@]}" "${ESP32_DEFINES[@]}" "${ESP32_INC[@]}"
+        compile_c "$RISCV_GCC" "$dir/decompressor.o" "$TAMP_SRC/decompressor.c" -O2 "${RISCV_ARCH[@]}" "${ESP32_DEFINES[@]}" "${ESP32_INC[@]}"
+        "$RISCV_GXX" -std=c++20 -O2 "${RISCV_ARCH[@]}" "${ESP32_DEFINES[@]}" "${ESP32_INC[@]}" -Itamp/_c_src \
+            -c "$ESP32_CPP" -o "$dir/compressor_esp32.o"
+        report "$label" "$RISCV_SIZE" \
+            "$dir/common.o" "$dir/compressor.o" "$dir/decompressor.o" "$dir/compressor_esp32.o"
+    }
+
+    run_riscv_default esp32c3_default "esp32c3 default (RISC-V RV32IMC, -O2)"
+    run_tamp_esp32_riscv esp32c3_tamp_esp32 "esp32c3 TAMP_ESP32=1 (RISC-V RV32IMC, -O2)"
 fi
