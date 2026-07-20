@@ -29,7 +29,7 @@ tamp = "tamp.cli.main:run_app"
 [dependency-groups]
 dev = [
     "coverage[toml]>=5.1",
-    "pre-commit>=2.16.0",
+    "pre-commit>=4.6.0",
     "pytest>=7.1.2",
     "pytest-cov>=3.0.0",
     "pytest-mock>=3.7.0",
