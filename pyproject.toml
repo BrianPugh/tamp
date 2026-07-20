@@ -15,7 +15,7 @@ dependencies = []
 
 [project.optional-dependencies]
 cli = [
-    "cyclopts>=1.0.0",
+    "cyclopts>=4.22.0",
     "rich>=15.0.0",
 ]
 
