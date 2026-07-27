@@ -48,7 +48,7 @@ dev = [
 docs = [
     "sphinx>=4.5.0",
     "sphinx-rtd-theme>=3.0.0",
-    "gitpython>=3.1.50",
+    "gitpython>=3.1.57",
     "sphinx-copybutton>=0.5.2",
     "myst-parser[linkify]>=3.0.1,<4",
 ]
