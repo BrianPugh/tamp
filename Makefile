@@ -479,6 +479,11 @@ CTEST_DEFINES = -DTAMP_STREAM_STDIO=1 -DTAMP_STREAM_MEMORY=1 \
 	-DTAMP_STREAM_FATFS=1 -DTEST_FATFS=1 \
 	-DTAMP_LAZY_MATCHING=1 \
 	-DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR
+# c-test covers the same match finder the pip/Cython build opts into on
+# 64-bit hosts (the core defaults to the portable one); c-test-embedded
+# covers the portable path. Selections are mutually exclusive (compile
+# error), so this is applied only to the non-embedded tamp objects.
+CTEST_MATCH_DEFINE = -DTAMP_USE_DESKTOP_MATCH=1
 CTEST_CFLAGS = $(CTEST_INCLUDES) $(CTEST_SANITIZER_FLAGS) $(CTEST_DEFINES)
 # Strict warnings applied only to first-party tamp sources, not third-party (Unity/LittleFS/FatFs)
 CTEST_WARN_FLAGS = -Wall -Wextra -Wtype-limits -Werror
@@ -510,7 +515,7 @@ CTEST_TEST_OBJS = \
 # Build tamp source files for testing
 build/ctests/%.o: tamp/_c_src/tamp/%.c
 	@mkdir -p build/ctests
-	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -c $< -o $@
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_MATCH_DEFINE) $(CTEST_WARN_FLAGS) -c $< -o $@
 
 # Build Unity framework
 build/unity/unity.o: ctests/Unity/src/unity.c ctests/Unity/src/unity.h
@@ -546,14 +551,43 @@ build/ctests/fatfs_ramdisk.o: ctests/fatfs_ramdisk.c
 # Build test runner (includes test files via #include)
 build/ctests/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c ctests/test_stream.c ctests/test_stream_filesystems.c
 	@mkdir -p build/ctests
-	$(CTEST_CC) $(CTEST_CFLAGS)  -c $< -o $@
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_MATCH_DEFINE) -c $< -o $@
 
 # Link test executable
 build/test_runner: $(CTEST_TAMP_OBJS) $(CTEST_LFS_OBJS) $(CTEST_FATFS_OBJS) $(CTEST_TEST_OBJS)
 	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
 
-c-test: build/test_runner
+c-test: build/test_runner c-compile-matrix
 	./build/test_runner
+
+# Compile the vendored trio under every documented flag combination.
+# Regression guard: flag-gated code paths must always compile.
+C_COMPILE_MATRIX_CONFIGS = \
+	"" \
+	"-DTAMP_EXTENDED=0" \
+	"-DTAMP_USE_MEMSET=0" \
+	"-DTAMP_STREAM=0"
+
+.PHONY: c-compile-matrix
+c-compile-matrix:
+	@mkdir -p build
+	@set -e; for cfg in $(C_COMPILE_MATRIX_CONFIGS); do \
+		echo "c-compile-matrix: $$cfg"; \
+		for src in tamp/_c_src/tamp/common.c tamp/_c_src/tamp/compressor.c tamp/_c_src/tamp/decompressor.c; do \
+			$(CC) -O2 -Wall -Itamp/_c_src $$cfg -c $$src -o build/c_compile_matrix.o.tmp; \
+		done; \
+	done; rm -f build/c_compile_matrix.o.tmp
+	@set -e; for cfg in \
+		"-DTAMP_ESP32=1 -DTAMP_USE_DESKTOP_MATCH=1" \
+		"-DTAMP_USE_EMBEDDED_MATCH=1 -DTAMP_USE_DESKTOP_MATCH=1"; do \
+		echo "c-compile-matrix (must NOT compile): $$cfg"; \
+		if $(CC) -O2 -Wall -Itamp/_c_src $$cfg -c tamp/_c_src/tamp/common.c \
+			-o build/c_compile_matrix.o.tmp 2>/dev/null; then \
+			echo "c-compile-matrix: ERROR: conflicting match selection compiled: $$cfg"; \
+			rm -f build/c_compile_matrix.o.tmp; exit 1; \
+		fi; \
+	done; rm -f build/c_compile_matrix.o.tmp
+	@echo "c-compile-matrix: all configurations compile"
 
 clean-c-test:
 	@rm -f build/test_runner
@@ -578,7 +612,7 @@ build/ctests-embedded/%.o: tamp/_c_src/tamp/%.c
 	@mkdir -p build/ctests-embedded
 	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
 
-build/ctests-embedded/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
+build/ctests-embedded/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c ctests/test_stream.c ctests/test_stream_filesystems.c
 	@mkdir -p build/ctests-embedded
 	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
 
@@ -587,6 +621,7 @@ build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OB
 
 c-test-embedded: build/test_runner_embedded
 	./build/test_runner_embedded
+
 
 
 ############
