@@ -85,8 +85,10 @@ extern "C" {
  ******************************************************************************/
 
 /* find_best_match implementation (see compressor.c). At most one of these
- * may be 1 (enforced below); with none set, the portable scan is used.
- *   embedded:  portable single-byte-first scan, the default.
+ * may be 1 (enforced below); with none set, the portable single-byte-first
+ * scan is used.
+ *   embedded:  the portable scan; compressor.c does not read this flag, so
+ *              setting it only guards against a conflicting selection.
  *   desktop:   64-bit SWAR for 64-bit hosts (little-endian, cheap unaligned
  *              loads). */
 #ifndef TAMP_USE_EMBEDDED_MATCH
