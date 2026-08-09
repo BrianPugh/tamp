@@ -101,7 +101,7 @@ extern "C" {
  * the espidf platform component provides find_best_match via extern, and
  * compressor.c's dispatch checks it first, so combining it with an explicit
  * TAMP_USE_*_MATCH would otherwise silently drop the requested finder. */
-#if (TAMP_USE_EMBEDDED_MATCH + TAMP_USE_DESKTOP_MATCH + TAMP_ESP32) > 1
+#if ((TAMP_USE_EMBEDDED_MATCH != 0) + (TAMP_USE_DESKTOP_MATCH != 0) + (TAMP_ESP32 != 0)) > 1
 #error "At most one find_best_match selection (TAMP_USE_*_MATCH / TAMP_ESP32) may be enabled"
 #endif
 
