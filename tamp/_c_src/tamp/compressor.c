@@ -79,25 +79,28 @@ inline bool tamp_compressor_full(const TampCompressor* compressor) {
 }
 
 /*
- * Platform-specific find_best_match implementations:
+ * find_best_match implementations, selected by the flags from common.h's
+ * platform tuning section (the default is the portable embedded scan; build
+ * systems opt into their platform's measured configuration):
  *
  * 1. TAMP_ESP32: External implementation in espidf/tamp/compressor_esp32.cpp
  *
- * 2. Desktop 64-bit (x86_64, aarch64, Windows 64-bit):
- *    Included from compressor_find_match_desktop.c - uses bit manipulation
- *    and 64-bit loads for parallel match detection
+ * 2. TAMP_USE_DESKTOP_MATCH (64-bit hosts): included from
+ *    compressor_find_match_desktop.c - uses bit manipulation and 64-bit
+ *    loads for parallel match detection.
  *
- * 3. Embedded/Default (Cortex-M0/M0+, other 32-bit):
- *    Defined below - single-byte-first comparison, safe for all architectures
+ * 3. Default: defined below - portable single-byte-first comparison, safe
+ *    for all architectures.
  *
- * Set TAMP_USE_EMBEDDED_MATCH=1 to force the embedded implementation on desktop
- * (useful for testing the embedded code path on CI).
+ * Implementations reachable on embedded targets are defined inline so that
+ * common.c/compressor.c/decompressor.c compile standalone with only the
+ * headers; only desktop/experimental variants live in #include'd files.
  */
 
 #if TAMP_ESP32
 extern void find_best_match(TampCompressor* compressor, uint16_t* match_index, uint8_t* match_size);
 
-#elif (defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64)) && !TAMP_USE_EMBEDDED_MATCH
+#elif TAMP_USE_DESKTOP_MATCH
 #include "compressor_find_match_desktop.c"
 
 #else

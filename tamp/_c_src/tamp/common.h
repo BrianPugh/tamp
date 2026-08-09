@@ -69,6 +69,44 @@ extern "C" {
 #define TAMP_OPTIMIZE_SIZE
 #endif
 
+/*******************************************************************************
+ * Platform performance tuning
+ *
+ * The core sources never select architecture-specific code on their own:
+ * every flag below defaults to the portable implementation. Build systems opt
+ * in to the measured configuration for their platform, mirroring TAMP_ESP32:
+ *
+ *   pip/Cython (setup.py):      TAMP_USE_DESKTOP_MATCH=1 on 64-bit hosts
+ *   espidf component (Kconfig): TAMP_ESP32 (default y)
+ *
+ * Individual flags can still be set/overridden with -D<flag>=0/1. Measured
+ * numbers below are from devices/BENCHMARKS.md workloads; when enabling a
+ * flag on an unmeasured core, benchmark it.
+ ******************************************************************************/
+
+/* find_best_match implementation (see compressor.c). At most one of these
+ * may be 1 (enforced below); with none set, the portable single-byte-first
+ * scan is used.
+ *   embedded:  the portable scan; compressor.c does not read this flag, so
+ *              setting it only guards against a conflicting selection.
+ *   desktop:   64-bit SWAR for 64-bit hosts (little-endian, cheap unaligned
+ *              loads). */
+#ifndef TAMP_USE_EMBEDDED_MATCH
+#define TAMP_USE_EMBEDDED_MATCH 0
+#endif
+#ifndef TAMP_USE_DESKTOP_MATCH
+#define TAMP_USE_DESKTOP_MATCH 0
+#endif
+
+/* The selections are mutually exclusive; reject conflicting configurations
+ * loudly rather than silently picking one. TAMP_ESP32 counts as a selection:
+ * the espidf platform component provides find_best_match via extern, and
+ * compressor.c's dispatch checks it first, so combining it with an explicit
+ * TAMP_USE_*_MATCH would otherwise silently drop the requested finder. */
+#if ((TAMP_USE_EMBEDDED_MATCH != 0) + (TAMP_USE_DESKTOP_MATCH != 0) + (TAMP_ESP32 != 0)) > 1
+#error "At most one find_best_match selection (TAMP_USE_*_MATCH / TAMP_ESP32) may be enabled"
+#endif
+
 /* TAMP_USE_MEMSET: Use libc memset (default: 1).
  * Set to 0 for environments without libc (e.g. MicroPython native modules).
  * When disabled, uses a volatile loop that prevents GCC from emitting a
