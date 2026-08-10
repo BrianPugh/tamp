@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77", "setuptools-scm>=8", "cython>=3.0.0"]
+requires = ["setuptools>=77", "setuptools-scm>=8", "cython>=3.2.9"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -40,7 +40,7 @@ dev = [
     "ipdb>=0.13.13",
     "packaging>=26.1",
     "mpremote>=1.20.0",
-    "cython>=3.2.8",
+    "cython>=3.2.9",
     "pytest-subtests>=0.10.0",
     "numpy>=1.24",
     "pyelftools>=0.32,<0.33",
