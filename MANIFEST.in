@@ -11,6 +11,7 @@ prune wasm
 prune website
 prune assets
 prune espidf
+prune zephyr
 prune mpy_bindings
 prune fuzz
 prune tools

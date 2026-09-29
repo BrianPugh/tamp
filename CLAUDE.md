@@ -22,6 +22,8 @@ different platforms:
   - MicroPython Native Module (`mpy_bindings/`)
 - **WebAssembly** (`wasm/`) - JavaScript/TypeScript bindings via Emscripten
 - **ESP-IDF Component** (`espidf/`) - ESP32 optimized version
+- **Zephyr Module** (`zephyr/`) - `module.yml`, CMake and Kconfig building the
+  shared C source as a Zephyr library
 
 **Shared C Source:** All implementations use the same C source code in
 `tamp/_c_src/tamp/`:
