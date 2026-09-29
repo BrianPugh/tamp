@@ -1,0 +1,4 @@
+name: tamp
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig

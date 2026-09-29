@@ -106,6 +106,34 @@ tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.7.0/tamp-1.7.0-mp
 Copy the `tamp/_c_src/tamp` folder into your project. For more information, see
 [the documentation](https://tamp.readthedocs.io/en/latest/c_library.html).
 
+### Zephyr
+
+Tamp is a
+[Zephyr module](https://docs.zephyrproject.org/latest/develop/modules.html). Add
+it to your `west.yml`:
+
+```yaml
+manifest:
+  remotes:
+    - name: brianpugh
+      url-base: https://github.com/BrianPugh
+  projects:
+    - name: tamp
+      remote: brianpugh
+      revision: main # pin to a release tag or commit
+      path: modules/lib/tamp
+```
+
+Then enable it in `prj.conf`:
+
+```
+CONFIG_TAMP=y
+```
+
+`CONFIG_TAMP_COMPRESSOR` and `CONFIG_TAMP_DECOMPRESSOR` (both default `y`)
+select which halves get compiled. Include the headers as `"tamp/compressor.h"`
+and `"tamp/decompressor.h"`.
+
 # Usage
 
 Tamp works on desktop python and micropython. On desktop, Tamp can be bundled

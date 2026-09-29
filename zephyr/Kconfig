@@ -1,0 +1,21 @@
+config TAMP
+	bool "tamp compression library"
+	help
+	  Build the tamp C compression library. Headers are available as
+	  "tamp/compressor.h" and "tamp/decompressor.h".
+
+if TAMP
+
+config TAMP_COMPRESSOR
+	bool "tamp compressor"
+	default y
+	help
+	  Compile the tamp compressor (tamp/compressor.c).
+
+config TAMP_DECOMPRESSOR
+	bool "tamp decompressor"
+	default y
+	help
+	  Compile the tamp decompressor (tamp/decompressor.c).
+
+endif # TAMP
