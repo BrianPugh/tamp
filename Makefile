@@ -158,7 +158,8 @@ endif
 
 datasets/enwik8.zip:
 	@mkdir -p datasets
-	curl -o datasets/enwik8.zip https://mattmahoney.net/dc/enwik8.zip
+	curl -fL -o datasets/enwik8.zip.tmp https://mattmahoney.net/dc/enwik8.zip
+	mv datasets/enwik8.zip.tmp datasets/enwik8.zip
 
 datasets/enwik8: | datasets/enwik8.zip
 	cd datasets && unzip -q enwik8.zip
@@ -168,9 +169,10 @@ download-enwik8: datasets/enwik8
 datasets/silesia:
 	@mkdir -p datasets
 	@if [ ! -d datasets/silesia ]; then \
-		curl -o datasets/silesia.zip http://mattmahoney.net/dc/silesia.zip && \
-		mkdir -p datasets/silesia && \
-		unzip -q datasets/silesia.zip -d datasets/silesia && \
+		rm -rf datasets/silesia.tmp && \
+		curl -fL -o datasets/silesia.zip https://mattmahoney.net/dc/silesia.zip && \
+		unzip -q datasets/silesia.zip -d datasets/silesia.tmp && \
+		mv datasets/silesia.tmp datasets/silesia && \
 		rm datasets/silesia.zip; \
 	fi
 
@@ -245,7 +247,7 @@ build/enwik8-100kb.tamp: build/enwik8-100kb
 
 download-micropython:
 	mkdir -p datasets
-	cd datasets && curl -O https://micropython.org/resources/firmware/RPI_PICO-20250415-v1.25.0.uf2
+	cd datasets && curl -fLO https://micropython.org/resources/firmware/RPI_PICO-20250415-v1.25.0.uf2
 
 download: download-enwik8 download-silesia download-sms download-tweets download-micropython
 
