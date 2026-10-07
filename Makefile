@@ -489,6 +489,7 @@ c-test: build/test_runner
 clean-c-test:
 	@rm -f build/test_runner
 	@rm -f build/test_runner_embedded
+	@rm -f build/match_index_check build/match_index_check_embedded build/match_index_dump_*.bin
 	@rm -f build/ctests/*.o
 	@rm -f build/ctests-embedded/*.o
 	@rm -f build/unity/*.o
@@ -518,6 +519,28 @@ build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OB
 
 c-test-embedded: build/test_runner_embedded
 	./build/test_runner_embedded
+
+# Match index tests: TAMP_MATCH_INDEX output must be byte-identical to the linear scan,
+# both within one build and against the embedded find_best_match that ships to devices.
+.PHONY: c-test-match-index
+
+MATCH_INDEX_CHECK_DEPS = ctests/match_index_check.c $(wildcard tamp/_c_src/tamp/*.c tamp/_c_src/tamp/*.h)
+MATCH_INDEX_CHECK_SRCS = ctests/match_index_check.c tamp/_c_src/tamp/common.c tamp/_c_src/tamp/compressor.c
+
+build/match_index_check: $(MATCH_INDEX_CHECK_DEPS)
+	@mkdir -p build
+	$(CTEST_CC) $(CTEST_INCLUDES) $(CTEST_SANITIZER_FLAGS) $(CTEST_WARN_FLAGS) -DTAMP_LAZY_MATCHING=1 -DTAMP_MATCH_INDEX=1 $(MATCH_INDEX_CHECK_SRCS) -o $@
+
+build/match_index_check_embedded: $(MATCH_INDEX_CHECK_DEPS)
+	@mkdir -p build
+	$(CTEST_CC) $(CTEST_INCLUDES) $(CTEST_SANITIZER_FLAGS) $(CTEST_WARN_FLAGS) -DTAMP_LAZY_MATCHING=1 -DTAMP_USE_EMBEDDED_MATCH=1 $(MATCH_INDEX_CHECK_SRCS) -o $@
+
+c-test-match-index: build/match_index_check build/match_index_check_embedded
+	./build/match_index_check
+	./build/match_index_check --dump > build/match_index_dump_index.bin
+	./build/match_index_check_embedded --dump > build/match_index_dump_embedded.bin
+	cmp build/match_index_dump_index.bin build/match_index_dump_embedded.bin
+	@echo "match index output matches the embedded match finder"
 
 
 ############

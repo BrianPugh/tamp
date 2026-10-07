@@ -23,6 +23,13 @@
 #define read_input(offset) (compressor->input[input_add(offset)])
 #define IS_LITERAL_FLAG (1 << compressor->conf.literal)
 
+#if !TAMP_MATCH_INDEX
+// Real definition lives with the match index in compressor_find_match_desktop.c.
+#define TAMP_INDEX_UPDATE(compressor, count) \
+    do {                                     \
+    } while (0)
+#endif
+
 #define FLUSH_CODE (0xAB)
 
 // Internal return value for poll_extended_handling: signals caller to
@@ -356,6 +363,7 @@ static TAMP_NOINLINE void write_rle_token(TampCompressor* compressor, uint8_t co
         compressor->window[compressor->window_pos] = symbol;
         compressor->window_pos = (compressor->window_pos + 1) & window_mask;
     }
+    TAMP_INDEX_UPDATE(compressor, window_write);
 }
 
 /**
@@ -408,6 +416,7 @@ static TAMP_NOINLINE tamp_res write_extended_match_token(TampCompressor* compres
     uint8_t window_write = MIN(count, remaining);
     tamp_window_copy(compressor->window, &wp, position, window_write, window_mask);
     compressor->window_pos = wp;
+    TAMP_INDEX_UPDATE(compressor, window_write);
 
     compressor->extended_match_count = 0;  // Position reset not needed - only read when count > 0
 
@@ -518,6 +527,7 @@ static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE tamp_res poll_extended_handling(TampComp
         write_to_bit_buffer(compressor, IS_LITERAL_FLAG | last_byte, compressor->conf.literal + 1);
         compressor->window[compressor->window_pos] = last_byte;
         compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+        TAMP_INDEX_UPDATE(compressor, 1);
         compressor->rle_count = 0;
         return TAMP_OK;
     }
@@ -654,6 +664,7 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
         compressor->window_pos = (compressor->window_pos + 1) & window_mask;
         compressor->input_pos = input_add(1);
     }
+    TAMP_INDEX_UPDATE(compressor, match_size);
     compressor->input_size -= match_size;
 
     return TAMP_OK;
@@ -754,6 +765,7 @@ flush_check:
             const uint16_t window_mask = (1 << compressor->conf.window) - 1;
             compressor->window[compressor->window_pos] = literal;
             compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+            TAMP_INDEX_UPDATE(compressor, 1);
         } else {
             // count >= 2: write as RLE token
             write_rle_token(compressor, compressor->rle_count);
