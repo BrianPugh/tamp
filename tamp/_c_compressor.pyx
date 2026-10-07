@@ -9,21 +9,6 @@ from ._c_common import ERROR_LOOKUP
 
 from typing import Union
 
-cdef extern from *:
-    # build.py only defines TAMP_MATCH_INDEX on targets that support it.
-    """
-    #if TAMP_MATCH_INDEX
-    #define tamp_py_match_index_size(window) TAMP_MATCH_INDEX_SIZE(window)
-    #define tamp_py_set_match_index(compressor, buffer) tamp_compressor_set_match_index(compressor, buffer)
-    #else
-    #define tamp_py_match_index_size(window) ((size_t)0)
-    #define tamp_py_set_match_index(compressor, buffer) ((void)0)
-    #endif
-    """
-    size_t tamp_py_match_index_size(int window)
-    void tamp_py_set_match_index(ctamp.TampCompressor *compressor, void *buffer)
-
-
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
     cdef bytearray _window_buffer
@@ -44,7 +29,7 @@ cdef class Compressor:
 
     cdef int _attach_match_index(self) except -1:
         if self._match_index is not NULL:
-            tamp_py_set_match_index(self._c_compressor, self._match_index)
+            ctamp.tamp_py_set_match_index(self._c_compressor, self._match_index)
         return 0
 
     def __init__(
@@ -94,7 +79,7 @@ cdef class Compressor:
 
         PyMem_Free(self._match_index)
         self._match_index = NULL
-        cdef size_t match_index_size = tamp_py_match_index_size(window)
+        cdef size_t match_index_size = ctamp.tamp_py_match_index_size(window)
         if match_index_size:
             self._match_index = PyMem_Malloc(match_index_size)
             if self._match_index is NULL:
