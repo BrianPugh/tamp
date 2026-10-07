@@ -242,7 +242,8 @@ make website-clean         # Clean website build artifacts
   on desktop (for testing)
 - `TAMP_MATCH_INDEX=1` - Enable `tamp_compressor_set_match_index`, an opt-in
   hash-chain match index for faster compression. Desktop 64-bit only (build
-  error elsewhere); without it the compiled code is unchanged.
+  error elsewhere); without it the compiled code is unchanged. `setup.py` sets
+  it for 64-bit x86_64/aarch64 Python builds unless `TAMP_USE_EMBEDDED_MATCH=1`.
 - `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
   environments without libc (e.g. MicroPython native modules).
 

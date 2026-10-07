@@ -6,6 +6,12 @@ Python API
 
 .. autoclass:: tamp.Compressor
 
+.. note::
+
+   On 64-bit x86_64/aarch64, the C-accelerated compressor allocates a match index
+   (about 128 KB plus 6 bytes per window byte) per instance to speed up compression.
+   Output is identical either way.
+
 .. autoclass:: tamp.TextCompressor
 
 .. autofunction:: tamp.compress
