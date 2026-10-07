@@ -46,6 +46,11 @@ Pass these flags to your compiler (e.g., ``-DTAMP_STREAM=0``).
      - Enable lazy matching support. When enabled, ``TampConf.lazy_matching``
        becomes available. Improves compression ratio by 0.5-2% at the cost of
        50-75% slower compression. Most embedded systems should leave disabled.
+   * - TAMP_MATCH_INDEX
+     - 0
+     - Enable ``tamp_compressor_set_match_index``, an optional hash-chain index
+       that speeds up compression (especially at large windows) with byte-identical
+       output, at the cost of 128+ KiB of compression-time memory. Desktop 64-bit (x86_64/aarch64) only; see `Match Index`_.
    * - TAMP_STREAM
      - 1
      - Include stream API (``tamp_compress_stream``, ``tamp_decompress_stream``).
@@ -323,6 +328,26 @@ To compile the library with lazy matching support, define the ``TAMP_LAZY_MATCHI
 Alternatively, use the compiler flag ``-DTAMP_LAZY_MATCHING=1``.
 
 When compiled with ``TAMP_LAZY_MATCHING=1``, the ``TampConf.lazy_matching`` field becomes available and can be set to enable this feature for individual compressor instances.
+
+Match Index
+-----------
+On desktop 64-bit targets, compression time is dominated by searching the window for matches.
+Compiling with ``-DTAMP_MATCH_INDEX=1`` adds ``tamp_compressor_set_match_index``, which attaches a caller-provided hash-chain index so the search only visits window positions that could match.
+Output is byte-identical to compressing without the index.
+The index adds ``TAMP_MATCH_INDEX_SIZE(window)`` bytes (2-byte aligned) of compression-time memory: roughly 128 KiB plus 6 bytes per window byte.
+
+Attach it after ``tamp_compressor_init``; both ``tamp_compressor_init`` and ``tamp_compressor_reset_dictionary`` detach it, so re-attach after either.
+
+.. code-block:: c
+
+   TampCompressor compressor;
+   tamp_compressor_init(&compressor, &conf, window_buffer);
+   void *index = malloc(TAMP_MATCH_INDEX_SIZE(conf.window));
+   tamp_compressor_set_match_index(&compressor, index);
+   // Compress as usual; free(index) once done with the compressor.
+
+Defining ``TAMP_MATCH_INDEX`` on any other target (32-bit, ESP32, or with ``TAMP_USE_EMBEDDED_MATCH``) is a compile error.
+The Python package and CLI enable it automatically on 64-bit x86_64/aarch64.
 
 Minimizing Output Buffer Size
 -----------------------------

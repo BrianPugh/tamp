@@ -63,7 +63,32 @@ typedef struct TampCompressor {
     // unrelated functions. The ESP32 variant keeps it inline (free in WARM-section padding).
     uint8_t last_was_flush;
 #endif
+#if TAMP_MATCH_INDEX
+    uint16_t *match_index;  // Optional caller-provided hash-chain index; see tamp_compressor_set_match_index.
+#endif
 } TampCompressor;
+
+#if TAMP_MATCH_INDEX
+#if TAMP_ESP32 || TAMP_USE_EMBEDDED_MATCH || \
+    !(defined(__x86_64__) || defined(__aarch64__) || defined(_M_X64) || defined(_M_ARM64))
+#error "TAMP_MATCH_INDEX is only supported with the desktop 64-bit match finder"
+#endif
+
+/** Bytes of index memory tamp_compressor_set_match_index needs for a window of 2^window_bits bytes. */
+#define TAMP_MATCH_INDEX_SIZE(window_bits) ((65536 + 3 * ((size_t)1 << (window_bits))) * sizeof(uint16_t))
+
+/**
+ * @brief Speed up compression with a hash-chain index over the window.
+ *
+ * Output is byte-identical to compressing without an index. Call after
+ * tamp_compressor_init; init and tamp_compressor_reset_dictionary detach the index,
+ * so call again after either to keep using it.
+ *
+ * @param[in,out] compressor Initialized compressor.
+ * @param[in] buffer At least TAMP_MATCH_INDEX_SIZE(conf.window) bytes, 2-byte aligned.
+ */
+void tamp_compressor_set_match_index(TampCompressor *compressor, void *buffer);
+#endif
 
 /**
  * @brief Initialize Tamp Compressor object.

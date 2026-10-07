@@ -76,6 +76,21 @@ cdef extern from "tamp/compressor.h":
             );
 
 
+cdef extern from "tamp/compressor.h":
+    # setup.py only defines TAMP_MATCH_INDEX on targets that support it, and Cython can't
+    # conditionally compile, so the guard lives in C; the size is 0 where it's unavailable.
+    """
+    #if TAMP_MATCH_INDEX
+    #define tamp_py_match_index_size(window) TAMP_MATCH_INDEX_SIZE(window)
+    #define tamp_py_set_match_index(compressor, buffer) tamp_compressor_set_match_index(compressor, buffer)
+    #else
+    #define tamp_py_match_index_size(window) ((size_t)0)
+    #define tamp_py_set_match_index(compressor, buffer) ((void)0)
+    #endif
+    """
+    size_t tamp_py_match_index_size(int window)
+    void tamp_py_set_match_index(TampCompressor *compressor, void *buffer)
+
 
 cdef extern from "tamp/decompressor.h":
     ctypedef struct TampDecompressor:

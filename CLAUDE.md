@@ -35,7 +35,9 @@ different platforms:
 - `decompressor.h/c` - Decompression implementation
 - `compressor_find_match_desktop.c` - Desktop-optimized match finding (included
   by `compressor.c` on 64-bit targets: x86_64, aarch64, unless
-  `TAMP_USE_EMBEDDED_MATCH=1`)
+  `TAMP_USE_EMBEDDED_MATCH=1`). With `TAMP_MATCH_INDEX=1` it also holds an
+  optional hash-chain match index (~128 KB + 6 bytes per window byte,
+  byte-identical output)
 
 ## Development Commands
 
@@ -238,6 +240,10 @@ make website-clean         # Clean website build artifacts
   `TAMP_STREAM_FATFS` - Enable built-in I/O handlers for specific backends
 - `TAMP_USE_EMBEDDED_MATCH=1` - Force embedded `find_best_match` implementation
   on desktop (for testing)
+- `TAMP_MATCH_INDEX=1` - Enable `tamp_compressor_set_match_index`, an opt-in
+  hash-chain match index for faster compression. Desktop 64-bit only (build
+  error elsewhere); without it the compiled code is unchanged. `setup.py` sets
+  it for 64-bit x86_64/aarch64 Python builds unless `TAMP_USE_EMBEDDED_MATCH=1`.
 - `TAMP_USE_MEMSET=1` - Use libc `memset` (default: 1). Set to `0` for
   environments without libc (e.g. MicroPython native modules).
 
@@ -319,6 +325,7 @@ backends (memory, stdio, LittleFS, FatFS).
    uv run pytest      # Python tests
    make c-test            # C unit tests with sanitizers
    make c-test-embedded   # C tests with embedded match finding
+   make c-test-match-index  # Match index output vs. linear scan
    cd wasm && npm test    # WebAssembly
    ```
 
@@ -369,7 +376,8 @@ the pure Python reference implementation to keep them in sync.
 GitHub Actions workflows (`.github/workflows/`):
 
 - `tests.yaml` - Lint (ruff, pre-commit) and test across Python 3.9/3.12/3.13
-  and multiple OS. Also runs `c-test` and `c-test-embedded`.
+  and multiple OS. Also runs `c-test`, `c-test-embedded` and
+  `c-test-match-index`.
 - `build_wheels.yaml` - Cross-platform wheel builds via cibuildwheel
 - `javascript.yaml` - WebAssembly tests on Node 18/20
 - `mpy_native_module.yaml` - MicroPython native module builds for ARM

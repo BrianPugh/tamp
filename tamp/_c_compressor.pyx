@@ -9,11 +9,11 @@ from ._c_common import ERROR_LOOKUP
 
 from typing import Union
 
-
 cdef class Compressor:
     cdef ctamp.TampCompressor* _c_compressor
     cdef bytearray _window_buffer
     cdef unsigned char *_window_buffer_ptr
+    cdef void *_match_index
     cdef object f
     cdef bint _close_f_on_close
     cdef bint _dictionary_reset
@@ -24,7 +24,13 @@ cdef class Compressor:
             raise MemoryError
 
     def __dealloc__(self):
+        PyMem_Free(self._match_index)
         PyMem_Free(self._c_compressor)
+
+    cdef int _attach_match_index(self) except -1:
+        if self._match_index is not NULL:
+            ctamp.tamp_py_set_match_index(self._c_compressor, self._match_index)
+        return 0
 
     def __init__(
         self,
@@ -70,6 +76,15 @@ cdef class Compressor:
         res = ctamp.tamp_compressor_init(self._c_compressor, &conf, self._window_buffer_ptr)
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
+
+        PyMem_Free(self._match_index)
+        self._match_index = NULL
+        cdef size_t match_index_size = ctamp.tamp_py_match_index_size(window)
+        if match_index_size:
+            self._match_index = PyMem_Malloc(match_index_size)
+            if self._match_index is NULL:
+                raise MemoryError
+            self._attach_match_index()
 
     def write(self, const unsigned char[::1] data not None) -> int:
         cdef:
@@ -157,6 +172,7 @@ cdef class Compressor:
 
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
+        self._attach_match_index()
 
         if output_written_size:
             self.f.write(buffer[:output_written_size])

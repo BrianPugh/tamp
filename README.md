@@ -328,6 +328,10 @@ window buffer, but are implementation-specific and ignored for clarity here.
 Tamp uses significantly less memory than ZLib, and half the memory of
 Heatshrink.
 
+On 64-bit x86_64/aarch64, the Python package and CLI additionally allocate a
+compression match index (about 128 KB plus 6 bytes per window byte) for faster
+compression; output is unchanged. Embedded builds don't use it.
+
 ## Runtime
 
 As a rough benchmark, here is the performance (in seconds) of these different

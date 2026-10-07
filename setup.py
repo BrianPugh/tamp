@@ -1,6 +1,7 @@
 """Builds the Cython extensions; all other packaging configuration is in pyproject.toml."""
 
 import os
+import platform
 import sys
 
 from setuptools import setup
@@ -52,6 +53,9 @@ def build_extensions():
     if os.environ.get("TAMP_USE_EMBEDDED_MATCH", "0") == "1":
         print("Using embedded find_best_match implementation")
         define_macros.append(("TAMP_USE_EMBEDDED_MATCH", "1"))
+    elif sys.maxsize > 2**32 and platform.machine().lower() in ("x86_64", "amd64", "aarch64", "arm64"):
+        # The match index only builds with the 64-bit desktop match finder; 32-bit wheels use the plain scan.
+        define_macros.append(("TAMP_MATCH_INDEX", "1"))
 
     if profile:
         print("Setting profiling configuration.")

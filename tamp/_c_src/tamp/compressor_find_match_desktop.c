@@ -69,6 +69,109 @@ static inline int tamp_ctzll(uint64_t value) {
         }                                                                           \
     } while (0)
 
+#if TAMP_MATCH_INDEX
+/*
+ * Hash-chain index over the window: every position p < WINDOW_SIZE - 1 sits in the
+ * doubly-linked list for its 2-byte key window[p] | window[p+1] << 8. Those are exactly
+ * the positions the linear scan in find_best_match extends, so walking one list finds
+ * the same matches in O(list length) instead of O(WINDOW_SIZE).
+ * Layout of the caller's buffer: head[65536], next[W], prev[W], key[W].
+ */
+#define TAMP_INDEX_NONE 0xFFFF
+
+static void index_link(uint16_t *ix, uint16_t window_size, uint16_t pos) {
+    uint16_t *head = ix, *next = ix + 65536, *prev = next + window_size, *key = prev + window_size;
+    uint16_t k = key[pos];
+    prev[pos] = TAMP_INDEX_NONE;
+    next[pos] = head[k];
+    if (head[k] != TAMP_INDEX_NONE) prev[head[k]] = pos;
+    head[k] = pos;
+}
+
+static void index_unlink(uint16_t *ix, uint16_t window_size, uint16_t pos) {
+    uint16_t *head = ix, *next = ix + 65536, *prev = next + window_size, *key = prev + window_size;
+    if (prev[pos] == TAMP_INDEX_NONE)
+        head[key[pos]] = next[pos];
+    else
+        next[prev[pos]] = next[pos];
+    if (next[pos] != TAMP_INDEX_NONE) prev[next[pos]] = prev[pos];
+}
+
+static void index_rebuild(TampCompressor *compressor) {
+    uint16_t *ix = compressor->match_index;
+    const uint16_t window_size = WINDOW_SIZE;
+    uint16_t *key = ix + 65536 + 2 * window_size;
+    for (uint32_t i = 0; i < 65536; i++) ix[i] = TAMP_INDEX_NONE;
+    for (uint16_t p = 0; p + 1 < window_size; p++) {
+        key[p] = compressor->window[p] | (compressor->window[p + 1] << 8);
+        index_link(ix, window_size, p);
+    }
+}
+
+/* Re-key the pairs touched by the count bytes just written before window_pos. */
+static void index_update(TampCompressor *compressor, uint16_t count) {
+    uint16_t *ix = compressor->match_index;
+    const uint16_t window_size = WINDOW_SIZE;
+    const uint16_t mask = window_size - 1;
+    const uint16_t start = compressor->window_pos - count;
+    uint16_t *key = ix + 65536 + 2 * window_size;
+    for (uint16_t j = 0; j <= count; j++) {
+        uint16_t p = (start - 1 + j) & mask;
+        if (p == mask) continue;  // Pairs don't wrap around the window end.
+        uint16_t k = compressor->window[p] | (compressor->window[p + 1] << 8);
+        if (k == key[p]) continue;
+        index_unlink(ix, window_size, p);
+        key[p] = k;
+        index_link(ix, window_size, p);
+    }
+}
+
+/*
+ * Returns false, leaving the result unset, when the linear scan would be faster: the
+ * scan stops at the first full-length match, while the chain (not in window order) would
+ * have to be walked to its end to find the lowest-index one. Long chains of short matches
+ * (low-entropy data) also fall back once the walk exceeds WINDOW_SIZE / 16 positions.
+ */
+static bool find_best_match_indexed(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size) {
+    *match_size = 0;
+    if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return true;
+
+    const uint16_t window_size = WINDOW_SIZE;
+    const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
+    const unsigned char *window = compressor->window;
+    const uint16_t *next = compressor->match_index + 65536;
+    uint16_t budget = window_size >> 4;
+
+    uint8_t input_bytes[sizeof(compressor->input)];  // max_pattern_size <= input_size <= 16
+    for (uint8_t i = 0; i < max_pattern_size; i++) input_bytes[i] = read_input(i);
+
+    // The linear scan returns the first (lowest-index) longest match, so break ties the same way.
+    for (uint16_t idx = compressor->match_index[input_bytes[0] | (input_bytes[1] << 8)]; idx != TAMP_INDEX_NONE;
+         idx = next[idx]) {
+        if (TAMP_UNLIKELY(budget-- == 0)) return false;
+        const uint8_t limit = MIN(max_pattern_size, window_size - idx);
+        uint8_t match_len = 2;
+        while (match_len < limit && window[idx + match_len] == input_bytes[match_len]) match_len++;
+        if (TAMP_UNLIKELY(match_len == max_pattern_size)) return false;
+        if (match_len > *match_size || (match_len == *match_size && idx < *match_index)) {
+            *match_size = match_len;
+            *match_index = idx;
+        }
+    }
+    return true;
+}
+
+#define TAMP_INDEX_UPDATE(compressor, count)                                \
+    do {                                                                    \
+        if ((compressor)->match_index) index_update((compressor), (count)); \
+    } while (0)
+
+void tamp_compressor_set_match_index(TampCompressor *compressor, void *buffer) {
+    compressor->match_index = (uint16_t *)buffer;
+    if (buffer) index_rebuild(compressor);
+}
+#endif  // TAMP_MATCH_INDEX
+
 /**
  * @brief Find the best match for the current input buffer.
  *
@@ -80,6 +183,9 @@ static inline int tamp_ctzll(uint64_t value) {
  * @param[out] match_size Size of best found match.
  */
 static inline void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size) {
+#if TAMP_MATCH_INDEX
+    if (compressor->match_index && find_best_match_indexed(compressor, match_index, match_size)) return;
+#endif
     *match_size = 0;
 
     if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return;
