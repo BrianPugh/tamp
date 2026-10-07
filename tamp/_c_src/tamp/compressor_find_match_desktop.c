@@ -126,30 +126,39 @@ static void index_update(TampCompressor *compressor, uint16_t count) {
     }
 }
 
-static void find_best_match_indexed(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size) {
+/*
+ * Returns false, leaving the result unset, when the linear scan would be faster: the
+ * scan stops at the first full-length match, while the chain (not in window order) would
+ * have to be walked to its end to find the lowest-index one. Long chains of short matches
+ * (low-entropy data) also fall back once the walk exceeds WINDOW_SIZE / 16 positions.
+ */
+static bool find_best_match_indexed(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size) {
     *match_size = 0;
-    if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return;
+    if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return true;
 
     const uint16_t window_size = WINDOW_SIZE;
     const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
     const unsigned char *window = compressor->window;
     const uint16_t *next = compressor->match_index + 65536;
+    uint16_t budget = window_size >> 4;
 
     uint8_t input_bytes[sizeof(compressor->input)];  // max_pattern_size <= input_size <= 16
     for (uint8_t i = 0; i < max_pattern_size; i++) input_bytes[i] = read_input(i);
 
-    // Chains aren't in window order, so break ties toward the lowest index explicitly:
-    // the linear scan returns the first (lowest-index) longest match.
+    // The linear scan returns the first (lowest-index) longest match, so break ties the same way.
     for (uint16_t idx = compressor->match_index[input_bytes[0] | (input_bytes[1] << 8)]; idx != TAMP_INDEX_NONE;
          idx = next[idx]) {
+        if (TAMP_UNLIKELY(budget-- == 0)) return false;
         const uint8_t limit = MIN(max_pattern_size, window_size - idx);
         uint8_t match_len = 2;
         while (match_len < limit && window[idx + match_len] == input_bytes[match_len]) match_len++;
+        if (TAMP_UNLIKELY(match_len == max_pattern_size)) return false;
         if (match_len > *match_size || (match_len == *match_size && idx < *match_index)) {
             *match_size = match_len;
             *match_index = idx;
         }
     }
+    return true;
 }
 
 #define TAMP_INDEX_UPDATE(compressor, count)                                \
@@ -175,10 +184,7 @@ void tamp_compressor_set_match_index(TampCompressor *compressor, void *buffer) {
  */
 static inline void find_best_match(TampCompressor *compressor, uint16_t *match_index, uint8_t *match_size) {
 #if TAMP_MATCH_INDEX
-    if (compressor->match_index) {
-        find_best_match_indexed(compressor, match_index, match_size);
-        return;
-    }
+    if (compressor->match_index && find_best_match_indexed(compressor, match_index, match_size)) return;
 #endif
     *match_size = 0;
 

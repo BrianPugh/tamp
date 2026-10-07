@@ -50,7 +50,10 @@ static void generate(unsigned char *buf, size_t n, int kind) {
             case 4:  // Short-range repeats.
                 buf[i] = (i > 64 && rnd() % 8) ? buf[i - 1 - rnd() % 64] : (unsigned char)rnd();
                 break;
-            case 5:  // Repeats from farther back than small windows reach.
+            case 5:  // Short periodic patterns: chains span the window and full-length matches abound.
+                buf[i] = (rnd() % 500) ? alphabet[(i % (2 + (n % 7))) & 3] : (unsigned char)rnd();
+                break;
+            case 6:  // Repeats from farther back than small windows reach.
                 buf[i] = (i > 5000 && rnd() % 16) ? buf[i - 1 - rnd() % 5000] : (unsigned char)rnd();
                 break;
             default:  // Long runs mixed with noise.
@@ -150,7 +153,7 @@ int main(int argc, char **argv) {
 
         // Keeps the linear scan's O(n * window) cost reasonable under sanitizers.
         const size_t n = 1 + rnd() % (conf.window <= 10 ? MAX_INPUT : 6000);
-        const int kind = rnd() % 7;
+        const int kind = rnd() % 8;
         generate(in, n, kind);
         if (conf.literal < 8)
             for (size_t j = 0; j < n; j++) in[j] &= (1 << conf.literal) - 1;
