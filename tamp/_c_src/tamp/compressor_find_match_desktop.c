@@ -127,6 +127,99 @@ static void index_update(TampCompressor *compressor, uint16_t count) {
 }
 
 /*
+ * Walks the chain of the pair pat[j], pat[j+1], treating each entry q as a match candidate
+ * at q - j >= lo that counts if it matches at least need (>= j + 2) bytes of pat[0..n).
+ * Keeps the longest, lowest-index one in the result. Returns false once the walk exceeds
+ * budget positions.
+ */
+static TAMP_ALWAYS_INLINE bool chain_search(const TampCompressor *compressor, const uint8_t *pat, uint8_t n, uint8_t j,
+                                            uint8_t need, uint16_t lo, uint16_t budget, uint16_t *match_index,
+                                            uint8_t *match_size) {
+    const uint16_t window_size = WINDOW_SIZE;
+    const unsigned char *window = compressor->window;
+    const uint16_t *next = compressor->match_index + 65536;
+    for (uint16_t q = compressor->match_index[pat[j] | (pat[j + 1] << 8)]; q != TAMP_INDEX_NONE; q = next[q]) {
+        if (TAMP_UNLIKELY(budget-- == 0)) return false;
+        if (q < lo + j) continue;
+        const uint16_t p = q - j;
+        uint8_t i = 0;
+        while (i < j && window[p + i] == pat[i]) i++;
+        if (i < j) continue;
+        const uint8_t limit = MIN(n, window_size - p);
+        uint8_t match_len = j + 2;
+        while (match_len < limit && window[p + match_len] == pat[match_len]) match_len++;
+        if (match_len < need) continue;
+        if (match_len > *match_size || (match_len == *match_size && p < *match_index)) {
+            *match_size = match_len;
+            *match_index = p;
+        }
+    }
+    return true;
+}
+
+/*
+ * Lowest-index longest match of pat[0..n) among window positions >= lo, counting only
+ * matches of at least min_len (2 <= min_len <= n) bytes. Returns false, leaving the result
+ * unset, when the linear scan would be faster.
+ *
+ * Every such match holds the pair pat[j], pat[j+1] at offset j for each j < min_len - 1,
+ * so when pat has two differing adjacent bytes there, that pair's chain lists every
+ * candidate. Otherwise pat starts with a run b^r (r >= min_len). A position then matches
+ * min(its run of b, r) bytes unless that run is exactly r long and followed by pat[r];
+ * those positions sit r-1 before a (b, pat[r]) pair. Without one, the answer is the
+ * lowest position starting a run of r b's, else the start of the first longest run.
+ * Walking the (b, b) chain gives the same answer and is faster unless it is long, as on
+ * low-entropy data where it spans most of the window, so it is tried first and abandoned
+ * after a few positions.
+ */
+static bool index_search(const TampCompressor *compressor, const uint8_t *pat, uint8_t n, uint8_t min_len, uint16_t lo,
+                         uint16_t *match_index, uint8_t *match_size) {
+    const uint16_t window_size = WINDOW_SIZE;
+    const unsigned char *window = compressor->window;
+    *match_size = 0;
+
+    uint8_t r = 1;
+    while (r < n && pat[r] == pat[0]) r++;
+
+    const uint16_t budget = window_size >> 4;
+    if (r < min_len) return chain_search(compressor, pat, n, r - 1, min_len, lo, budget, match_index, match_size);
+    if (chain_search(compressor, pat, n, 0, min_len, lo, 8, match_index, match_size)) return true;
+
+    *match_size = 0;
+    if (r < n) {
+        if (!chain_search(compressor, pat, n, r - 1, r + 1, lo, budget, match_index, match_size)) return false;
+        if (*match_size) return true;
+    }
+
+    const uint8_t b = pat[0];
+    uint16_t run = 0, best_run = min_len - 1, best_start = 0;
+    for (uint16_t p = lo; p < window_size; p++) {
+        if (window[p] == b) {
+            if (++run == r) {
+                *match_index = p + 1 - r;
+                *match_size = r;
+                return true;
+            }
+        } else {
+            if (run > best_run) {
+                best_run = run;
+                best_start = p - run;
+            }
+            run = 0;
+        }
+    }
+    if (run > best_run) {
+        best_run = run;
+        best_start = window_size - run;
+    }
+    if (best_run >= min_len) {
+        *match_index = best_start;
+        *match_size = best_run;
+    }
+    return true;
+}
+
+/*
  * Returns false, leaving the result unset, when the linear scan would be faster: the
  * scan stops at the first full-length match, while the chain (not in window order) would
  * have to be walked to its end to find the lowest-index one. Long chains of short matches
@@ -145,6 +238,10 @@ static bool find_best_match_indexed(TampCompressor *compressor, uint16_t *match_
     uint8_t input_bytes[sizeof(compressor->input)];  // max_pattern_size <= input_size <= 16
     for (uint8_t i = 0; i < max_pattern_size; i++) input_bytes[i] = read_input(i);
 
+    // The linear scan reports matches from 2 bytes up, even below min_pattern_size.
+    if (input_bytes[0] == input_bytes[1])
+        return index_search(compressor, input_bytes, max_pattern_size, 2, 0, match_index, match_size);
+
     // The linear scan returns the first (lowest-index) longest match, so break ties the same way.
     for (uint16_t idx = compressor->match_index[input_bytes[0] | (input_bytes[1] << 8)]; idx != TAMP_INDEX_NONE;
          idx = next[idx]) {
@@ -160,6 +257,28 @@ static bool find_best_match_indexed(TampCompressor *compressor, uint16_t *match_
     }
     return true;
 }
+
+#if TAMP_EXTENDED_COMPRESS
+/* find_extended_match via the index: the pattern is the current match plus the input. */
+static bool find_extended_match_indexed(TampCompressor *compressor, uint16_t current_pos, uint8_t current_count,
+                                        uint16_t *new_pos, uint8_t *new_count) {
+    const uint8_t max_pattern = MIN(current_count + compressor->input_size, MAX_PATTERN_SIZE);
+    uint8_t pat[256];
+    memcpy(pat, compressor->window + current_pos, current_count);
+    for (uint8_t i = current_count; i < max_pattern; i++) pat[i] = read_input(i - current_count);
+
+    // The match usually just continues in place, and current_pos is the lowest candidate.
+    const uint8_t limit = MIN(max_pattern, WINDOW_SIZE - current_pos);
+    uint8_t len = current_count;
+    while (len < limit && compressor->window[current_pos + len] == pat[len]) len++;
+    if (len == max_pattern) {
+        *new_pos = current_pos;
+        *new_count = len;
+        return true;
+    }
+    return index_search(compressor, pat, max_pattern, current_count + 1, current_pos, new_pos, new_count);
+}
+#endif
 
 #define TAMP_INDEX_UPDATE(compressor, count)                                \
     do {                                                                    \
