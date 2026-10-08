@@ -130,7 +130,9 @@ static void index_update(TampCompressor *compressor, uint16_t count) {
  * Walks the chain of the pair pat[j], pat[j+1], treating each entry q as a match candidate
  * at q - j >= lo that counts if it matches at least need (>= j + 2) bytes of pat[0..n).
  * Keeps the longest, lowest-index one in the result. Returns false once the walk exceeds
- * budget positions.
+ * budget positions. The chain is not in window order, so after a full-length match it
+ * must still be walked to its end to find the lowest-index one, while a linear scan stops
+ * at the first; the remaining walk is capped so long chains fall back to the scan.
  */
 static TAMP_ALWAYS_INLINE bool chain_search(const TampCompressor *compressor, const uint8_t *pat, uint8_t n, uint8_t j,
                                             uint8_t need, uint16_t lo, uint16_t budget, uint16_t *match_index,
@@ -149,6 +151,7 @@ static TAMP_ALWAYS_INLINE bool chain_search(const TampCompressor *compressor, co
         uint8_t match_len = j + 2;
         while (match_len < limit && window[p + match_len] == pat[match_len]) match_len++;
         if (match_len < need) continue;
+        if (TAMP_UNLIKELY(match_len == n) && budget > 128) budget = 128;
         if (match_len > *match_size || (match_len == *match_size && p < *match_index)) {
             *match_size = match_len;
             *match_index = p;
@@ -164,7 +167,10 @@ static TAMP_ALWAYS_INLINE bool chain_search(const TampCompressor *compressor, co
  *
  * Every such match holds the pair pat[j], pat[j+1] at offset j for each j < min_len - 1,
  * so when pat has two differing adjacent bytes there, that pair's chain lists every
- * candidate. Otherwise pat starts with a run b^r (r >= min_len). A position then matches
+ * candidate. The last such pair is used: for an extended match it holds the new byte,
+ * which rules out most continuations of a periodic match.
+ *
+ * Otherwise pat starts with a run b^r (r >= min_len). A position then matches
  * min(its run of b, r) bytes unless that run is exactly r long and followed by pat[r];
  * those positions sit r-1 before a (b, pat[r]) pair. Without one, the answer is the
  * lowest position starting a run of r b's, else the start of the first longest run.
@@ -182,7 +188,11 @@ static bool index_search(const TampCompressor *compressor, const uint8_t *pat, u
     while (r < n && pat[r] == pat[0]) r++;
 
     const uint16_t budget = window_size >> 4;
-    if (r < min_len) return chain_search(compressor, pat, n, r - 1, min_len, lo, budget, match_index, match_size);
+    if (r < min_len) {
+        uint8_t j = min_len - 2;
+        while (pat[j] == pat[j + 1]) j--;
+        return chain_search(compressor, pat, n, j, min_len, lo, budget, match_index, match_size);
+    }
     if (chain_search(compressor, pat, n, 0, min_len, lo, 8, match_index, match_size)) return true;
 
     *match_size = 0;
