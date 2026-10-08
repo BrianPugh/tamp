@@ -461,7 +461,11 @@ static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE tamp_res poll_extended_handling(TampComp
 
             uint16_t new_pos;
             uint8_t new_count;
-            find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
+#if TAMP_MATCH_INDEX
+            if (!compressor->match_index ||
+                !find_extended_match_indexed(compressor, current_pos, current_count, &new_pos, &new_count))
+#endif
+                find_extended_match(compressor, current_pos, current_count, &new_pos, &new_count);
 
             if (new_count > current_count) {
                 uint8_t extra_bytes = new_count - current_count;
