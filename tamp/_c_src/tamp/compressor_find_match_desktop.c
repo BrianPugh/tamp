@@ -127,37 +127,80 @@ static void index_update(TampCompressor *compressor, uint16_t count) {
 }
 
 /*
- * Walks the chain of the pair pat[j], pat[j+1], treating each entry q as a match candidate
- * at q - j >= lo that counts if it matches at least need (>= j + 2) bytes of pat[0..n).
- * Keeps the longest, lowest-index one in the result. Returns false once the walk exceeds
- * budget positions. The chain is not in window order, so after a full-length match it
- * must still be walked to its end to find the lowest-index one, while a linear scan stops
- * at the first; the remaining walk is capped so long chains fall back to the scan.
+ * Length of the match of pat[0..n) at q - j for an entry q on the chain of the pair
+ * pat[j], pat[j+1], or 0 if q - j < lo or the match is shorter than need (>= j + 2).
+ */
+static TAMP_ALWAYS_INLINE uint8_t chain_match_len(const TampCompressor *compressor, const uint8_t *pat, uint8_t n,
+                                                  uint8_t j, uint8_t need, uint16_t lo, uint16_t q) {
+    const unsigned char *window = compressor->window;
+    if (q < lo + j) return 0;
+    const uint16_t p = q - j;
+    uint8_t i = 0;
+    while (i < j && window[p + i] == pat[i]) i++;
+    if (i < j) return 0;
+    const uint8_t limit = MIN(n, WINDOW_SIZE - p);
+    uint8_t match_len = j + 2;
+    while (match_len < limit && window[p + match_len] == pat[match_len]) match_len++;
+    return match_len < need ? 0 : match_len;
+}
+
+/*
+ * Walks the chain of the pair pat[j], pat[j+1] for the longest, lowest-index match of at
+ * least need bytes, merged into the result. Returns false once the walk exceeds budget
+ * positions. The chain is not in window order, so after a full-length match it must still
+ * be walked to its end to find the lowest-index one, while a linear scan stops at the
+ * first; the remaining walk is capped so long chains fall back to the scan.
  */
 static TAMP_ALWAYS_INLINE bool chain_search(const TampCompressor *compressor, const uint8_t *pat, uint8_t n, uint8_t j,
                                             uint8_t need, uint16_t lo, uint16_t budget, uint16_t *match_index,
                                             uint8_t *match_size) {
-    const uint16_t window_size = WINDOW_SIZE;
-    const unsigned char *window = compressor->window;
     const uint16_t *next = compressor->match_index + 65536;
     for (uint16_t q = compressor->match_index[pat[j] | (pat[j + 1] << 8)]; q != TAMP_INDEX_NONE; q = next[q]) {
         if (TAMP_UNLIKELY(budget-- == 0)) return false;
-        if (q < lo + j) continue;
-        const uint16_t p = q - j;
-        uint8_t i = 0;
-        while (i < j && window[p + i] == pat[i]) i++;
-        if (i < j) continue;
-        const uint8_t limit = MIN(n, window_size - p);
-        uint8_t match_len = j + 2;
-        while (match_len < limit && window[p + match_len] == pat[match_len]) match_len++;
-        if (match_len < need) continue;
+        const uint8_t match_len = chain_match_len(compressor, pat, n, j, need, lo, q);
+        if (!match_len) continue;
         if (TAMP_UNLIKELY(match_len == n) && budget > 128) budget = 128;
+        const uint16_t p = q - j;
         if (match_len > *match_size || (match_len == *match_size && p < *match_index)) {
             *match_size = match_len;
             *match_index = p;
         }
     }
     return true;
+}
+
+/* chain_search split into resumable steps, so two chains can be walked in lockstep. */
+typedef struct {
+    uint16_t q, budget, index;
+    uint8_t size;
+} ChainWalk;
+
+static TAMP_ALWAYS_INLINE void chain_start(const TampCompressor *compressor, const uint8_t *pat, uint8_t j,
+                                           uint16_t budget, ChainWalk *w) {
+    w->q = compressor->match_index[pat[j] | (pat[j + 1] << 8)];
+    w->budget = budget;
+    w->index = 0;
+    w->size = 0;
+}
+
+/* Advances the walk by up to steps entries; returns true once it reaches the chain's end. */
+static TAMP_ALWAYS_INLINE bool chain_step(const TampCompressor *compressor, const uint8_t *pat, uint8_t n, uint8_t j,
+                                          uint8_t need, uint16_t lo, ChainWalk *w, uint8_t steps) {
+    const uint16_t *next = compressor->match_index + 65536;
+    uint16_t q = w->q;
+    for (; q != TAMP_INDEX_NONE && steps && w->budget; q = next[q], steps--) {
+        w->budget--;
+        const uint8_t match_len = chain_match_len(compressor, pat, n, j, need, lo, q);
+        if (!match_len) continue;
+        if (TAMP_UNLIKELY(match_len == n) && w->budget > 128) w->budget = 128;
+        const uint16_t p = q - j;
+        if (match_len > w->size || (match_len == w->size && p < w->index)) {
+            w->size = match_len;
+            w->index = p;
+        }
+    }
+    w->q = q;
+    return q == TAMP_INDEX_NONE;
 }
 
 /*
@@ -168,7 +211,12 @@ static TAMP_ALWAYS_INLINE bool chain_search(const TampCompressor *compressor, co
  * Every such match holds the pair pat[j], pat[j+1] at offset j for each j < min_len - 1,
  * so when pat has two differing adjacent bytes there, that pair's chain lists every
  * candidate. The last such pair is used: for an extended match it holds the new byte,
- * which rules out most continuations of a periodic match.
+ * which rules out most continuations of a periodic match. When the new byte repeats the
+ * last matched one, the pair holding it is a run pair (b, b) instead, whose chain is short
+ * in periodic data but long in runs, while the last differing pair's chain is the reverse.
+ * Both are walked in lockstep, splitting the budget, and the first to finish gives the
+ * answer. The differing pair takes more steps per round, as data with long runs makes its
+ * chain the shorter one far more often.
  *
  * Otherwise pat starts with a run b^r (r >= min_len). A position then matches
  * min(its run of b, r) bytes unless that run is exactly r long and followed by pat[r];
@@ -190,8 +238,28 @@ static bool index_search(const TampCompressor *compressor, const uint8_t *pat, u
     const uint16_t budget = window_size >> 4;
     if (r < min_len) {
         uint8_t j = min_len - 2;
-        while (pat[j] == pat[j + 1]) j--;
-        return chain_search(compressor, pat, n, j, min_len, lo, budget, match_index, match_size);
+        if (pat[j] != pat[j + 1])
+            return chain_search(compressor, pat, n, j, min_len, lo, budget, match_index, match_size);
+        uint8_t k = j - 1;
+        while (pat[k] == pat[k + 1]) k--;
+        ChainWalk same, diff;
+        chain_start(compressor, pat, j, budget / 2, &same);
+        chain_start(compressor, pat, k, budget / 2, &diff);
+        const ChainWalk *done;
+        for (;;) {
+            if (same.budget && chain_step(compressor, pat, n, j, min_len, lo, &same, 4)) {
+                done = &same;
+                break;
+            }
+            if (diff.budget && chain_step(compressor, pat, n, k, min_len, lo, &diff, 32)) {
+                done = &diff;
+                break;
+            }
+            if (!same.budget && !diff.budget) return false;
+        }
+        *match_index = done->index;
+        *match_size = done->size;
+        return true;
     }
     if (chain_search(compressor, pat, n, 0, min_len, lo, 8, match_index, match_size)) return true;
 

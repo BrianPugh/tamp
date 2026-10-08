@@ -59,6 +59,9 @@ static void generate(unsigned char *buf, size_t n, int kind) {
             case 7:  // Mostly zeros with sparse noise, like an uncompressed binary diff.
                 buf[i] = rnd() % 8 ? 0 : (rnd() % 4 ? (unsigned char)(rnd() % 4) : (unsigned char)rnd());
                 break;
+            case 8:  // Period-2 data with occasional doubled bytes: extensions by a repeat of the last byte.
+                buf[i] = (i && rnd() % 64 == 0) ? buf[i - 1] : alphabet[i & 1];
+                break;
             default:  // Long runs mixed with noise.
                 if (rnd() % 400 == 0) {
                     const unsigned char c = (unsigned char)rnd();
@@ -156,7 +159,7 @@ int main(int argc, char **argv) {
 
         // Keeps the linear scan's O(n * window) cost reasonable under sanitizers.
         const size_t n = 1 + rnd() % (conf.window <= 10 ? MAX_INPUT : 6000);
-        const int kind = rnd() % 9;
+        const int kind = rnd() % 10;
         generate(in, n, kind);
         if (conf.literal < 8)
             for (size_t j = 0; j < n; j++) in[j] &= (1 << conf.literal) - 1;
