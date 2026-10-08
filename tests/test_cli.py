@@ -44,6 +44,21 @@ compressed_foo_foo_foo = bytes(
 
 @unittest.skipIf(micropython is not None, "not running cpython")
 class TestCli(unittest.TestCase):
+    def test_empty_dictionary_keeps_initialized_window(self):
+        import tamp
+        from tamp.cli.main import load_dictionary
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dict_file = Path(tmp_dir) / "empty.bin"
+            dict_file.write_bytes(b"")
+            for extended in (False, True):
+                for literal in (5, 8):
+                    with self.subTest(extended=extended, literal=literal):
+                        dictionary = load_dictionary(dict_file, 10, literal, extended)
+                        expected = tamp.initialize_dictionary(1024, literal=literal if extended else 8)
+                        self.assertEqual(dictionary, expected)
+                        self.assertEqual(len(dictionary), 1024)
+
     def test_compress_file_to_stdout(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)

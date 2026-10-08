@@ -101,7 +101,8 @@ def load_dictionary(path: Path, window: int, literal: int, extended: bool) -> by
     if len(raw) > window_size:
         raise ValueError(f"Dictionary file ({len(raw)} bytes) is larger than window size ({window_size} bytes).")
     dictionary = tamp.initialize_dictionary(window_size, literal=literal if extended else 8)
-    dictionary[-len(raw) :] = raw
+    if raw:
+        dictionary[-len(raw) :] = raw
     return dictionary
 
 
