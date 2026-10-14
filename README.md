@@ -401,9 +401,3 @@ buffer-looping functions (like `tamp_compressor_compress`) that Heatshrink lacks
 
 Tamp is dual-licensed under either the [Apache License 2.0](LICENSE-APACHE) or
 the [MIT License](LICENSE-MIT), at your option.
-
-The exception is `espidf/tamp/private/copyutil.hpp` and
-`espidf/tamp/private/tamp_search.hpp` (by @BitsForPeople), which are licensed
-under GPL-3.0-or-later. They are only compiled into the ESP-IDF component when
-`TAMP_ESP32` is enabled (the component's Kconfig default); disable
-`CONFIG_TAMP_ESP32` to build without them.
