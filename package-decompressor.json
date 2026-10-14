@@ -3,6 +3,5 @@
     ["tamp/__init__.py", "github:brianpugh/tamp/tamp/__init__.py"],
     ["tamp/decompressor_viper.py", "github:brianpugh/tamp/tamp/decompressor_viper.py"]
   ],
-  "deps": [],
-  "version": "1.7.0"
+  "deps": []
 }

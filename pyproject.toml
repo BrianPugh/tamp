@@ -44,6 +44,7 @@ dev = [
     "pytest-subtests>=0.10.0",
     "numpy>=1.24",
     "pyelftools>=0.32,<0.33",
+    "bump-my-version>=1.6.0",
 ]
 docs = [
     "sphinx>=4.5.0",
@@ -68,6 +69,24 @@ cache-keys = [
 ]
 
 [tool.setuptools_scm]
+
+# Release with `uv run bump-my-version bump {major,minor,patch}`, which commits
+# and tags. setuptools-scm still derives the package version from that tag; this
+# only rewrites version strings that live in committed files.
+[tool.bumpversion]
+current_version = "2.4.0"
+commit = true
+tag = true
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "releases/download/v{current_version}/tamp-{current_version}-"
+replace = "releases/download/v{new_version}/tamp-{new_version}-"
+
+[[tool.bumpversion.files]]
+filename = "docs/source/Installation.rst"
+search = "releases/download/v{current_version}/tamp-{current_version}-"
+replace = "releases/download/v{new_version}/tamp-{new_version}-"
 
 [tool.setuptools.packages.find]
 include = ["tamp*"]

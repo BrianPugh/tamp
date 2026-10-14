@@ -89,7 +89,8 @@ install, are small, and are incredibly fast.
 Download the appropriate `.mpy` file from the
 [release page](https://github.com/BrianPugh/tamp/releases).
 
-- Match the micropython version.
+- Match the `.mpy` version to your micropython version: `mpy6.3` for v1.23+,
+  `mpy6.2` for v1.22, `mpy6.1` for v1.20-v1.21.
 - Match the architecture to the microcontroller (e.g. `armv6m` for a pi pico).
 
 Rename the file to `tamp.mpy` and transfer it to your board. If using
@@ -98,7 +99,7 @@ following to `pyproject.toml`.
 
 ```toml
 [tool.belay.dependencies]
-tamp = "https://github.com/BrianPugh/tamp/releases/download/v1.7.0/tamp-1.7.0-mpy1.23-armv6m.mpy"
+tamp = "https://github.com/BrianPugh/tamp/releases/download/v2.4.0/tamp-2.4.0-mpy6.3-armv6m.mpy"
 ```
 
 ## C
