@@ -8,7 +8,7 @@ TAMP_C_FILES := \
 	decompressor.h
 
 stage:
-	cp ../../README.md .
+	cp ../../README.md ../../LICENSE-APACHE ../../LICENSE-MIT .
 	mkdir -p tamp
 	$(foreach f,$(TAMP_C_FILES),cp ../../tamp/_c_src/tamp/$(f) tamp/;)
 

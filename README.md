@@ -396,3 +396,8 @@ buffer-looping functions (like `tamp_compressor_compress`) that Heatshrink lacks
 ## Acknowledgement
 
 - Thanks @BitsForPeople for the esp32-optimized compressor implementation.
+
+## License
+
+Tamp is dual-licensed under either the [Apache License 2.0](LICENSE-APACHE) or
+the [MIT License](LICENSE-MIT), at your option.

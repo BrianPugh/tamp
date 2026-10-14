@@ -140,5 +140,7 @@ class TampDecompressor {
 
 ## License
 
-This project is licensed under the Apache 2.0 License - see the
-[LICENSE](https://github.com/BrianPugh/tamp/blob/main/LICENSE) file for details.
+This project is dual-licensed under either the
+[Apache License 2.0](https://github.com/BrianPugh/tamp/blob/main/LICENSE-APACHE)
+or the [MIT License](https://github.com/BrianPugh/tamp/blob/main/LICENSE-MIT),
+at your option.
