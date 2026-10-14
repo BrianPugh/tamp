@@ -74,7 +74,7 @@ cache-keys = [
 # and tags. setuptools-scm still derives the package version from that tag; this
 # only rewrites version strings that live in committed files.
 [tool.bumpversion]
-current_version = "2.4.0"
+current_version = "2.5.0"
 commit = true
 tag = true
 
