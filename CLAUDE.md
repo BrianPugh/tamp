@@ -381,11 +381,11 @@ the pure Python reference implementation to keep them in sync.
 
 GitHub Actions workflows (`.github/workflows/`):
 
-- `tests.yaml` - Lint (ruff, pre-commit) and test across Python 3.9/3.12/3.13
-  and multiple OS. Also runs `c-test`, `c-test-embedded` and
-  `c-test-match-index`.
+- `tests.yaml` - Lint (ruff, pre-commit) and test across Python 3.9-3.13 and
+  multiple OS. Also runs `c-test`, `c-test-embedded` and `c-test-match-index`.
 - `build_wheels.yaml` - Cross-platform wheel builds via cibuildwheel
-- `javascript.yaml` - WebAssembly tests on Node 18/20
+- `javascript.yaml` - WebAssembly build/tests on Node 22; publishes to npm on
+  tags
 - `mpy_native_module.yaml` - MicroPython native module builds for ARM
   architectures
 - `esp_upload_component.yml` - ESP-IDF component registry upload
