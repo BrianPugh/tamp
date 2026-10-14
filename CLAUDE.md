@@ -354,11 +354,17 @@ backends (memory, stdio, LittleFS, FatFS).
 
 1. **Version is automatically managed** via `setuptools-scm` (derived from git
    tags)
-2. **Build artifacts include:**
+2. **Cut a release** with `uv run bump-my-version bump {major,minor,patch}` on a
+   clean `main`. It rewrites the version strings in committed files (README /
+   `Installation.rst` `.mpy` URLs; config in `pyproject.toml`
+   `[tool.bumpversion]`), commits, and tags `vX.Y.Z`. Push the commit and tag,
+   then create the GitHub release from the existing tag. The
+   `release_version_check.yaml` workflow fails any tag made by hand.
+3. **Build artifacts include:**
    - Python wheels with compiled extensions
    - MicroPython `.mpy` files for multiple architectures
    - WebAssembly npm package
-3. **CI/CD handles** cross-platform builds and testing
+4. **CI/CD handles** cross-platform builds and testing
 
 ### Python Import Fallback Chain
 
@@ -383,6 +389,8 @@ GitHub Actions workflows (`.github/workflows/`):
 - `mpy_native_module.yaml` - MicroPython native module builds for ARM
   architectures
 - `esp_upload_component.yml` - ESP-IDF component registry upload
+- `release_version_check.yaml` - On `v*.*.*` tags, fails if `[tool.bumpversion]`
+  `current_version` or the README/docs `.mpy` URLs don't match the tag
 - `espidf_build.yaml` - Build-only check of the `devices/espidf/` harness (opt
   legs for esp32/esp32s3/esp32c3 + one noopt leg, ESP-IDF v6.0.2; placeholder
   embed data, no enwik8/uv). PRs trigger it only for `espidf/`/`devices/`
