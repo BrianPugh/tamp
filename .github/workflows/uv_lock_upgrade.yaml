@@ -1,0 +1,51 @@
+name: Upgrade uv.lock
+
+# Replaces dependabot for uv.lock: `uv lock --upgrade` resolves the python 3.9
+# part of the lock separately, which dependabot's uv updater can't do.
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Mondays 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  upgrade:
+    name: 'uv lock --upgrade'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Upgrade uv.lock
+        run: |
+          {
+            echo 'Automated `uv lock --upgrade`.'
+            echo
+            echo '```'
+            uv lock --upgrade 2>&1 | grep -E '^(Updated|Added|Removed) ' || echo 'No changes'
+            echo '```'
+          } > "$RUNNER_TEMP/body.md"
+
+      # Needs "Allow GitHub Actions to create and approve pull requests" enabled.
+      # PRs opened with the default GITHUB_TOKEN don't trigger CI (close and
+      # reopen the PR to run it); setting the UV_LOCK_UPGRADE_TOKEN secret
+      # (fine-grained PAT: contents + pull-requests write) avoids that.
+      - name: Open pull request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.UV_LOCK_UPGRADE_TOKEN || github.token }}
+          add-paths: uv.lock
+          branch: automated/uv-lock-upgrade
+          delete-branch: true
+          commit-message: Upgrade uv.lock
+          title: Upgrade uv.lock
+          body-path: ${{ runner.temp }}/body.md

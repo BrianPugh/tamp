@@ -1,18 +1,13 @@
 # Lockfile-only: bump the pinned versions without raising the minimum
 # versions in pyproject.toml / package.json, which would only restrict users.
 # https://docs.github.com/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+#
+# uv.lock is refreshed by uv_lock_upgrade.yaml instead: dependabot's uv updater
+# pins one version per package across all python versions, which can't resolve
+# for the python 3.9 part of the lock.
 
 version: 2
 updates:
-  - package-ecosystem: 'uv'
-    directory: '/'
-    schedule:
-      interval: 'weekly'
-    versioning-strategy: 'lockfile-only'
-    groups:
-      python:
-        patterns: ['*']
-
   - package-ecosystem: 'npm'
     directory: '/wasm'
     schedule:

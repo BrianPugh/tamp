@@ -387,6 +387,8 @@ GitHub Actions workflows (`.github/workflows/`):
   legs for esp32/esp32s3/esp32c3 + one noopt leg, ESP-IDF v6.0.2; placeholder
   embed data, no enwik8/uv). PRs trigger it only for `espidf/`/`devices/`
   changes; `tamp/_c_src/` coverage runs on push to main.
+- `uv_lock_upgrade.yaml` - Weekly `uv lock --upgrade` PR (dependabot only
+  handles the npm lockfiles; its uv updater can't resolve the python 3.9 fork)
 
 ## Documentation Style
 
