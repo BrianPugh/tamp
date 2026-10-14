@@ -23,7 +23,6 @@ exclude uv.lock
 # they configure are pruned above). None affect building or using the package.
 exclude .pre-commit-config.yaml
 exclude .readthedocs.yaml
-exclude .bumpversion.cfg
 exclude .codecov.yml
 exclude .clang-format
 exclude .eslintrc.json
