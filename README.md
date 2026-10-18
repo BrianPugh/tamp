@@ -369,8 +369,9 @@ speed Tamp can achieve. In all tests, a 1KB window (10 bit) was used.
 Tamp resulted in a **50841** byte archive, while Micropython's builtin `deflate`
 resulted in a larger, **59442** byte archive.
 
-See [devices/BENCHMARKS.md](devices/BENCHMARKS.md) for this benchmark across
-various hardware.
+See
+[devices/BENCHMARKS.md](https://github.com/BrianPugh/tamp/blob/main/devices/BENCHMARKS.md)
+for this benchmark across various hardware.
 
 ## Binary Size
 
@@ -400,5 +401,7 @@ buffer-looping functions (like `tamp_compressor_compress`) that Heatshrink lacks
 
 ## License
 
-Tamp is dual-licensed under either the [Apache License 2.0](LICENSE-APACHE) or
-the [MIT License](LICENSE-MIT), at your option.
+Tamp is dual-licensed under either the
+[Apache License 2.0](https://github.com/BrianPugh/tamp/blob/main/LICENSE-APACHE)
+or the [MIT License](https://github.com/BrianPugh/tamp/blob/main/LICENSE-MIT),
+at your option.
