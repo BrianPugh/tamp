@@ -52,7 +52,8 @@ typedef struct {
     };
     uint8_t window_bits_max : 4;    // Max window bits buffer can hold
     uint8_t configured : 1;         // Whether config has been set (authoritative "header complete" flag)
-    uint8_t header_bytes_read : 2;  // Before configured: header bytes consumed so far
+    uint8_t header_bytes_read : 1;  // Before configured: 1 if the first header byte is stashed
+    uint8_t flush_reset_done : 1;   // This run of FLUSHes already reset the dictionary (window is pristine)
     uint8_t last_was_flush : 1;     // Previous token was FLUSH (for double-FLUSH dictionary reset detection)
 } TampDecompressor;
 
