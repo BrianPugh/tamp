@@ -236,5 +236,122 @@ class TestOversizedDictionary(unittest.TestCase):
                     self.assertEqual(bytes(d.read()), self.PAYLOAD)
 
 
+def _c_extension_available():
+    return micropython is None and CCompressor is not None
+
+
+class _Raw(io.RawIOBase):
+    """Readable raw stream whose readinto() a test can override."""
+
+    def __init__(self, data):
+        self.b = io.BytesIO(data)
+
+    def readable(self):
+        return True
+
+    def read(self, n=-1):  # RawIOBase.read() itself trusts readinto()
+        return self.b.read(n)
+
+
+@unittest.skipUnless(_c_extension_available(), "Cython extension not built")
+class TestCythonBufferLifetimes(unittest.TestCase):
+    """The Cython bindings hand raw pointers to C; Python-side misuse must not invalidate them."""
+
+    def setUp(self):
+        with io.BytesIO() as f:
+            c = CCompressor(f)
+            c.write(b"hello world " * 50)
+            c.flush()
+            self.compressed = f.getvalue()
+
+    def test_dictionary_resize_blocked_while_in_use(self):
+        # Bug: resizing the dictionary bytearray freed storage that C still used.
+        d = bytearray(1 << 10)
+        c = CCompressor(io.BytesIO(), window=10, dictionary=d)  # noqa: F841 (keep alive)
+        with self.assertRaises(BufferError):
+            d.clear()
+
+        dd = bytearray(1 << 10)
+        dec = CDecompressor(io.BytesIO(self.compressed), dictionary=dd)  # noqa: F841 (keep alive)
+        with self.assertRaises(BufferError):
+            dd.extend(b"x")
+
+    def test_readinto_overreport_rejected(self):
+        # Bug: a readinto() returning more than the buffer size made C read past it.
+        class Overreporting(_Raw):
+            def readinto(self, buf):
+                n = self.b.readinto(buf)
+                return n and (1 << 28)
+
+        with self.assertRaisesRegex(ValueError, "readinto"):
+            CDecompressor(Overreporting(self.compressed)).read()
+
+    def test_readinto_cannot_resize_input_buffer(self):
+        # Bug: readinto() received the internal bytearray and could shrink it under C.
+        class Shrinking(_Raw):
+            def readinto(self, buf):
+                chunk = self.b.read(len(buf))
+                buf[:] = chunk
+                return len(chunk)
+
+        with self.assertRaises(ValueError):
+            CDecompressor(Shrinking(self.compressed)).read()
+
+    def test_readinto_output_buffer_resized_by_source(self):
+        # Bug: readinto() cached the output pointer across f.readinto(), which may run code
+        # that resizes the caller's buffer.
+        out = bytearray(1 << 16)
+
+        class ShrinksOutput(_Raw):
+            def readinto(self, buf):
+                del out[16:]
+                return self.b.readinto(buf)
+
+        n = CDecompressor(ShrinksOutput(self.compressed)).readinto(out)
+        self.assertLessEqual(n, len(out))
+        self.assertEqual(bytes(out[:n]), (b"hello world " * 50)[:n])
+
+    def test_methods_before_init_raise(self):
+        # Bug: __new__ without __init__ ran C on an uninitialized struct.
+        c = CCompressor.__new__(CCompressor)
+        with self.assertRaises(RuntimeError):
+            c.write(b"abc")
+        with self.assertRaises(RuntimeError):
+            c.flush()
+        d = CDecompressor.__new__(CDecompressor)
+        with self.assertRaises(RuntimeError):
+            d.readinto(bytearray(10))
+
+    def test_window_literal_out_of_range(self):
+        # Bug: window/literal wrapped into 4-bit bitfields (window=24 -> 8).
+        for kw in ({"window": 24}, {"window": 30}, {"literal": 24}, {"literal": 21}):
+            with self.subTest(**kw), self.assertRaises(ValueError):
+                CCompressor(io.BytesIO(), **kw)
+
+    def test_concurrent_write_rejected(self):
+        # Bug: 2 threads inside the GIL-released compress loop on one Compressor crashed.
+        import threading
+
+        c = CCompressor(io.BytesIO(), window=10)
+        blob = bytes(range(256)) * 4096
+        errors = []
+        start = threading.Barrier(4)
+
+        def worker():
+            start.wait()
+            try:
+                for _ in range(10):
+                    c.write(blob)
+            except RuntimeError as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertTrue(errors)
+
+
 if __name__ == "__main__":
     unittest.main()

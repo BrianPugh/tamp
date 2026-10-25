@@ -17,6 +17,21 @@ cdef class Compressor:
     cdef object f
     cdef bint _close_f_on_close
     cdef bint _dictionary_reset
+    cdef object _window_view  # buffer export: blocks resizing the window bytearray under C
+    cdef bint _initialized
+    cdef bint _busy  # set while C runs with the GIL released
+
+    cdef int _check_ready(self) except -1:
+        if not self._initialized:
+            raise RuntimeError("Compressor is not initialized.")
+        if self._busy:
+            raise RuntimeError("Compressor is already in use by another thread.")
+        return 0
+
+    cdef int _enter(self) except -1:
+        self._check_ready()
+        self._busy = True
+        return 0
 
     def __cinit__(self):
         self._c_compressor = <ctamp.TampCompressor*>PyMem_Malloc(sizeof(ctamp.TampCompressor))
@@ -46,6 +61,16 @@ cdef class Compressor:
     ):
         cdef ctamp.TampConf conf
 
+        if self._busy:
+            raise RuntimeError("Compressor is already in use by another thread.")
+        self._initialized = False
+
+        # TampConf.window/literal are 4-bit bitfields; reject instead of wrapping.
+        if not 8 <= window <= 15:
+            raise ValueError("window must be in range [8, 15].")
+        if not 5 <= literal <= 8:
+            raise ValueError("literal must be in range [5, 8].")
+
         if dictionary is not None and len(dictionary) != (1 << window):
             # The exact size is required: a too-small buffer used as the window
             # would let the C compressor write out of bounds.
@@ -70,6 +95,7 @@ cdef class Compressor:
         conf.append = append
 
         self._window_buffer = dictionary if dictionary is not None else bytearray(1 << window)
+        self._window_view = memoryview(self._window_buffer)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
         self._dictionary_reset = dictionary_reset
@@ -85,6 +111,7 @@ cdef class Compressor:
             if self._match_index is NULL:
                 raise MemoryError
             self._attach_match_index()
+        self._initialized = True
 
     def write(self, const unsigned char[::1] data not None) -> int:
         cdef:
@@ -110,16 +137,20 @@ cdef class Compressor:
         output_buffer_mv = memoryview(output_buffer)
 
         while input_remaining_size:
-            with nogil:
-                res = ctamp.tamp_compressor_compress(
-                    self._c_compressor,
-                    output_buffer_ptr,
-                    CHUNK_SIZE,
-                    &output_buffer_written_size,
-                    data_ptr,
-                    input_remaining_size,
-                    &input_consumed_size
-                )
+            self._enter()
+            try:
+                with nogil:
+                    res = ctamp.tamp_compressor_compress(
+                        self._c_compressor,
+                        output_buffer_ptr,
+                        CHUNK_SIZE,
+                        &output_buffer_written_size,
+                        data_ptr,
+                        input_remaining_size,
+                        &input_consumed_size
+                    )
+            finally:
+                self._busy = False
             if res < 0:
                 raise ERROR_LOOKUP.get(res, NotImplementedError)
             self.f.write(output_buffer_mv[:output_buffer_written_size])
@@ -139,14 +170,18 @@ cdef class Compressor:
 
         cdef unsigned char *buffer_ptr = <unsigned char *> buffer
         cdef size_t buffer_len = len(buffer)
-        with nogil:
-            res = ctamp.tamp_compressor_flush(
-                self._c_compressor,
-                buffer_ptr,
-                buffer_len,
-                &output_written_size,
-                write_token,
-            )
+        self._enter()
+        try:
+            with nogil:
+                res = ctamp.tamp_compressor_flush(
+                    self._c_compressor,
+                    buffer_ptr,
+                    buffer_len,
+                    &output_written_size,
+                    write_token,
+                )
+        finally:
+            self._busy = False
 
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
@@ -163,6 +198,7 @@ cdef class Compressor:
         cdef bytearray buffer = bytearray(32)  # Worst case: 23 (flush) + 4 (2x FLUSH) = 27 bytes
         cdef size_t output_written_size = 0
 
+        self._check_ready()  # runs with the GIL held
         res = ctamp.tamp_compressor_reset_dictionary(
             self._c_compressor,
             <unsigned char *> buffer,
