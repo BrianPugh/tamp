@@ -247,3 +247,15 @@ describe('Tamp WebAssembly Tests', () => {
     );
   });
 });
+
+describe('Regressions', () => {
+  test('decompress drains output past the 4 MiB internal chunk', async () => {
+    // Bug: when the input was fully consumed on a call that returned TAMP_OUTPUT_FULL, tokens
+    // still in the bit buffer were dropped, truncating the output at a 4 MiB multiple.
+    for (const extra of [1, 5, 64]) {
+      const plain = new Uint8Array((1 << 22) + extra);
+      const out = await decompress(await compress(plain));
+      assert.equal(out.length, plain.length);
+    }
+  });
+});
