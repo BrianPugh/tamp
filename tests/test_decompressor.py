@@ -304,3 +304,23 @@ class TestDecompressor(unittest.TestCase):
 
                 self.assertEqual(actual_len, len(expected))
                 self.assertEqual(actual_buf[:actual_len], expected)
+
+    @unittest.skipIf(micropython is not None, "requires unittest.mock")
+    def test_repeated_flush_resets_dictionary_once(self):
+        # Regression: every FLUSH after a double-FLUSH re-initialized the window, letting a
+        # stream of 2-byte FLUSH tokens force a full dictionary init per 2 input bytes.
+        from unittest import mock
+
+        import tamp.decompressor
+
+        header = bytes([0x1B, 0x00])  # window=8, literal=8, extended, dictionary_reset
+        flush = bytes([0x55, 0x80])
+        literal_a_flush = bytes([0xA0, 0xAA, 0xC0])
+        compressed = header + flush * 100 + literal_a_flush + flush
+
+        with mock.patch.object(
+            tamp.decompressor, "initialize_dictionary", wraps=tamp.decompressor.initialize_dictionary
+        ) as init:
+            self.assertEqual(tamp.decompressor.decompress(compressed), b"A")
+        # 1 at stream start, 1 for the FLUSH run, 1 after the literal.
+        self.assertEqual(init.call_count, 3)

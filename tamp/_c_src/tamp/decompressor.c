@@ -328,6 +328,25 @@ static TAMP_OPTIMIZE_SIZE tamp_res tamp_decompressor_populate_from_conf(TampDeco
     return TAMP_OK;
 }
 
+/**
+ * Track FLUSH runs and perform the double-FLUSH dictionary reset.
+ * Kept out of line so this cold path doesn't perturb the hot loop's codegen.
+ */
+static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE void handle_flush(TampDecompressor* decompressor) {
+    if (!decompressor->last_was_flush) {
+        decompressor->last_was_flush = 1;
+        decompressor->flush_reset_done = 0;
+    } else if (decompressor->conf_dictionary_reset && !decompressor->flush_reset_done) {
+        // Double-FLUSH: reset dictionary.
+        decompressor->window_pos = 0;
+        tamp_initialize_dictionary(decompressor->window, (size_t)1 << decompressor->conf_window,
+                                   decompressor->conf_extended ? decompressor->conf_literal : 8);
+        // Further FLUSHes before the next literal/match would reset an already-pristine window;
+        // skip them so a stream of FLUSH tokens can't force a full re-init every 2 bytes.
+        decompressor->flush_reset_done = 1;
+    }
+}
+
 tamp_res tamp_decompressor_init(TampDecompressor* decompressor, const TampConf* conf, unsigned char* window,
                                 uint8_t window_bits) {
     tamp_res res = TAMP_OK;
@@ -456,6 +475,8 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                 continue;
             }
             if (res != TAMP_OK) return res;
+            if (TAMP_UNLIKELY(callback && (res = callback(user_data, *input_consumed_size, input_size))))
+                return (tamp_res)res;
             continue;
         }
 #endif  // TAMP_EXTENDED_DECOMPRESS
@@ -503,13 +524,9 @@ tamp_res tamp_decompressor_decompress_cb(TampDecompressor* decompressor, unsigne
                 decompressor->bit_buffer = bit_buffer << (bit_buffer_pos & 7);
                 decompressor->bit_buffer_pos =
                     bit_buffer_pos & ~7;  // Round bit_buffer_pos down to nearest multiple of 8.
-                if (decompressor->conf_dictionary_reset && decompressor->last_was_flush) {
-                    // Double-FLUSH: reset dictionary.
-                    decompressor->window_pos = 0;
-                    tamp_initialize_dictionary(decompressor->window, (size_t)1 << conf_window,
-                                               decompressor->conf_extended ? conf_literal : 8);
-                }
-                decompressor->last_was_flush = 1;
+                handle_flush(decompressor);
+                if (TAMP_UNLIKELY(callback && (res = callback(user_data, *input_consumed_size, input_size))))
+                    return (tamp_res)res;
                 continue;
             }
 

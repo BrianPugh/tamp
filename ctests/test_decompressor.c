@@ -212,3 +212,59 @@ void test_decompress_cb_callback_receives_input_consumed(void) {
     TEST_ASSERT_EQUAL(original_len, output_written);
     TEST_ASSERT_EQUAL_MEMORY(original, output, original_len);
 }
+
+static int count_callback(void *user_data, size_t bytes_processed, size_t total_bytes) {
+    (void)bytes_processed;
+    (void)total_bytes;
+    (*(int *)user_data)++;
+    return 0;
+}
+
+void test_decompressor_repeated_flush_resets_once(void) {
+    /*****
+     * Regression: every FLUSH after a double-FLUSH re-initialized the whole window, so a
+     * stream of 2-byte FLUSH tokens forced a full dictionary init per 2 input bytes without
+     * ever invoking the callback. A reset window is pristine, so only the first double-FLUSH
+     * since the last literal/match may reset it.
+     */
+    const unsigned char header[] = {0x1B, 0x00};                 // window=8, literal=8, extended, dictionary_reset
+    const unsigned char flush[] = {0x55, 0x80};                  // FLUSH token, byte-aligned
+    const unsigned char literal_a_flush[] = {0xA0, 0xAA, 0xC0};  // literal 'A' + FLUSH
+
+    TampDecompressor d;
+    unsigned char window[1 << 8];
+    unsigned char output[8];
+    size_t written, consumed;
+    int calls = 0;
+
+    TEST_ASSERT_EQUAL(TAMP_OK, tamp_decompressor_init(&d, NULL, window, 8));
+    TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED,
+                      tamp_decompressor_decompress(&d, output, sizeof(output), &written, header, sizeof(header), NULL));
+    for (int i = 0; i < 2; i++)  // double-FLUSH: resets
+        TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED, tamp_decompressor_decompress(&d, output, sizeof(output), &written,
+                                                                             flush, sizeof(flush), NULL));
+    const unsigned char dictionary_byte = window[0];
+
+    // Further FLUSHes must not re-initialize the window (sentinel survives), and must still
+    // invoke the progress callback.
+    window[0] = (unsigned char)~dictionary_byte;
+    for (int i = 0; i < 3; i++) {
+        TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED,
+                          tamp_decompressor_decompress_cb(&d, output, sizeof(output), &written, flush, sizeof(flush),
+                                                          &consumed, count_callback, &calls));
+        TEST_ASSERT_EQUAL(sizeof(flush), consumed);
+        TEST_ASSERT_EQUAL(0, written);
+    }
+    TEST_ASSERT_EQUAL(3, calls);
+    TEST_ASSERT_EQUAL((unsigned char)~dictionary_byte, window[0]);
+
+    // After data, a double-FLUSH resets again.
+    TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED,
+                      tamp_decompressor_decompress(&d, output, sizeof(output), &written, literal_a_flush,
+                                                   sizeof(literal_a_flush), NULL));
+    TEST_ASSERT_EQUAL(1, written);
+    TEST_ASSERT_EQUAL('A', output[0]);
+    TEST_ASSERT_EQUAL(TAMP_INPUT_EXHAUSTED,
+                      tamp_decompressor_decompress(&d, output, sizeof(output), &written, flush, sizeof(flush), NULL));
+    TEST_ASSERT_EQUAL(dictionary_byte, window[0]);
+}
