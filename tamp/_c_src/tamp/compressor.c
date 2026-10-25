@@ -527,6 +527,9 @@ static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE tamp_res poll_extended_handling(TampComp
         // run then ended; RLE tokens require count >= 2 and the byte is no longer
         // in the input buffer, so re-emit it as a literal (mirrors the
         // rle_count == 1 drain in tamp_compressor_flush).
+        // The run byte came from the window, which a custom dictionary may fill with
+        // bytes wider than conf.literal.
+        if (TAMP_UNLIKELY(last_byte >> compressor->conf.literal)) return TAMP_EXCESS_BITS;
         const uint16_t window_mask = (1 << compressor->conf.window) - 1;
         write_to_bit_buffer(compressor, IS_LITERAL_FLAG | last_byte, compressor->conf.literal + 1);
         compressor->window[compressor->window_pos] = last_byte;
@@ -641,6 +644,11 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
         match_size = 1;
         unsigned char c = read_input(0);
         if (TAMP_UNLIKELY(c >> conf_literal)) {
+#if TAMP_LAZY_MATCHING
+            // Lazy matching may have just cached the next position's match; that cache
+            // is only valid after this literal is emitted, which it now won't be.
+            compressor->cached_match_index = -1;
+#endif
             return TAMP_EXCESS_BITS;
         }
         write_to_bit_buffer(compressor, (1 << conf_literal) | c, conf_literal + 1);
@@ -763,6 +771,7 @@ flush_check:
         if (compressor->rle_count == 1) {
             // Single byte - write as literal (can't use RLE token for count < 2)
             uint8_t literal = get_last_window_byte(compressor);
+            if (TAMP_UNLIKELY(literal >> compressor->conf.literal)) return TAMP_EXCESS_BITS;
             write_to_bit_buffer(compressor, IS_LITERAL_FLAG | literal, compressor->conf.literal + 1);
 
             // Write to window
