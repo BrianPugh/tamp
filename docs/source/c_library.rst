@@ -485,11 +485,14 @@ If a static window buffer is used, then ``tamp_decompressor_read_header`` doesn'
 ``tamp_decompressor_init`` initializes the actual decompressor object, using an optionally supplied ``TampConf``.
 If no ``TampConf`` is provided, then it will be automatically initialized on first ``tamp_decompressor_decompress``
 call from input header data.
+In that case the header also decides whether a custom dictionary is used, and if so the window buffer is used as-is.
+When decompressing untrusted data without a ``TampConf``, initialize the window first (with your dictionary, or zeros),
+otherwise a crafted stream can copy whatever the buffer previously held (e.g. a prior file's plaintext) into the output.
 
 .. code-block:: c
 
    TampDecompressor decompressor;
-   unsigned char window_buffer[1024];
+   static unsigned char window_buffer[1024];
    tamp_res res;
 
    // Since no TampConf is provided, the header will automatically be parsed
@@ -637,7 +640,7 @@ First initialize a ``TampDecompressor`` with ``tamp_decompressor_init``, then us
 .. code-block:: c
 
    TampDecompressor decompressor;
-   unsigned char window[1 << 10];
+   static unsigned char window[1 << 10];
 
    // Initialize the decompressor (NULL conf to read from stream header)
    tamp_decompressor_init(&decompressor, NULL, window, 10);
@@ -751,7 +754,7 @@ Tamp provides a ``TampLfsFile`` struct to bundle these together into a single ha
    // Bundle filesystem and file handle together
    TampLfsFile in_handle = { .lfs = &lfs, .file = &in_file };
    TampLfsFile out_handle = { .lfs = &lfs, .file = &out_file };
-   unsigned char window[1 << 10];
+   static unsigned char window[1 << 10];
 
    // Initialize decompressor (NULL conf reads from stream header)
    TampDecompressor decompressor;
@@ -784,7 +787,7 @@ Unlike LittleFS, FatFs file handles (``FIL``) are self-contained and can be pass
    FIL in_file, out_file;
    f_open(&in_file, "data.tamp", FA_READ);
    f_open(&out_file, "data.bin", FA_WRITE | FA_CREATE_ALWAYS);
-   unsigned char window[1 << 10];
+   static unsigned char window[1 << 10];
 
    // Initialize decompressor (NULL conf reads from stream header)
    TampDecompressor decompressor;

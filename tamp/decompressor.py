@@ -129,11 +129,10 @@ class _RingBuffer:
             self.write_byte(byte)
 
     def get(self, index, size):
-        out = bytearray(size)
-        for i in range(size):
-            pos = (index + i) % self.size
-            out[i] = self.buffer[pos]
-        return bytes(out)
+        # Matches never wrap; the C decompressor rejects these as TAMP_OOB.
+        if index + size > self.size:
+            raise ValueError("Match references data past the end of the window.")
+        return bytes(self.buffer[index : index + size])
 
     @property
     def last_written_byte(self) -> int:
