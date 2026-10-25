@@ -604,7 +604,9 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_decompress_stream(TampDecompressor* decompresso
     while (1) {
         if (input_available == 0 && !eof_reached) {
             int bytes_read = read_cb(read_handle, input_buffer, input_buffer_size);
-            if (TAMP_UNLIKELY(bytes_read < 0)) return TAMP_READ_ERROR;
+            // A callback reporting more than it was asked for would make the
+            // decompressor read past input_buffer.
+            if (TAMP_UNLIKELY(bytes_read < 0 || (size_t)bytes_read > input_buffer_size)) return TAMP_READ_ERROR;
             eof_reached = (bytes_read == 0);
             input_pos = 0;
             input_available = bytes_read;

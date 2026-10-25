@@ -351,3 +351,35 @@ void test_decompress_stream_callback_receives_input_consumed(void) {
     TEST_ASSERT_EQUAL(original_len, decompress_out);
     TEST_ASSERT_EQUAL_MEMORY(original, decompressed, original_len);
 }
+
+static int overreporting_read(void *handle, unsigned char *buffer, size_t size) {
+    // Regression: tamp_{compress,decompress}_stream trusted read_cb's return value, so a
+    // callback claiming more bytes than requested made them read past their stack buffer.
+    static const unsigned char data[] = {0x58, 0xB3, 0x04, 0x1C, 0x81, 0x00, 0x03, 0x00, 0x00};
+    int *calls = (int *)handle;
+    if ((*calls)++) return 0;
+    memcpy(buffer, data, size < sizeof(data) ? size : sizeof(data));
+    return (int)size + 1;
+}
+
+static int discard_write(void *handle, const unsigned char *buffer, size_t size) {
+    (void)handle;
+    (void)buffer;
+    return (int)size;
+}
+
+void test_stream_read_cb_overreport(void) {
+    unsigned char window[1 << 10];
+    int calls = 0;
+
+    TampDecompressor decompressor;
+    TEST_ASSERT_EQUAL(TAMP_OK, tamp_decompressor_init(&decompressor, NULL, window, 10));
+    TEST_ASSERT_EQUAL(TAMP_READ_ERROR, tamp_decompress_stream(&decompressor, overreporting_read, &calls, discard_write,
+                                                              NULL, NULL, NULL, NULL, NULL));
+
+    calls = 0;
+    TampCompressor compressor;
+    TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_init(&compressor, NULL, window));
+    TEST_ASSERT_EQUAL(TAMP_READ_ERROR, tamp_compress_stream(&compressor, overreporting_read, &calls, discard_write,
+                                                            NULL, NULL, NULL, NULL, NULL));
+}
