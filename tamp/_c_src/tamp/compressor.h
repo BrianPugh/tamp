@@ -155,7 +155,14 @@ void tamp_compressor_sink(TampCompressor *compressor, const unsigned char *input
  * as many whole-bytes as possible from this buffer. After this flush, there remains up to 7 bits,
  * to which the current call's compressed token/literal is added to.
  *
- * A 3-byte output buffer should be able to handle any compressor configuration.
+ * The above bound covers literals and standard tokens. With conf.extended (the default), an
+ * extended-match token is up to 33 bits, and poll only starts writing one when at least 6 bytes
+ * of output space remain after the leading partial flush; with less it returns TAMP_OUTPUT_FULL
+ * without making progress.
+ *
+ * A 3-byte output buffer handles any configuration with conf.extended=false; use at least
+ * 6 bytes when conf.extended is set. A caller that always passes a 3-5 byte buffer to an
+ * extended compressor livelocks on the first extended match.
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.

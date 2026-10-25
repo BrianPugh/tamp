@@ -41,6 +41,7 @@ int main(void) {
     RUN_TEST(test_reset_dictionary_requires_conf_flag);
     RUN_TEST(test_reset_dictionary_small_output_buffer);
     RUN_TEST(test_double_flush_does_not_reset);
+    RUN_TEST(test_compressor_poll_min_output_buffer_extended);
 
     // find_best_match edge cases (exact-bitstream pinned)
     RUN_TEST(test_find_best_match_window_edge);
@@ -59,6 +60,7 @@ int main(void) {
     RUN_TEST(test_stream_extended_rle_roundtrip);
     RUN_TEST(test_compress_stream_callback_receives_input_consumed);
     RUN_TEST(test_decompress_stream_callback_receives_input_consumed);
+    RUN_TEST(test_stream_read_cb_overreport);
 
     // Built-in I/O handler tests
     RUN_TEST(test_stdio_handlers_roundtrip);

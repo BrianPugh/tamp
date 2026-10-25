@@ -920,7 +920,8 @@ TAMP_OPTIMIZE_SIZE tamp_res tamp_compress_stream(TampCompressor* compressor, tam
     // Main compression loop
     while (1) {
         int bytes_read = read_cb(read_handle, input_buffer, sizeof(input_buffer));
-        if (TAMP_UNLIKELY(bytes_read < 0)) return TAMP_READ_ERROR;
+        // Also reject a callback claiming more bytes than requested (once per chunk, not per byte).
+        if (TAMP_UNLIKELY(bytes_read < 0 || (size_t)bytes_read > sizeof(input_buffer))) return TAMP_READ_ERROR;
         if (bytes_read == 0) break;
 
         *input_consumed_size += bytes_read;

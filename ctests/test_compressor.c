@@ -846,3 +846,50 @@ void test_find_best_match_max_pattern_early_exit(void) {
     static const unsigned char expected[] = {0x1c, 0x4e, 0x3d, 0x50};
     run_match_finder_case(dictionary, (const unsigned char *)"ABCDEFGHIJKLMNOP", 16, expected, sizeof(expected));
 }
+
+void test_compressor_poll_min_output_buffer_extended(void) {
+    // A pending extended-match token needs EXTENDED_MATCH_MIN_OUTPUT_BYTES (6) of output
+    // space; poll() with a fresh 6-byte buffer each call must always make progress.
+    unsigned char window[1 << 10];
+    TampCompressor compressor;
+    TampConf conf = {.window = 10, .literal = 8, .extended = true};
+    TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_init(&compressor, &conf, window));
+
+    unsigned char input[192];
+    for (int i = 0; i < 64; i++) input[i] = input[64 + i] = (unsigned char)(i * 37 + 11);
+    for (int i = 128; i < 192; i++) input[i] = (unsigned char)((i * 101 + 7) ^ 0x5a);
+
+    static unsigned char compressed[512];
+    size_t compressed_size = 0, pos = 0;
+    while (pos < sizeof(input)) {
+        size_t consumed;
+        tamp_compressor_sink(&compressor, input + pos, sizeof(input) - pos, &consumed);
+        pos += consumed;
+        int stalls = 0;
+        while (tamp_compressor_full(&compressor)) {
+            unsigned char buf[6];
+            size_t written = 0;
+            tamp_res res = tamp_compressor_poll(&compressor, buf, sizeof(buf), &written);
+            TEST_ASSERT_GREATER_OR_EQUAL(0, res);
+            memcpy(compressed + compressed_size, buf, written);
+            compressed_size += written;
+            if (res == TAMP_OUTPUT_FULL && written == 0)
+                TEST_ASSERT_LESS_THAN(2, ++stalls);
+            else
+                stalls = 0;
+        }
+    }
+    size_t written = 0;
+    TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_flush(&compressor, compressed + compressed_size,
+                                                     sizeof(compressed) - compressed_size, &written, false));
+    compressed_size += written;
+
+    unsigned char d_window[1 << 10], output[256];
+    TampDecompressor decompressor;
+    size_t output_size = 0;
+    TEST_ASSERT_EQUAL(TAMP_OK, tamp_decompressor_init(&decompressor, NULL, d_window, 10));
+    tamp_decompressor_decompress(&decompressor, output, sizeof(output), &output_size, compressed, compressed_size,
+                                 NULL);
+    TEST_ASSERT_EQUAL(sizeof(input), output_size);
+    TEST_ASSERT_EQUAL_MEMORY(input, output, sizeof(input));
+}
