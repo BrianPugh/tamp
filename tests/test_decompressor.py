@@ -324,3 +324,10 @@ class TestDecompressor(unittest.TestCase):
             self.assertEqual(tamp.decompressor.decompress(compressed), b"A")
         # 1 at stream start, 1 for the FLUSH run, 1 after the literal.
         self.assertEqual(init.call_count, 3)
+
+    def test_match_past_window_end_raises(self):
+        # window=8, literal=8; a single 2-byte match at index 255 runs off the window end.
+        compressed = bytes([0x18, 0x3F, 0xC0])
+        for decompress in decompresses:
+            with self.subTest(decompress=decompress), self.assertRaises(ValueError):
+                decompress(compressed)
