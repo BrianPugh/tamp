@@ -128,6 +128,10 @@ npm run type-check         # TypeScript checking
 make ARCH=armv6m           # Build for specific architecture
 ```
 
+The build needs `pyelftools` (a dev dependency); outside the uv env it fails
+with `No module named 'elftools'`, so run it as `uv run make mpy ...` (same for
+`make mpy-native-size`).
+
 Changing `ARCH` alone does not trigger a rebuild (stale objects are reused; make
 reports "Nothing to be done"). Remove `build/mpy_bindings/` and `build/tamp/`
 when switching architectures.
