@@ -846,3 +846,72 @@ void test_find_best_match_max_pattern_early_exit(void) {
     static const unsigned char expected[] = {0x1c, 0x4e, 0x3d, 0x50};
     run_match_finder_case(dictionary, (const unsigned char *)"ABCDEFGHIJKLMNOP", 16, expected, sizeof(expected));
 }
+
+#if TAMP_LAZY_MATCHING
+void test_compressor_lazy_excess_bits_does_not_leave_stale_cache(void) {
+    // Regression: lazy matching cached the next position's match, then the forced literal
+    // failed with TAMP_EXCESS_BITS (custom dictionary holding bytes >= 1 << literal). The
+    // stale cache made the next poll, e.g. the flush in Python's close(), emit that match at
+    // the wrong input position: flush succeeded and the stream decoded to different data.
+    for (int extended = 0; extended < 2; extended++) {
+        unsigned char window[256];
+        for (int i = 0; i < 256; i++) window[i] = (unsigned char)('0' + i % 10);
+        memcpy(window + 10,
+               "\xff"
+               "ab",
+               3);                            // 3-byte match at input position 0
+        memcpy(window + 100, "abcdefgh", 8);  // longer match at position 1: lazy forces a literal
+        TampCompressor compressor;
+        TampConf conf = {
+            .window = 8, .literal = 7, .use_custom_dictionary = true, .extended = extended, .lazy_matching = true};
+        TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_init(&compressor, &conf, window));
+
+        const unsigned char input[16] =
+            "\xff"
+            "abcdefghXYZWVUT";
+        unsigned char output[64];
+        size_t written;
+        TEST_ASSERT_EQUAL(TAMP_EXCESS_BITS, tamp_compressor_compress(&compressor, output, sizeof(output), &written,
+                                                                     input, sizeof(input), NULL));
+        // The offending byte is still at the head of the input buffer, so every later
+        // attempt must keep failing rather than encode something else.
+        TEST_ASSERT_EQUAL(TAMP_EXCESS_BITS,
+                          tamp_compressor_flush(&compressor, output, sizeof(output), &written, false));
+    }
+}
+#endif
+
+void test_compressor_extended_rle_lone_byte_excess_bits(void) {
+    // Regression: with a custom dictionary holding bytes wider than conf.literal, a run byte
+    // that a match had copied into the window was consumed into rle_count, then drained as a
+    // literal without the excess-bits check. Its extra high bits were OR'd over the previous
+    // token: compression returned TAMP_OK and the stream decoded to different data.
+    // drain_via_poll=0 drains in tamp_compressor_flush, 1 in tamp_compressor_poll.
+    for (int drain_via_poll = 0; drain_via_poll < 2; drain_via_poll++) {
+        unsigned char window[256] = {0};
+        window[50] = 0xff;  // "00 ff" is in the dictionary
+        TampCompressor compressor;
+        TampConf conf = {.window = 8, .literal = 5, .use_custom_dictionary = true, .extended = true};
+        TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_init(&compressor, &conf, window));
+
+        const unsigned char input[3] = {0x00, 0xff, 0xff};
+        unsigned char output[64];
+        size_t written;
+        tamp_compressor_sink(&compressor, input, sizeof(input), NULL);
+        // "00 ff" is emitted as a match, then the trailing 0xff is consumed into rle_count.
+        TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_poll(&compressor, output, sizeof(output), &written));
+        TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_poll(&compressor, output, sizeof(output), &written));
+        TEST_ASSERT_EQUAL(0, compressor.input_size);
+        TEST_ASSERT_EQUAL(1, compressor.rle_count);
+
+        tamp_res res;
+        if (drain_via_poll) {
+            const unsigned char next = 0x01;  // ends the run
+            tamp_compressor_sink(&compressor, &next, 1, NULL);
+            res = tamp_compressor_poll(&compressor, output, sizeof(output), &written);
+        } else {
+            res = tamp_compressor_flush(&compressor, output, sizeof(output), &written, false);
+        }
+        TEST_ASSERT_EQUAL(TAMP_EXCESS_BITS, res);
+    }
+}

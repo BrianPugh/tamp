@@ -245,6 +245,18 @@ class TestCompressor(unittest.TestCase):
                     compressor.write(b"\xff")
                     compressor.flush()
 
+    def test_excess_bits_rle_byte_from_dictionary(self):
+        # Regression: extended RLE drained a lone run byte (copied into the window from a custom
+        # dictionary) as a literal without the excess-bits check, silently corrupting the stream.
+        dictionary = bytearray(256)
+        dictionary[50] = 0xFF
+        for Compressor in Compressors:
+            with self.subTest(Compressor=Compressor), io.BytesIO() as f:
+                compressor = Compressor(f, window=8, literal=5, dictionary=bytearray(dictionary))
+                with self.assertRaises((ExcessBitsError, NativeExcessBitsError)):
+                    compressor.write(b"\x00\xff\xff")
+                    compressor.flush()
+
     def test_single_shot_compress_text(self):
         for compress in compresses:
             with self.subTest(compress=compress):
