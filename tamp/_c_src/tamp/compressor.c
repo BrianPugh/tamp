@@ -173,7 +173,17 @@ static TAMP_NOINLINE void find_best_match(TampCompressor* compressor, uint16_t* 
 
             // Extend match byte by byte with pre-clamped bounds
             for (; match_len < max_len; match_len++) {
-                if (TAMP_LIKELY(p[match_len] != input[(input_pos + match_len) & 0xF])) break;
+                uint32_t idx = match_len;
+#if defined(__GNUC__) && defined(__thumb__) && !defined(__thumb2__)
+                // Prevent IVOPTS from creating a second induction variable (input_pos + match_len)
+                // that spills to the stack, and evaluate in_byte before loading p[match_len].
+                __asm__("" : "+l"(idx));
+#endif
+                uint32_t in_byte = input[(idx + input_pos) & 0xF];
+#if defined(__GNUC__) && defined(__thumb__) && !defined(__thumb2__)
+                __asm__("" : "+l"(in_byte));
+#endif
+                if (TAMP_LIKELY(p[match_len] != in_byte)) break;
             }
 
             // Update best match if this is better
