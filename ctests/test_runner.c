@@ -21,6 +21,7 @@ int main(void) {
     RUN_TEST(test_decompressor_malicious_oob);
     RUN_TEST(test_decompress_cb_callback_receives_input_consumed);
     RUN_TEST(test_decompressor_repeated_flush_resets_once);
+    RUN_TEST(test_decompressor_callback_abort_reports_progress);
 
     // Compressor tests
     RUN_TEST(test_compressor_init);
