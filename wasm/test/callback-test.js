@@ -332,3 +332,15 @@ describe('Tamp Decompression AbortSignal Tests', () => {
     }
   });
 });
+
+test('destroy() during an awaited onPoll rejects instead of using a freed compressor', async () => {
+  // Bug: compress() resumed after the await and called into C with a freed/null struct.
+  const data = new Uint8Array(1 << 18).map((_, i) => 97 + ((i * 7919) % 13));
+  const c = new TampCompressor();
+  await assert.rejects(
+    c.compress(data, { pollIntervalBytes: 1, pollIntervalMs: 0, onPoll: async () => c.destroy() }),
+    /destroyed/
+  );
+  // Another instance in the same module is unaffected.
+  assert.deepStrictEqual(await compress(data), await compress(data));
+});
