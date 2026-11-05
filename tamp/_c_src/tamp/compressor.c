@@ -144,6 +144,9 @@ static TAMP_NOINLINE void find_best_match(TampCompressor* compressor, uint16_t* 
     const unsigned char* const p_end = window + window_size_minus_1;
 
 #if defined(__GNUC__)
+#ifndef TAMP_SWAR_PROBE
+#define TAMP_SWAR_PROBE() /* test hook: c-test-embedded counts skipped words */
+#endif
     // Word-at-a-time skip over bytes that can't start a match: ~2 cycles/byte
     // instead of ~9 on Cortex-M0+, and the scan dominates compression time.
     uint32_t ones = 0x01010101u;
@@ -192,7 +195,9 @@ static TAMP_NOINLINE void find_best_match(TampCompressor* compressor, uint16_t* 
         p++;
 #if defined(__GNUC__)
     swar_check:
-        if (((uintptr_t)p << 30) == 0) {
+        // Truncate to 32 bits first: on a 64-bit host, shifting the full
+        // uintptr_t left by 30 tests the low 34 bits, so the SWAR path never ran.
+        if (((uint32_t)(uintptr_t)p << 30) == 0) {
             // Aligned: skip 4 bytes per iteration until a word may hold
             // first_byte (zero-byte detect on the XOR; false positives
             // are fine, the byte loop re-checks).
@@ -200,6 +205,7 @@ static TAMP_NOINLINE void find_best_match(TampCompressor* compressor, uint16_t* 
                 uint32_t word = *(const tamp_word_alias*)p ^ first_broadcast;
                 if ((word - ones) & ~word & 0x80808080u) break;
                 p += 4;
+                TAMP_SWAR_PROBE();
             }
         }
 #endif

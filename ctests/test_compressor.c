@@ -846,3 +846,25 @@ void test_find_best_match_max_pattern_early_exit(void) {
     static const unsigned char expected[] = {0x1c, 0x4e, 0x3d, 0x50};
     run_match_finder_case(dictionary, (const unsigned char *)"ABCDEFGHIJKLMNOP", 16, expected, sizeof(expected));
 }
+
+#if TAMP_SWAR_PROBE_TEST
+unsigned long tamp_swar_probe_count = 0;
+
+void test_find_best_match_swar_path_runs(void) {
+    // The exact-bitstream cases above pass whether or not the word-at-a-time
+    // skip runs, so count skipped words directly. A window with no copy of the
+    // first input byte should be skipped almost entirely a word at a time.
+    unsigned char dictionary[1 << 10];
+    memset(dictionary, 'z', sizeof(dictionary));
+    TampCompressor compressor;
+    TampConf conf = {.window = 10, .literal = 8, .use_custom_dictionary = true};
+    TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_init(&compressor, &conf, dictionary));
+
+    unsigned char output[64];
+    size_t output_written;
+    tamp_swar_probe_count = 0;
+    TEST_ASSERT_EQUAL(TAMP_OK, tamp_compressor_compress_and_flush(&compressor, output, sizeof(output), &output_written,
+                                                                  (const unsigned char *)"AB", 2, NULL, false));
+    TEST_ASSERT_GREATER_THAN(100, tamp_swar_probe_count);
+}
+#endif

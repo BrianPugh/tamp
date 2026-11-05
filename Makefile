@@ -506,13 +506,17 @@ CTEST_EMBEDDED_TEST_OBJS = \
 	build/unity/unity.o \
 	build/ctests-embedded/test_runner.o
 
+# Count words skipped by the embedded find_best_match SWAR scan, so a test can
+# assert the word-at-a-time path actually runs on this (64-bit) host.
+CTEST_SWAR_PROBE = '-DTAMP_SWAR_PROBE()=do { extern unsigned long tamp_swar_probe_count; tamp_swar_probe_count++; } while (0)'
+
 build/ctests-embedded/%.o: tamp/_c_src/tamp/%.c
 	@mkdir -p build/ctests-embedded
-	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
+	$(CTEST_CC) $(CTEST_CFLAGS) $(CTEST_WARN_FLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 $(CTEST_SWAR_PROBE) -c $< -o $@
 
 build/ctests-embedded/test_runner.o: ctests/test_runner.c ctests/test_compressor.c ctests/test_decompressor.c
 	@mkdir -p build/ctests-embedded
-	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -c $< -o $@
+	$(CTEST_CC) $(CTEST_CFLAGS) -DTAMP_USE_EMBEDDED_MATCH=1 -DTAMP_SWAR_PROBE_TEST=1 -c $< -o $@
 
 build/test_runner_embedded: $(CTEST_EMBEDDED_TAMP_OBJS) $(CTEST_EMBEDDED_TEST_OBJS) $(CTEST_LFS_OBJS) $(CTEST_FATFS_OBJS)
 	$(CTEST_CC) $(CTEST_LDFLAGS) -o $@ $^
