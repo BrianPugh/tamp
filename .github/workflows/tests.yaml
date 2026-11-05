@@ -152,7 +152,7 @@ jobs:
       - name: Install MicroPython
         uses: BrianPugh/install-micropython@v3
         with:
-          reference: v1.22.0
+          reference: v1.27.0
 
       - name: Install library with sanitizers
         run: |
