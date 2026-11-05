@@ -72,6 +72,10 @@ tamp_res tamp_decompressor_read_header(TampConf *conf, const unsigned char *inpu
  *
  * @param[in,out] decompressor TampDecompressor object to perform decompression with.
  * @param[in] conf Decompressor configuration. Set to NULL to perform an implicit header read.
+ *                 With NULL, the stream's header decides whether a custom dictionary is used;
+ *                 if it is, the window buffer is used as-is (not initialized). Initialize the
+ *                 window (your dictionary, or zeros) before decompressing untrusted data, or
+ *                 stale memory in it can be copied to the output.
  * @param[in] window Pre-allocated window buffer.
  * @param[in] window_bits Number of window bits the buffer can accommodate (8-15).
  *                        Buffer must be at least (1 << window_bits) bytes.
@@ -150,7 +154,7 @@ TAMP_ALWAYS_INLINE tamp_res tamp_decompressor_decompress(TampDecompressor *decom
  * lfs_file_t in, out;
  * lfs_file_open(&lfs, &in, "data.tamp", LFS_O_RDONLY);
  * lfs_file_open(&lfs, &out, "data.bin", LFS_O_WRONLY | LFS_O_CREAT);
- * unsigned char window[1024];
+ * static unsigned char window[1024];  // static: zero-initialized (see tamp_decompressor_init)
  * TampDecompressor decompressor;
  * tamp_decompressor_init(&decompressor, NULL, window, 10);
  * tamp_decompress_stream(
