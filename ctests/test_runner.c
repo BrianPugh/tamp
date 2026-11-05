@@ -47,6 +47,9 @@ int main(void) {
     RUN_TEST(test_find_best_match_alignment_phases);
     RUN_TEST(test_find_best_match_swar_byte_patterns);
     RUN_TEST(test_find_best_match_max_pattern_early_exit);
+#if TAMP_SWAR_PROBE_TEST
+    RUN_TEST(test_find_best_match_swar_path_runs);
+#endif
 
     // Decompressor extended tests
     RUN_TEST(test_decompressor_extended_rle);

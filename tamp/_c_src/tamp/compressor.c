@@ -71,14 +71,22 @@ static TAMP_NOINLINE void write_to_bit_buffer(TampCompressor* compressor, uint32
  */
 static TAMP_NOINLINE TAMP_OPTIMIZE_SIZE tamp_res partial_flush(TampCompressor* compressor, unsigned char** output,
                                                                size_t* output_size, size_t* output_written_size) {
-    while (compressor->bit_buffer_pos >= 8 && *output_size) {
-        *(*output)++ = compressor->bit_buffer >> 24;
-        (*output_size)--;
-        (*output_written_size)++;
-        compressor->bit_buffer_pos -= 8;
-        compressor->bit_buffer <<= 8;
+    uint32_t bit_buffer_pos = compressor->bit_buffer_pos;
+    uint32_t bit_buffer = compressor->bit_buffer;
+    unsigned char* out = *output;
+    size_t out_size = *output_size;
+    while (bit_buffer_pos >= 8 && out_size) {
+        *out++ = (unsigned char)(bit_buffer >> 24);
+        out_size--;
+        bit_buffer_pos -= 8;
+        bit_buffer <<= 8;
     }
-    return (compressor->bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
+    compressor->bit_buffer = bit_buffer;
+    compressor->bit_buffer_pos = (uint8_t)bit_buffer_pos;
+    *output_written_size += *output_size - out_size;
+    *output = out;
+    *output_size = out_size;
+    return (bit_buffer_pos >= 8) ? TAMP_OUTPUT_FULL : TAMP_OK;
 }
 
 inline bool tamp_compressor_full(const TampCompressor* compressor) {
@@ -118,63 +126,89 @@ extern void find_best_match(TampCompressor* compressor, uint16_t* match_index, u
  * @param[out] match_size Size of best found match.
  */
 static TAMP_NOINLINE void find_best_match(TampCompressor* compressor, uint16_t* match_index, uint8_t* match_size) {
+    uint32_t best_size = 0;
     *match_size = 0;
 
-    if (TAMP_UNLIKELY(compressor->input_size < compressor->min_pattern_size)) return;
+    const uint32_t input_size = compressor->input_size;
+    const uint32_t min_pattern_size = compressor->min_pattern_size;
+    if (TAMP_UNLIKELY(input_size < min_pattern_size)) return;
 
-    const uint8_t first_byte = read_input(0);
-    const uint8_t second_byte = read_input(1);
+    const unsigned char* const input = compressor->input;
+    const uint32_t input_pos = compressor->input_pos;
+    const uint32_t first_byte = input[input_pos];
+    const uint32_t second_byte = input[(input_pos + 1) & 0xF];
     const uint32_t window_size_minus_1 = WINDOW_SIZE - 1;
-    const uint8_t max_pattern_size = MIN(compressor->input_size, MAX_PATTERN_SIZE);
-    const unsigned char* window = compressor->window;
+    const uint32_t max_pattern_size = MIN(input_size, (uint32_t)MAX_PATTERN_SIZE);
+    const unsigned char* const window = compressor->window;
+    const unsigned char* p = window;
+    const unsigned char* const p_end = window + window_size_minus_1;
 
 #if defined(__GNUC__)
-    // Word-at-a-time skip over bytes that can't start a match: ~3 cycles/byte
+#ifndef TAMP_SWAR_PROBE
+#define TAMP_SWAR_PROBE() /* test hook: c-test-embedded counts skipped words */
+#endif
+    // Word-at-a-time skip over bytes that can't start a match: ~2 cycles/byte
     // instead of ~9 on Cortex-M0+, and the scan dominates compression time.
-    const uint32_t first_broadcast = first_byte * 0x01010101u;
+    uint32_t ones = 0x01010101u;
+#if defined(__thumb__) && !defined(__thumb2__)
+    // Keep 0x01010101 in a low register so (word - ones) uses a 1-cycle subs
+    // instead of reloading 0xfefefeff from the literal pool every iteration.
+    __asm__("" : "+l"(ones));
+#endif
+    const uint32_t first_broadcast = first_byte * ones;
+    const unsigned char* const p_swar_end = p_end - 4;
+    typedef uint32_t __attribute__((may_alias)) tamp_word_alias;
+    goto swar_check;
 #endif
 
-    for (uint32_t window_index = 0; window_index < window_size_minus_1; window_index++) {
-        if (TAMP_LIKELY(window[window_index] != first_byte)) {
-#if defined(__GNUC__)
-            uint32_t wi = window_index + 1;
-            if (TAMP_LIKELY(((uintptr_t)(window + wi) & 3) == 0)) {
-                // Aligned: skip 4 bytes per iteration until a word may hold
-                // first_byte (zero-byte detect on the XOR; false positives
-                // are fine, the byte loop re-checks).
-                typedef uint32_t __attribute__((may_alias)) tamp_word_alias;
-                while (wi + 4 <= window_size_minus_1) {
-                    uint32_t word = *(const tamp_word_alias*)(window + wi) ^ first_broadcast;
-                    if ((word - 0x01010101u) & ~word & 0x80808080u) break;
-                    wi += 4;
-                }
+    while (p < p_end) {
+        if (TAMP_UNLIKELY(p[0] == first_byte) && TAMP_UNLIKELY(p[1] == second_byte)) {
+            // Found 2-byte match, now extend the match
+            uint32_t max_len = (uint32_t)(p_end - p) + 1;
+            if (TAMP_LIKELY(max_len > max_pattern_size)) max_len = max_pattern_size;
+            uint32_t match_len = 2;
+
+            // Extend match byte by byte with pre-clamped bounds
+            for (; match_len < max_len; match_len++) {
+                uint32_t idx = match_len;
+#if defined(__GNUC__) && defined(__thumb__) && !defined(__thumb2__)
+                // Prevent IVOPTS from creating a second induction variable (input_pos + match_len)
+                // that spills to the stack, and evaluate in_byte before loading p[match_len].
+                __asm__("" : "+l"(idx));
+#endif
+                uint32_t in_byte = input[(idx + input_pos) & 0xF];
+#if defined(__GNUC__) && defined(__thumb__) && !defined(__thumb2__)
+                __asm__("" : "+l"(in_byte));
+#endif
+                if (TAMP_LIKELY(p[match_len] != in_byte)) break;
             }
-            window_index = wi - 1;  // loop increment advances to wi
+
+            // Update best match if this is better
+            if (TAMP_UNLIKELY(match_len > best_size)) {
+                best_size = match_len;
+                *match_size = (uint8_t)best_size;
+                *match_index = (uint16_t)(p - window);
+                // Early termination if we found the maximum possible match
+                if (TAMP_UNLIKELY(best_size == max_pattern_size)) return;
+            }
+        }
+        p++;
+#if defined(__GNUC__)
+    swar_check:
+        // Truncate to 32 bits first: on a 64-bit host, shifting the full
+        // uintptr_t left by 30 tests the low 34 bits, so the SWAR path never ran.
+        if (((uint32_t)(uintptr_t)p << 30) == 0) {
+            // Aligned: skip 4 bytes per iteration until a word may hold
+            // first_byte (zero-byte detect on the XOR; false positives
+            // are fine, the byte loop re-checks).
+            while (p <= p_swar_end) {
+                uint32_t word = *(const tamp_word_alias*)p ^ first_broadcast;
+                if ((word - ones) & ~word & 0x80808080u) break;
+                p += 4;
+                TAMP_SWAR_PROBE();
+            }
+        }
 #endif
-            continue;
-        }
-        if (TAMP_LIKELY(window[window_index + 1] != second_byte)) {
-            continue;
-        }
-
-        // Found 2-byte match, now extend the match
-        uint8_t match_len = 2;
-
-        // Extend match byte by byte with optimized bounds checking
-        for (uint8_t i = 2; i < max_pattern_size; i++) {
-            if (TAMP_UNLIKELY((window_index + i) > window_size_minus_1)) break;
-
-            if (TAMP_LIKELY(window[window_index + i] != read_input(i))) break;
-            match_len = i + 1;
-        }
-
-        // Update best match if this is better
-        if (TAMP_UNLIKELY(match_len > *match_size)) {
-            *match_size = match_len;
-            *match_index = window_index;
-            // Early termination if we found the maximum possible match
-            if (TAMP_UNLIKELY(*match_size == max_pattern_size)) return;
-        }
     }
 }
 
@@ -357,11 +391,14 @@ static TAMP_NOINLINE void write_rle_token(TampCompressor* compressor, uint8_t co
     write_extended_huffman(compressor, count - 2, TAMP_LEADING_RLE_BITS);
 
     // Write up to TAMP_RLE_MAX_WINDOW bytes to window (or until buffer end, no wrap)
-    uint16_t remaining = WINDOW_SIZE - compressor->window_pos;
-    uint8_t window_write = MIN(MIN(count, TAMP_RLE_MAX_WINDOW), remaining);
-    for (uint8_t i = 0; i < window_write; i++) {
-        compressor->window[compressor->window_pos] = symbol;
-        compressor->window_pos = (compressor->window_pos + 1) & window_mask;
+    uint32_t wp = compressor->window_pos;
+    uint16_t remaining = WINDOW_SIZE - wp;
+    uint32_t window_write = MIN(MIN(count, TAMP_RLE_MAX_WINDOW), remaining);
+    unsigned char* dst = compressor->window + wp;
+    compressor->window_pos = (uint16_t)((wp + window_write) & window_mask);
+    TAMP_NOVECTOR
+    for (uint32_t i = 0; i < window_write; i++) {
+        dst[i] = symbol;
     }
     TAMP_INDEX_UPDATE(compressor, window_write);
 }
@@ -663,13 +700,17 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
                             huffman_bits[huffman_index] + conf_window);
     }
     // Populate Window
-    for (uint8_t i = 0; i < match_size; i++) {
-        compressor->window[compressor->window_pos] = read_input(0);
-        compressor->window_pos = (compressor->window_pos + 1) & window_mask;
-        compressor->input_pos = input_add(1);
+    unsigned char* window = compressor->window;
+    uint32_t wp = compressor->window_pos;
+    uint32_t ip = compressor->input_pos;
+    for (uint32_t i = 0; i < match_size; i++) {
+        window[wp] = compressor->input[(ip + i) & 0xF];
+        wp = (wp + 1) & window_mask;
     }
-    TAMP_INDEX_UPDATE(compressor, match_size);
+    compressor->window_pos = (uint16_t)wp;
+    compressor->input_pos = (uint8_t)((ip + match_size) & 0xF);
     compressor->input_size -= match_size;
+    TAMP_INDEX_UPDATE(compressor, match_size);
 
     return TAMP_OK;
 }
@@ -679,17 +720,18 @@ TAMP_NOINLINE tamp_res tamp_compressor_poll(TampCompressor* compressor, unsigned
 
 void tamp_compressor_sink(TampCompressor* compressor, const unsigned char* input, size_t input_size,
                           size_t* consumed_size) {
-    size_t consumed_size_proxy;
-    if (TAMP_LIKELY(consumed_size))
-        *consumed_size = 0;
-    else
-        consumed_size = &consumed_size_proxy;
+    uint32_t comp_input_size = compressor->input_size;
+    size_t space = sizeof(compressor->input) - comp_input_size;
+    if (input_size > space) input_size = space;
+    if (TAMP_LIKELY(consumed_size)) *consumed_size = input_size;
+    uint32_t pos = compressor->input_pos + comp_input_size;
+    compressor->input_size = (uint8_t)(comp_input_size + input_size);
+    const unsigned char* end = input + input_size;
 
-    for (size_t i = 0; i < input_size; i++) {
-        if (TAMP_UNLIKELY(tamp_compressor_full(compressor))) break;
-        compressor->input[input_add(compressor->input_size)] = input[i];
-        compressor->input_size += 1;
-        (*consumed_size)++;
+    TAMP_NOVECTOR
+    while (input < end) {
+        compressor->input[pos & 0xF] = *input++;
+        pos++;
     }
 }
 
