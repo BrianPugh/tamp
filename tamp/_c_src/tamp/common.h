@@ -47,6 +47,14 @@ extern "C" {
 #define TAMP_HAS_GCC_OPTIMIZE 0
 #endif
 
+/* Stop GCC -O3 from vectorizing short byte loops into large prologues/epilogues.
+ * #pragma GCC novector exists since GCC 14; older GCC warns (-Wunknown-pragmas). */
+#if defined(__GNUC__) && !defined(__clang__) && (__GNUC__ >= 14)
+#define TAMP_NOVECTOR _Pragma("GCC novector")
+#else
+#define TAMP_NOVECTOR
+#endif
+
 #if defined(_MSC_VER)
 #define TAMP_ALWAYS_INLINE __forceinline
 #define TAMP_NOINLINE __declspec(noinline)

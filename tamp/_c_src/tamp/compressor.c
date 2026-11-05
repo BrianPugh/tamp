@@ -9,12 +9,6 @@
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2 * !!(condition)]))
 
-#if defined(__GNUC__) && !defined(__clang__)
-#define TAMP_NOVECTOR _Pragma("GCC novector")
-#else
-#define TAMP_NOVECTOR
-#endif
-
 #if TAMP_EXTENDED_COMPRESS
 // Extended max pattern: min_pattern_size + 11 + EXTENDED_MATCH_MAX_EXTRA
 // = min_pattern_size + 11 + (14 << 3) + 7 + 1 = min_pattern_size + 131

@@ -13,12 +13,6 @@
 #else
 
 /* Copy count bytes from src to the output cursor and advance it. */
-#if defined(__GNUC__) && !defined(__clang__)
-#define TAMP_NOVECTOR _Pragma("GCC novector")
-#else
-#define TAMP_NOVECTOR
-#endif
-
 #define TAMP_COPY_TO_OUTPUT(out, src, count)                       \
     do {                                                           \
         const unsigned char* _tamp_src = (src);                    \
