@@ -114,7 +114,7 @@ jobs:
           path: dist
 
       - name: Install MicroPython
-        uses: BrianPugh/install-micropython@v2
+        uses: BrianPugh/install-micropython@v3
         with:
           reference: ${{ matrix.micropython_version }}
 

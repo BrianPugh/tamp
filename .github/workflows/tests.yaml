@@ -150,7 +150,7 @@ jobs:
           enable-cache: true
 
       - name: Install MicroPython
-        uses: BrianPugh/install-micropython@v2
+        uses: BrianPugh/install-micropython@v3
         with:
           reference: v1.22.0
 
