@@ -240,17 +240,19 @@ def _c_extension_available():
     return micropython is None and CCompressor is not None
 
 
-class _Raw(io.RawIOBase):
-    """Readable raw stream whose readinto() a test can override."""
+if micropython is None:  # MicroPython's io has no RawIOBase
 
-    def __init__(self, data):
-        self.b = io.BytesIO(data)
+    class _Raw(io.RawIOBase):
+        """Readable raw stream whose readinto() a test can override."""
 
-    def readable(self):
-        return True
+        def __init__(self, data):
+            self.b = io.BytesIO(data)
 
-    def read(self, n=-1):  # RawIOBase.read() itself trusts readinto()
-        return self.b.read(n)
+        def readable(self):
+            return True
+
+        def read(self, n=-1):  # RawIOBase.read() itself trusts readinto()
+            return self.b.read(n)
 
 
 @unittest.skipUnless(_c_extension_available(), "Cython extension not built")
