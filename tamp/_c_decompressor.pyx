@@ -15,6 +15,10 @@ cdef class Decompressor:
         bytearray _window_buffer
         unsigned char *_window_buffer_ptr
         object input_buffer
+        object input_view  # passed to f.readinto(); a view can't be resized
+        object _window_view  # buffer export: blocks resizing the window bytearray under C
+        bint _initialized
+        bint _busy
         unsigned char *input_buffer_ptr
         size_t input_size
         size_t input_consumed
@@ -34,6 +38,10 @@ cdef class Decompressor:
             ctamp.TampConf conf
             size_t input_consumed_size;
 
+        if self._busy:
+            raise RuntimeError("Decompressor is already in use by another thread.")
+        self._initialized = False
+
         if not hasattr(f, "read"):  # It's probably a path-like object.
             f = open(str(f), "rb")
             self._close_f_on_close = True
@@ -43,6 +51,7 @@ cdef class Decompressor:
         self.f = f
 
         self.input_buffer = bytearray(CHUNK_SIZE)
+        self.input_view = memoryview(self.input_buffer)
         self.input_buffer_ptr = self.input_buffer
         self.input_size = 0
         self.input_consumed = 0
@@ -70,48 +79,69 @@ cdef class Decompressor:
             raise ValueError("Dictionary-window size mismatch.")
 
         self._window_buffer = dictionary if dictionary is not None else bytearray(1 << conf.window)
+        self._window_view = memoryview(self._window_buffer)
         self._window_buffer_ptr = <unsigned char *>self._window_buffer
 
         res = ctamp.tamp_decompressor_init(self._c_decompressor, &conf, self._window_buffer_ptr, conf.window)
         if res < 0:
             raise ERROR_LOOKUP.get(res, NotImplementedError)
+        self._initialized = True
 
-    def readinto(self, bytearray buf) -> int:
+    def readinto(self, bytearray buf not None) -> int:
         cdef:
-            unsigned char *output_buffer_ptr = buf
+            unsigned char *output_buffer_ptr
             size_t output_written_size, input_chunk_consumed
             unsigned char *input_ptr
             size_t input_avail
             size_t output_size
             size_t size
+            size_t written = 0
             ctamp.tamp_res res
 
+        if not self._initialized:
+            raise RuntimeError("Decompressor is not initialized.")
+        if self._busy:
+            raise RuntimeError("Decompressor is already in use by another thread.")
         size = len(buf)
         while size:
+            # f.readinto() below runs arbitrary Python that may resize buf, so re-derive
+            # the output pointer and clamp to its current length every iteration.
+            if <size_t>len(buf) <= written:
+                break
+            size = min(size, <size_t>len(buf) - written)
+            output_buffer_ptr = <unsigned char *>buf + written
             # decompress in chunks so we can still check PyErr_CheckSignals
             output_size = min(<size_t>CHUNK_SIZE, size)
 
             input_ptr = self.input_buffer_ptr + self.input_consumed
             input_avail = self.input_size
-            with nogil:
-                res = ctamp.tamp_decompressor_decompress(
-                    self._c_decompressor,
-                    output_buffer_ptr,
-                    output_size,
-                    &output_written_size,
-                    input_ptr,
-                    input_avail,
-                    &input_chunk_consumed
-                )
+            self._busy = True
+            try:
+                with nogil:
+                    res = ctamp.tamp_decompressor_decompress(
+                        self._c_decompressor,
+                        output_buffer_ptr,
+                        output_size,
+                        &output_written_size,
+                        input_ptr,
+                        input_avail,
+                        &input_chunk_consumed
+                    )
+            finally:
+                self._busy = False
             self.input_size -= input_chunk_consumed
             self.input_consumed += input_chunk_consumed
-            output_buffer_ptr += output_written_size
+            written += output_written_size
             size -= output_written_size
 
             if res == ctamp.TAMP_INPUT_EXHAUSTED:
                 # Read in more data
                 if hasattr(self.f, "readinto"):
-                    self.input_size = self.f.readinto(self.input_buffer)
+                    n = self.f.readinto(self.input_view)
+                    if n is None or not 0 <= n <= CHUNK_SIZE:
+                        # C would read past input_buffer.
+                        raise ValueError(f"readinto() returned invalid byte count {n!r}.")
+                    self.input_size = n
                 else:
                     # Fall back for file-like objects that only implement read().
                     chunk = self.f.read(CHUNK_SIZE)
@@ -130,7 +160,7 @@ cdef class Decompressor:
             # Check signals for things like KeyboardInterrupt
             PyErr_CheckSignals()
 
-        return len(buf) - size
+        return written
 
     def read(self, int size = -1) -> bytearray:
         """
