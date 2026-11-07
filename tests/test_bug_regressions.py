@@ -296,8 +296,21 @@ class TestCythonBufferLifetimes(unittest.TestCase):
                 buf[:] = chunk
                 return len(chunk)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "memoryview"):
             CDecompressor(Shrinking(self.compressed)).read()
+
+    def test_readinto_released_view_keeps_input_buffer(self):
+        # Bug: releasing the view handed to readinto() dropped the only export, so the
+        # internal bytearray could be freed while C still read from it.
+        class ReleaseAndClear(_Raw):
+            def readinto(self, buf):
+                ba = buf.obj
+                buf.release()
+                ba.clear()
+                return 0
+
+        with self.assertRaises(BufferError):
+            CDecompressor(ReleaseAndClear(self.compressed)).read()
 
     def test_readinto_output_buffer_resized_by_source(self):
         # Bug: readinto() cached the output pointer across f.readinto(), which may run code
@@ -353,6 +366,28 @@ class TestCythonBufferLifetimes(unittest.TestCase):
         for t in threads:
             t.join()
         self.assertTrue(errors)
+
+    def test_reentrant_call_during_file_io_rejected(self):
+        # Bug: the busy guard only covered the C call, so code running inside f.readinto()
+        # or f.write() (another thread, or a re-entrant call) could drive the same object.
+        compressed = self.compressed
+
+        class Reentrant(_Raw):
+            def readinto(self, buf):
+                dec.readinto(bytearray(10))
+
+        dec = CDecompressor(Reentrant(compressed))
+        with self.assertRaisesRegex(RuntimeError, "in use"):
+            dec.read()
+
+        class ReentrantWriter(io.BytesIO):
+            def write(self, b):
+                c.write(b"x")
+
+        c = CCompressor(ReentrantWriter())
+        with self.assertRaisesRegex(RuntimeError, "in use"):
+            c.write(b"hello world")
+            c.flush()
 
 
 if __name__ == "__main__":

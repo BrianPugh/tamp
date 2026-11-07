@@ -19,7 +19,7 @@ cdef class Compressor:
     cdef bint _dictionary_reset
     cdef object _window_view  # buffer export: blocks resizing the window bytearray under C
     cdef bint _initialized
-    cdef bint _busy  # set while C runs with the GIL released
+    cdef bint _busy  # set for the whole write/flush/reset_dictionary call, file I/O included
 
     cdef int _check_ready(self) except -1:
         if not self._initialized:
@@ -136,9 +136,9 @@ cdef class Compressor:
 
         output_buffer_mv = memoryview(output_buffer)
 
-        while input_remaining_size:
-            self._enter()
-            try:
+        self._enter()
+        try:
+            while input_remaining_size:
                 with nogil:
                     res = ctamp.tamp_compressor_compress(
                         self._c_compressor,
@@ -149,17 +149,17 @@ cdef class Compressor:
                         input_remaining_size,
                         &input_consumed_size
                     )
-            finally:
-                self._busy = False
-            if res < 0:
-                raise ERROR_LOOKUP.get(res, NotImplementedError)
-            self.f.write(output_buffer_mv[:output_buffer_written_size])
-            written_to_disk_size += output_buffer_written_size
-            data_ptr += input_consumed_size
-            input_remaining_size -= input_consumed_size
+                if res < 0:
+                    raise ERROR_LOOKUP.get(res, NotImplementedError)
+                self.f.write(output_buffer_mv[:output_buffer_written_size])
+                written_to_disk_size += output_buffer_written_size
+                data_ptr += input_consumed_size
+                input_remaining_size -= input_consumed_size
 
-            # Check signals for things like KeyboardInterrupt
-            PyErr_CheckSignals()
+                # Check signals for things like KeyboardInterrupt
+                PyErr_CheckSignals()
+        finally:
+            self._busy = False
 
         return written_to_disk_size
 
@@ -180,16 +180,16 @@ cdef class Compressor:
                     &output_written_size,
                     write_token,
                 )
+
+            if res < 0:
+                raise ERROR_LOOKUP.get(res, NotImplementedError)
+
+            if output_written_size:
+                self.f.write(buffer[:output_written_size])
+
+            self.f.flush()
         finally:
             self._busy = False
-
-        if res < 0:
-            raise ERROR_LOOKUP.get(res, NotImplementedError)
-
-        if output_written_size:
-            self.f.write(buffer[:output_written_size])
-
-        self.f.flush()
 
         return output_written_size
 
@@ -198,22 +198,25 @@ cdef class Compressor:
         cdef bytearray buffer = bytearray(32)  # Worst case: 23 (flush) + 4 (2x FLUSH) = 27 bytes
         cdef size_t output_written_size = 0
 
-        self._check_ready()  # runs with the GIL held
-        res = ctamp.tamp_compressor_reset_dictionary(
-            self._c_compressor,
-            <unsigned char *> buffer,
-            len(buffer),
-            &output_written_size,
-        )
+        self._enter()
+        try:
+            res = ctamp.tamp_compressor_reset_dictionary(
+                self._c_compressor,
+                <unsigned char *> buffer,
+                len(buffer),
+                &output_written_size,
+            )
 
-        if res < 0:
-            raise ERROR_LOOKUP.get(res, NotImplementedError)
-        self._attach_match_index()
+            if res < 0:
+                raise ERROR_LOOKUP.get(res, NotImplementedError)
+            self._attach_match_index()
 
-        if output_written_size:
-            self.f.write(buffer[:output_written_size])
+            if output_written_size:
+                self.f.write(buffer[:output_written_size])
 
-        self.f.flush()
+            self.f.flush()
+        finally:
+            self._busy = False
 
         return output_written_size
 

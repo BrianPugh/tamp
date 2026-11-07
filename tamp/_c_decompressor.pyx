@@ -15,7 +15,7 @@ cdef class Decompressor:
         bytearray _window_buffer
         unsigned char *_window_buffer_ptr
         object input_buffer
-        object input_view  # passed to f.readinto(); a view can't be resized
+        object _input_export  # buffer export: blocks resizing input_buffer under C
         object _window_view  # buffer export: blocks resizing the window bytearray under C
         bint _initialized
         bint _busy
@@ -51,7 +51,7 @@ cdef class Decompressor:
         self.f = f
 
         self.input_buffer = bytearray(CHUNK_SIZE)
-        self.input_view = memoryview(self.input_buffer)
+        self._input_export = memoryview(self.input_buffer)
         self.input_buffer_ptr = self.input_buffer
         self.input_size = 0
         self.input_consumed = 0
@@ -88,6 +88,19 @@ cdef class Decompressor:
         self._initialized = True
 
     def readinto(self, bytearray buf not None) -> int:
+        if not self._initialized:
+            raise RuntimeError("Decompressor is not initialized.")
+        if self._busy:
+            raise RuntimeError("Decompressor is already in use by another thread.")
+        # Held across f.readinto()/f.read() too, so neither another thread nor a
+        # re-entrant call can touch this object's C or input state mid-call.
+        self._busy = True
+        try:
+            return self._readinto(buf)
+        finally:
+            self._busy = False
+
+    cdef Py_ssize_t _readinto(self, bytearray buf) except -1:
         cdef:
             unsigned char *output_buffer_ptr
             size_t output_written_size, input_chunk_consumed
@@ -98,10 +111,6 @@ cdef class Decompressor:
             size_t written = 0
             ctamp.tamp_res res
 
-        if not self._initialized:
-            raise RuntimeError("Decompressor is not initialized.")
-        if self._busy:
-            raise RuntimeError("Decompressor is already in use by another thread.")
         size = len(buf)
         while size:
             # f.readinto() below runs arbitrary Python that may resize buf, so re-derive
@@ -115,20 +124,16 @@ cdef class Decompressor:
 
             input_ptr = self.input_buffer_ptr + self.input_consumed
             input_avail = self.input_size
-            self._busy = True
-            try:
-                with nogil:
-                    res = ctamp.tamp_decompressor_decompress(
-                        self._c_decompressor,
-                        output_buffer_ptr,
-                        output_size,
-                        &output_written_size,
-                        input_ptr,
-                        input_avail,
-                        &input_chunk_consumed
-                    )
-            finally:
-                self._busy = False
+            with nogil:
+                res = ctamp.tamp_decompressor_decompress(
+                    self._c_decompressor,
+                    output_buffer_ptr,
+                    output_size,
+                    &output_written_size,
+                    input_ptr,
+                    input_avail,
+                    &input_chunk_consumed
+                )
             self.input_size -= input_chunk_consumed
             self.input_consumed += input_chunk_consumed
             written += output_written_size
@@ -137,7 +142,9 @@ cdef class Decompressor:
             if res == ctamp.TAMP_INPUT_EXHAUSTED:
                 # Read in more data
                 if hasattr(self.f, "readinto"):
-                    n = self.f.readinto(self.input_view)
+                    # A throwaway view: if readinto() releases it, _input_export still
+                    # blocks resizing (freeing) input_buffer.
+                    n = self.f.readinto(memoryview(self._input_export))
                     if n is None or not 0 <= n <= CHUNK_SIZE:
                         # C would read past input_buffer.
                         raise ValueError(f"readinto() returned invalid byte count {n!r}.")
