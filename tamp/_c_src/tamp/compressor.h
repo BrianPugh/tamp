@@ -161,8 +161,8 @@ void tamp_compressor_sink(TampCompressor *compressor, const unsigned char *input
  * without making progress.
  *
  * A 3-byte output buffer handles any configuration with conf.extended=false; use at least
- * 6 bytes when conf.extended is set. A caller that always passes a 3-5 byte buffer to an
- * extended compressor livelocks on the first extended match.
+ * 6 bytes when conf.extended is set. With a 3-5 byte buffer, an extended compressor stops
+ * making progress at the first extended match.
  *
  * @param[in,out] compressor TampCompressor object to perform compression with.
  * @param[out] output Pointer to a pre-allocated buffer to hold the output compressed data.
