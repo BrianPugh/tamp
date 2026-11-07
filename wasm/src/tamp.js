@@ -142,6 +142,7 @@ export class TampCompressor {
     this.windowPtr = null;
     this.module = null;
     this._initPromise = null;
+    this._destroyed = false;
   }
 
   async initialize() {
@@ -212,6 +213,11 @@ export class TampCompressor {
       this.compressorPtr = null;
       this.windowPtr = null;
       throw error;
+    }
+
+    if (this._destroyed) {
+      // destroy() ran while we were initializing; free now that the allocation exists.
+      this.destroy();
     }
   }
 
@@ -511,6 +517,7 @@ export class TampCompressor {
    * @returns {void}
    */
   destroy() {
+    this._destroyed = true;
     if (this.compressorPtr) {
       this.module._free(this.compressorPtr); // Frees compressor struct, config struct, and window buffer
       this.compressorPtr = null;
@@ -533,6 +540,7 @@ export class TampDecompressor {
     this.windowPtr = null;
     this.module = null;
     this._initPromise = null;
+    this._destroyed = false;
     this.initialPtr = null;
     this.confPtr = null;
     this.inputConsumedPtr = null;
@@ -565,6 +573,11 @@ export class TampDecompressor {
     this.confPtr = this.initialPtr;
     this.inputConsumedPtr = this.initialPtr + confStructSize;
     this.headerInputPtr = this.inputConsumedPtr + 4;
+
+    if (this._destroyed) {
+      // destroy() ran while we were initializing; free now that the allocation exists.
+      this.destroy();
+    }
   }
 
   /**
@@ -832,6 +845,7 @@ export class TampDecompressor {
    * @returns {void}
    */
   destroy() {
+    this._destroyed = true;
     if (this.decompressorPtr) {
       this.module._free(this.decompressorPtr); // Frees both struct and window buffer
       this.decompressorPtr = null;
