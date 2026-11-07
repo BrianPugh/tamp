@@ -26,6 +26,11 @@ Custom dictionaries solve this problem by pre-populating the compression window 
    Custom dictionaries must be externally supplied to **both** the compressor and decompressor.
    The dictionary is not embedded in the compressed data, so both parties **must** have access to the same custom dictionary for successful compression and decompression.
 
+.. warning::
+
+   With ``literal < 8``, every byte of a custom dictionary must fit in ``literal`` bits (be less than ``1 << literal``).
+   The compressor does not validate the dictionary; a wider byte can produce a stream that decompresses to different data.
+
 When to Use Custom Dictionaries
 ================================
 

@@ -41,7 +41,7 @@ export interface TampOptions {
   window?: number;
   /** Number of literal bits (5-8). Default: 8 */
   literal?: number;
-  /** Custom dictionary data. If null, no custom dictionary is used. If Uint8Array, uses the provided dictionary. Default: null */
+  /** Custom dictionary data. If null, no custom dictionary is used. If Uint8Array, uses the provided dictionary; every byte must fit in `literal` bits (not validated). Default: null */
   dictionary?: Uint8Array | null;
   /** Enable extended format (RLE, extended match) for better compression ratios. Default: true */
   extended?: boolean;

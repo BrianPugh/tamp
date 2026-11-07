@@ -102,7 +102,8 @@ void tamp_compressor_set_match_index(TampCompressor *compressor, void *buffer);
  * @param[in] conf Compressor configuration. Set to NULL for default (window=10, literal=8).
  * @param[in] window Pre-allocated window buffer. Size must agree with conf->window.
  *                   If conf.use_custom_dictionary is true, then the window must be
- *                   externally initialized.
+ *                   externally initialized, and every byte must fit in conf->literal
+ *                   bits (not validated; wider bytes can corrupt the output).
  *
  * @return Tamp Status Code. Returns TAMP_INVALID_CONF if an invalid conf state is provided.
  */
