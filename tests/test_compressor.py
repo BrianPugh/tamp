@@ -245,6 +245,18 @@ class TestCompressor(unittest.TestCase):
                     compressor.write(b"\xff")
                     compressor.flush()
 
+    @unittest.skipIf(micropython is not None, "pure-python reference only")
+    def test_excess_bits_rle_byte_from_dictionary(self):
+        # A lone RLE byte drains as a literal; the reference checks its width even though
+        # the C compressor (by documented contract) doesn't validate custom dictionaries.
+        dictionary = bytearray(256)
+        dictionary[50] = 0xFF
+        with io.BytesIO() as f:
+            compressor = PyCompressor(f, window=8, literal=5, dictionary=dictionary)
+            with self.assertRaises(ExcessBitsError):
+                compressor.write(b"\x00\xff\xff")
+                compressor.flush()
+
     def test_single_shot_compress_text(self):
         for compress in compresses:
             with self.subTest(compress=compress):

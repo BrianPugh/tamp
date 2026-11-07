@@ -173,6 +173,8 @@ class Compressor:
             ``window`` must agree with the dictionary size.
             If providing a pre-allocated buffer, but with default initialization, it must
             first be initialized with :func:`~tamp.initialize_dictionary`
+            Every byte must fit in ``literal`` bits; the C implementation does not
+            validate this, and wider bytes can corrupt the output.
         lazy_matching: bool
             Use roughly 50% more cpu to get 0~2% better compression.
         append: bool
@@ -711,6 +713,8 @@ def compress(
         ``window`` must agree with the dictionary size.
         If providing a pre-allocated buffer, but with default initialization, it must
         first be initialized with :func:`~tamp.initialize_dictionary`
+        Every byte must fit in ``literal`` bits; the C implementation does not
+        validate this, and wider bytes can corrupt the output.
     lazy_matching: bool
         Use roughly 50% more cpu to get 0~2% better compression.
     extended: bool
