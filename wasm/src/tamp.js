@@ -367,6 +367,10 @@ export class TampCompressor {
                 };
 
                 await Promise.resolve(progressCallback(progressInfo));
+                if (!this.compressorPtr) {
+                  // destroy() ran while we were suspended; the struct is freed.
+                  throw new CompressionError('Compressor was destroyed during compression');
+                }
 
                 lastProgressTime = currentTime;
                 lastProgressBytes = bytesProcessed;
@@ -708,6 +712,9 @@ export class TampDecompressor {
     // Read header if not already done
     if (!this.headerRead) {
       const headerBytesConsumed = await this._readHeader(combinedInput);
+      if (!this.initialPtr) {
+        throw new Error('Decompressor has been destroyed');
+      }
       inputOffset += headerBytesConsumed;
 
       // If header isn't complete yet or we only have header data, return early.
@@ -751,7 +758,7 @@ export class TampDecompressor {
       let payloadSize = payloadData.length;
 
       // Process data incrementally
-      while (payloadSize > 0) {
+      while (true) {
         checkAborted(); // Check for cancellation at each iteration
         const result = this.module.ccall(
           'tamp_decompressor_decompress_cb',
@@ -793,8 +800,9 @@ export class TampDecompressor {
           throwOnError(result, 'Decompression');
         }
 
-        // If no more input to process, break
-        if (payloadSize === 0) {
+        // Input fully consumed and nothing left buffered. On TAMP_OUTPUT_FULL the
+        // bit buffer may still hold tokens, so call again with zero input.
+        if (payloadSize === 0 && result !== 1) {
           this.pendingInput = new Uint8Array(0);
           break;
         }
