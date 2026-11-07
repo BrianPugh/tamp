@@ -246,6 +246,25 @@ describe('Tamp WebAssembly Tests', () => {
       'Decompressor should throw when used after destroy'
     );
   });
+
+  test('destroy() during first-call initialization frees the instance', async () => {
+    // Bug: destroy() was a no-op until initialization finished, so the pending
+    // call succeeded and the wasm-side allocation was never freed.
+    const testData = new TextEncoder().encode('Destroy during init test');
+
+    const compressor = new TampCompressor();
+    const compressPromise = compressor.compress(testData);
+    compressor.destroy();
+    await assert.rejects(compressPromise, { message: 'Compressor has been destroyed' });
+    assert.equal(compressor.compressorPtr, null);
+
+    const compressed = await compress(testData);
+    const decompressor = new TampDecompressor();
+    const decompressPromise = decompressor.decompress(compressed);
+    decompressor.destroy();
+    await assert.rejects(decompressPromise, { message: 'Decompressor has been destroyed' });
+    assert.equal(decompressor.initialPtr, null);
+  });
 });
 
 describe('Regressions', () => {
