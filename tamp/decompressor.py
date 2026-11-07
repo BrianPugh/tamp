@@ -222,7 +222,7 @@ class Decompressor:
 
         self.min_pattern_size = compute_min_pattern_size(self.window_bits, self.literal_bits)
 
-        self._last_was_flush = False
+        self._last_was_flush = 0
 
         # Used to store decoded bytes that do not currently fit in the output buffer.
         self.overflow = bytearray()
@@ -269,14 +269,14 @@ class Decompressor:
                     is_literal = self._bit_reader.read(1)
 
                     if is_literal:
-                        self._last_was_flush = False
+                        self._last_was_flush = 0
                         string = bytes([self._bit_reader.read(self.literal_bits)])
                         self._window_buffer.write_bytes(string)
                     else:
                         match_size = self._bit_reader.read_huffman()
                         if match_size == _FLUSH:
                             self._bit_reader.clear()
-                            if self.dictionary_reset and self._last_was_flush:
+                            if self.dictionary_reset and self._last_was_flush == 1:
                                 # Double-FLUSH: reset dictionary.
                                 self._window_buffer = _RingBuffer(
                                     buffer=initialize_dictionary(
@@ -284,9 +284,12 @@ class Decompressor:
                                         literal=self.literal_bits if self.extended else 8,
                                     ),
                                 )
-                            self._last_was_flush = True
+                                # Window is pristine; further FLUSHes before data don't re-reset.
+                                self._last_was_flush = 2
+                            elif not self._last_was_flush:
+                                self._last_was_flush = 1
                             continue
-                        self._last_was_flush = False
+                        self._last_was_flush = 0
                         if self.extended and match_size > 11:
                             if match_size == _RLE_SYMBOL:
                                 rle_count = self._bit_reader.read_huffman()
