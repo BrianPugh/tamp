@@ -39,7 +39,7 @@ cdef class Decompressor:
             size_t input_consumed_size;
 
         if self._busy:
-            raise RuntimeError("Decompressor is already in use by another thread.")
+            raise RuntimeError("Decompressor is already in use (concurrent or re-entrant call).")
         self._initialized = False
 
         if not hasattr(f, "read"):  # It's probably a path-like object.
@@ -91,7 +91,7 @@ cdef class Decompressor:
         if not self._initialized:
             raise RuntimeError("Decompressor is not initialized.")
         if self._busy:
-            raise RuntimeError("Decompressor is already in use by another thread.")
+            raise RuntimeError("Decompressor is already in use (concurrent or re-entrant call).")
         # Held across f.readinto()/f.read() too, so neither another thread nor a
         # re-entrant call can touch this object's C or input state mid-call.
         self._busy = True

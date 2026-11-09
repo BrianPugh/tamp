@@ -25,7 +25,7 @@ cdef class Compressor:
         if not self._initialized:
             raise RuntimeError("Compressor is not initialized.")
         if self._busy:
-            raise RuntimeError("Compressor is already in use by another thread.")
+            raise RuntimeError("Compressor is already in use (concurrent or re-entrant call).")
         return 0
 
     cdef int _enter(self) except -1:
@@ -62,7 +62,7 @@ cdef class Compressor:
         cdef ctamp.TampConf conf
 
         if self._busy:
-            raise RuntimeError("Compressor is already in use by another thread.")
+            raise RuntimeError("Compressor is already in use (concurrent or re-entrant call).")
         self._initialized = False
 
         # TampConf.window/literal are 4-bit bitfields; reject instead of wrapping.
