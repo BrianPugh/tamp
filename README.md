@@ -99,7 +99,7 @@ following to `pyproject.toml`.
 
 ```toml
 [tool.belay.dependencies]
-tamp = "https://github.com/BrianPugh/tamp/releases/download/v2.5.0/tamp-2.5.0-mpy6.3-armv6m.mpy"
+tamp = "https://github.com/BrianPugh/tamp/releases/download/v2.6.0/tamp-2.6.0-mpy6.3-armv6m.mpy"
 ```
 
 ## C
