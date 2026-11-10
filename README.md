@@ -247,6 +247,10 @@ ratios than Tamp. Currently, there is no micropython-compatible zlib or
 heatshrink compression implementation, so these numbers are provided simply as a
 reference.
 
+Tamp is also available in [TurboBench](https://github.com/powturbo/TurboBench),
+an all-in-one compression benchmark executable, for comparing against many other
+compressors on your own data.
+
 ## Compression Ratio
 
 The following table shows compression algorithm performance over a variety of
